@@ -80,7 +80,7 @@ aws sts get-caller-identity
 You should see your IAM user ARN. Next, let's check you can access SageMaker:
 
 ```bash
-aws sagemaker list-endpoints --region us-east-1
+aws sagemaker list-endpoints
 ```
 
 This should return an empty list (no error).

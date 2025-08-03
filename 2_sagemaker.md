@@ -105,7 +105,7 @@ Terraform created several resources:
 After deployment, you'll see outputs like:
 ```
 sagemaker_endpoint_name = "alex-embedding-endpoint"
-sagemaker_role_arn = "arn:aws:iam::392340646348:role/alex-sagemaker-execution-role"
+sagemaker_role_arn = "arn:aws:iam::YOUR_ACCOUNT_ID:role/alex-sagemaker-execution-role"
 ```
 
 Save the `sagemaker_endpoint_name` - you'll need it for the Lambda function.
@@ -123,7 +123,6 @@ aws sagemaker-runtime invoke-endpoint \
   --endpoint-name alex-embedding-endpoint \
   --content-type application/json \
   --body fileb://vectorize_me.json \
-  --region us-east-1 \
   --output json \
   /dev/stdout
 ```
@@ -137,7 +136,7 @@ You'll see a JSON array with 384 floating-point numbers - that's the text "vecto
 Your serverless endpoint:
 - **Scales to zero**: No charges when not in use
 - **Request pricing**: ~$0.00002 per second of compute
-- **Memory**: 4GB allocated for model loading
+- **Memory**: 3GB allocated (AWS default limit for serverless)
 - **Estimated cost**: $1-2/month for typical usage (1000 requests/day)
 
 ## Troubleshooting
@@ -146,21 +145,23 @@ If the endpoint invocation fails:
 
 1. **Check endpoint status**:
 ```bash
-aws sagemaker describe-endpoint --endpoint-name alex-embedding-endpoint --region us-east-1
+aws sagemaker describe-endpoint --endpoint-name alex-embedding-endpoint
 ```
 Status should be "InService"
 
 2. **Check CloudWatch logs**:
 ```bash
-aws logs tail /aws/sagemaker/Endpoints/alex-embedding-endpoint --region us-east-1 --follow
+aws logs tail /aws/sagemaker/Endpoints/alex-embedding-endpoint --follow
 ```
 
 3. **Verify the HuggingFace model ID**:
 Check that the endpoint is configured with the correct model:
 ```bash
-aws sagemaker describe-model --model-name alex-embedding-model --region us-east-1 --query 'PrimaryContainer.Environment'
+aws sagemaker describe-model --model-name alex-embedding-model --query 'PrimaryContainer.Environment'
 ```
 Should show: `{"HF_MODEL_ID": "sentence-transformers/all-MiniLM-L6-v2", "HF_TASK": "feature-extraction"}`
+
+**Note**: If you're not in the default region, add `--region your-region` to these commands.
 
 ## Understanding Serverless vs Always-On
 
