@@ -27,3 +27,9 @@ variable "project_name" {
   type        = string
   default     = "alex"
 }
+
+variable "environment" {
+  description = "Environment name (e.g., dev, prod)"
+  type        = string
+  default     = "prod"
+}

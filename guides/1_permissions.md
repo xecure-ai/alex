@@ -43,15 +43,54 @@ First, we need to create proper IAM permissions for the Alex project. We'll crea
 2. In the left sidebar, click **User groups**
 3. Click the **Create group** button
 4. For **Group name**, enter: `AlexAccess`
-5. In the **Attach permissions policies** section, search for and select these policies:
+5. In the **Attach permissions policies** section, search for and select this policy:
    - `AmazonSageMakerFullAccess`
-   - `AmazonOpenSearchServiceFullAccess`
    
    Note: We already have Lambda, S3, CloudWatch, and API Gateway permissions from other groups.
 
 6. Click **Create group**
 
-### 1.3 Add the Group to Your IAM User
+### 1.3 Create Custom Policy for OpenSearch Serverless
+
+OpenSearch Serverless is a newer AWS service that doesn't have a managed policy yet. We need to create a custom policy for it.
+
+1. In the IAM Console, click **Policies** in the left sidebar
+2. Click **Create policy**
+3. Click the **JSON** tab
+4. Replace the default JSON with:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "aoss:*"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+5. Click **Next: Tags** (skip tags)
+6. Click **Next: Review**
+7. For **Policy name**, enter: `AlexOpenSearchServerlessAccess`
+8. For **Description**, enter: `Allows full access to OpenSearch Serverless for Alex project`
+9. Click **Create policy**
+
+### 1.4 Attach the Custom Policy to AlexAccess Group
+
+1. Go back to **User groups** in the left sidebar
+2. Click on the `AlexAccess` group you just created
+3. Click the **Permissions** tab
+4. Click **Add permissions** → **Attach policies**
+5. Search for `AlexOpenSearchServerlessAccess`
+6. Select the checkbox next to it
+7. Click **Attach policies**
+
+### 1.5 Add the Group to Your IAM User
 
 1. Still in IAM, click **Users** in the left sidebar
 2. Click on your user `aiengineer`
@@ -60,7 +99,7 @@ First, we need to create proper IAM permissions for the Alex project. We'll crea
 5. Select the checkbox next to `AlexAccess`
 6. Click **Add to groups**
 
-### 1.4 Sign Out and Sign Back In
+### 1.6 Sign Out and Sign Back In
 
 1. Click your username in the top right corner
 2. Click **Sign out**
@@ -69,7 +108,7 @@ First, we need to create proper IAM permissions for the Alex project. We'll crea
    - IAM user name: `aiengineer`
    - Your IAM password
 
-### 1.5 Verify Permissions
+### 1.7 Verify Permissions
 
 Let's verify you have the necessary permissions by running:
 

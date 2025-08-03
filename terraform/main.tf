@@ -83,3 +83,48 @@ resource "aws_sagemaker_endpoint" "embedding_endpoint" {
     aws_iam_role_policy_attachment.sagemaker_full_access
   ]
 }
+
+# OpenSearch Serverless module
+module "opensearch" {
+  source = "./modules/opensearch"
+  
+  collection_name = "alex-portfolio"
+  lambda_role_arn = module.lambda.role_arn
+  
+  tags = {
+    Project     = "Alex"
+    Environment = var.environment
+  }
+}
+
+# Lambda function module
+module "lambda" {
+  source = "./modules/lambda"
+  
+  function_name           = "alex-ingest"
+  deployment_package_path = "${path.module}/../backend/lambda/lambda_function.zip"
+  opensearch_endpoint     = module.opensearch.collection_endpoint
+  opensearch_collection_arn = module.opensearch.collection_arn
+  sagemaker_endpoint_name = aws_sagemaker_endpoint.embedding_endpoint.name
+  sagemaker_endpoint_arn  = aws_sagemaker_endpoint.embedding_endpoint.arn
+  
+  tags = {
+    Project     = "Alex"
+    Environment = var.environment
+  }
+}
+
+# API Gateway module
+module "api_gateway" {
+  source = "./modules/api_gateway"
+  
+  api_name             = "alex-api"
+  stage_name           = var.environment
+  lambda_function_name = module.lambda.function_name
+  lambda_invoke_arn    = module.lambda.invoke_arn
+  
+  tags = {
+    Project     = "Alex"
+    Environment = var.environment
+  }
+}

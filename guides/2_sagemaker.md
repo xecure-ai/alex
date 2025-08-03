@@ -194,4 +194,4 @@ In the next guide, we'll:
 
 Your SageMaker endpoint is ready and waiting. Let's continue building Alex! 🎉
 
-Continue to: [3_opensearch.md](3_opensearch.md)
+Continue to: [3_opensearch_lambda.md](3_opensearch_lambda.md)

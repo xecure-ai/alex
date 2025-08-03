@@ -17,6 +17,30 @@ frontend
 terraform
 - Here will be the terraform scripts for the deployment
 
+## OpenSearch + Lambda Architecture Decisions (August 2025)
+
+### Architecture Approach
+Based on research and lessons learned from SageMaker deployment:
+1. **OpenSearch Serverless** - Fully managed, auto-scaling vector database
+2. **Lambda with inline dependencies** - Simple zip deployment, no layers
+3. **API Gateway HTTP API** - Simpler and cheaper than REST API
+4. **API Key authentication** - Protect endpoints from public access
+
+### Implementation Decisions
+1. **Zip Creation**: Python script for cross-platform compatibility (Windows/Mac/Linux)
+2. **Authentication**: API Gateway API keys to prevent unauthorized access and protect SageMaker costs
+3. **Terraform Structure**: Separate modules for clarity:
+   - `modules/opensearch/` - OpenSearch Serverless resources
+   - `modules/lambda/` - Lambda function and IAM
+   - `modules/api_gateway/` - API Gateway and authentication
+   
+### Key Principles
+- Start simple, mainstream solutions only
+- Cross-platform compatibility is mandatory
+- Security by default (API keys from start)
+- Modular but not complex
+- Everything in Terraform for single deployment
+
 ## Important Learning: SageMaker Deployment Post-Mortem (August 2025)
 
 ### What Happened
@@ -49,3 +73,35 @@ We spent 2+ hours implementing a complex custom model packaging approach for dep
 
 ### Key Lesson
 For well-supported models like sentence-transformers, the cloud providers have already solved the deployment problem. Look for their simple solution before building a complex one.
+
+## Current Status (Where We Left Off)
+
+### Completed
+1. ✅ SageMaker Serverless endpoint deployed (all-MiniLM-L6-v2 model)
+2. ✅ Guides 1 and 2 complete and tested
+3. ✅ Lambda function code created (`backend/lambda/ingest.py`)
+4. ✅ Package.py script created for cross-platform Lambda deployment
+5. ✅ Package.py updated to work with uv (removed unnecessary `uv sync` call since `uv run` auto-syncs)
+
+### In Progress
+- Setting up Lambda directory with uv project structure
+- Need to DELETE `backend/lambda/requirements.txt` (still exists - Bash tool having issues)
+- User will run:
+  ```bash
+  cd backend/lambda
+  uv init
+  uv python pin 3.12
+  uv add opensearch-py requests-aws4auth boto3
+  ```
+
+### Next Steps (Not Started)
+1. Create Terraform modules:
+   - `terraform/modules/opensearch/` - OpenSearch Serverless setup
+   - `terraform/modules/lambda/` - Lambda function deployment
+   - `terraform/modules/api_gateway/` - API Gateway with API key auth
+2. Create guide `3_opensearch_lambda.md`
+3. Test complete pipeline end-to-end
+
+### Technical Issues Encountered
+- Bash tool having problems with both absolute paths and simple commands
+- May need fresh restart to resolve tool issues
