@@ -217,4 +217,4 @@ terraform.tfstate.d/
 
 # Lambda deployment packages
 lambda_function.zip
-backend/lambda/lambda_function.zip
+backend/ingest/lambda_function.zip

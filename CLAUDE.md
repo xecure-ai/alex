@@ -78,30 +78,31 @@ For well-supported models like sentence-transformers, the cloud providers have a
 
 ### Completed
 1. ✅ SageMaker Serverless endpoint deployed (all-MiniLM-L6-v2 model)
-2. ✅ Guides 1 and 2 complete and tested
-3. ✅ Lambda function code created (`backend/lambda/ingest.py`)
+2. ✅ Guides 1, 2, and 3 complete and tested
+3. ✅ Lambda function code created (`backend/ingest/ingest.py`)
 4. ✅ Package.py script created for cross-platform Lambda deployment
-5. ✅ Package.py updated to work with uv (removed unnecessary `uv sync` call since `uv run` auto-syncs)
+5. ✅ Complete infrastructure deployed with Terraform:
+   - OpenSearch Serverless collection
+   - Lambda function with retry logic for SageMaker cold starts
+   - API Gateway with API key authentication
+6. ✅ Management scripts created:
+   - `test_api.py` - Ingest sample stock data
+   - `search_api.py` - Explore OpenSearch database
+   - `cleanup_api.py` - Database cleanup/reset
+7. ✅ Renamed backend/lambda to backend/ingest for better semantic naming
 
-### In Progress
-- Setting up Lambda directory with uv project structure
-- Need to DELETE `backend/lambda/requirements.txt` (still exists - Bash tool having issues)
-- User will run:
-  ```bash
-  cd backend/lambda
-  uv init
-  uv python pin 3.12
-  uv add opensearch-py requests-aws4auth boto3
-  ```
+### Architecture Details
+- **backend/ingest**: Document ingestion service (Lambda function)
+  - Contains uv project with dependencies
+  - Includes management scripts for testing and data operations
+  - Package.py creates lambda_function.zip for deployment
+- **terraform/**: Infrastructure as Code
+  - Modular structure with separate modules for OpenSearch, Lambda, API Gateway
+  - Configured to deploy from backend/ingest/lambda_function.zip
 
-### Next Steps (Not Started)
-1. Create Terraform modules:
-   - `terraform/modules/opensearch/` - OpenSearch Serverless setup
-   - `terraform/modules/lambda/` - Lambda function deployment
-   - `terraform/modules/api_gateway/` - API Gateway with API key auth
-2. Create guide `3_opensearch_lambda.md`
-3. Test complete pipeline end-to-end
-
-### Technical Issues Encountered
-- Bash tool having problems with both absolute paths and simple commands
-- May need fresh restart to resolve tool issues
+### Key Implementation Details
+- SageMaker returns nested arrays [[[embedding]]] - extraction handled in ingest.py
+- OpenSearch endpoint requires stripping https:// prefix
+- Retry logic with tenacity library for SageMaker cold starts
+- OpenSearch Serverless has eventual consistency (5-10 second delay)
+- OpenSearch Serverless doesn't support bulk delete operations

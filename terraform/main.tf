@@ -102,7 +102,7 @@ module "lambda" {
   source = "./modules/lambda"
   
   function_name           = "alex-ingest"
-  deployment_package_path = "${path.module}/../backend/lambda/lambda_function.zip"
+  deployment_package_path = "${path.module}/../backend/ingest/lambda_function.zip"
   opensearch_endpoint     = module.opensearch.collection_endpoint
   opensearch_collection_arn = module.opensearch.collection_arn
   sagemaker_endpoint_name = aws_sagemaker_endpoint.embedding_endpoint.name

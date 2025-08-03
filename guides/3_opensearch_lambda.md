@@ -20,8 +20,8 @@ Welcome back! In this final infrastructure guide, we'll deploy the complete Alex
 The Lambda function code is already in the repository. We just need to create the deployment package:
 
 ```bash
-# Navigate to the Lambda directory
-cd backend/lambda
+# Navigate to the ingest directory
+cd backend/ingest
 
 # Install dependencies and create deployment package
 uv run package.py
@@ -165,8 +165,8 @@ These environment variables will be available for:
 We've included a Python test script that loads multiple documents into your knowledge base:
 
 ```bash
-# Navigate to the Lambda directory where the Python project is
-cd backend/lambda
+# Navigate to the ingest directory where the Python project is
+cd backend/ingest
 
 # Run the test script (dependencies are already in pyproject.toml)
 uv run test_api.py
@@ -209,7 +209,7 @@ You can explore your data in two ways:
 ### Option A: Using the Python Script (Recommended)
 
 ```bash
-# Still in backend/lambda directory
+# Still in backend/ingest directory
 uv run search_api.py
 ```
 
@@ -287,7 +287,7 @@ You now have three Python scripts to manage your Alex knowledge base:
 | `search_api.py` | Explore and search your data | `uv run search_api.py` |
 | `cleanup_api.py` | Reset/clear your database | `uv run cleanup_api.py` |
 
-All scripts should be run from the `backend/lambda` directory.
+All scripts should be run from the `backend/ingest` directory.
 
 **Important**: OpenSearch Serverless has eventual consistency. After adding documents with `test_api.py`, wait 5-10 seconds before running `search_api.py` to ensure the documents are searchable.
 
@@ -323,7 +323,7 @@ If you get 403 errors:
 If you want to start fresh or clean up test data:
 
 ```bash
-# In backend/lambda directory
+# In backend/ingest directory
 uv run cleanup_api.py
 ```
 
