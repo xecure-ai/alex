@@ -33,3 +33,9 @@ variable "environment" {
   type        = string
   default     = "prod"
 }
+
+variable "openai_api_key" {
+  description = "OpenAI API key for the researcher service"
+  type        = string
+  sensitive   = true
+}

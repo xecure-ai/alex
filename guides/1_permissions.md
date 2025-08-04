@@ -12,6 +12,25 @@ Alex will help users:
 - Get personalized financial advice
 - Track market trends and opportunities
 
+## Architecture Overview
+
+Here's what you'll be building across all the guides:
+
+```mermaid
+graph TB
+    User[User] -->|Research| AR[App Runner<br/>AI Researcher]
+    AR -->|Store| Lambda[Lambda<br/>Ingest]
+    Lambda -->|Embed| SM[SageMaker<br/>Embeddings]
+    Lambda -->|Index| OS[(OpenSearch<br/>Vector DB)]
+    User -->|Search| OS
+    
+    style AR fill:#FF9900
+    style OS fill:#3B82F6
+    style SM fill:#10B981
+```
+
+See [architecture.md](architecture.md) for the complete system architecture.
+
 ## About This Guide
 
 This first guide focuses on setting up the necessary AWS permissions. We'll create a dedicated IAM group with only the permissions needed for the Alex project.
@@ -23,6 +42,8 @@ Before starting, ensure you have:
 - AWS CLI installed and configured with your `aiengineer` IAM user
 - Python 3.11 or later
 - Basic familiarity with AWS services
+
+**Note for VS Code/Cursor users**: To view the architecture diagrams in this guide, install the "Markdown Preview Mermaid Support" extension (ID: `bierner.markdown-mermaid`). This will render the diagrams in your Markdown preview.
 
 ## Step 1: Setting Up IAM Permissions
 

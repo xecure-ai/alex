@@ -41,3 +41,14 @@ output "api_key_value" {
   value       = module.api_gateway.api_key_value
   sensitive   = true
 }
+
+# App Runner outputs
+output "researcher_service_url" {
+  description = "URL of the researcher App Runner service"
+  value       = "https://${module.app_runner.service_url}"
+}
+
+output "ecr_repository_url" {
+  description = "ECR repository URL for researcher Docker images"
+  value       = module.app_runner.ecr_repository_url
+}

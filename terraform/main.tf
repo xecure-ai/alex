@@ -128,3 +128,23 @@ module "api_gateway" {
     Environment = var.environment
   }
 }
+
+# App Runner module for Researcher service
+module "app_runner" {
+  source = "./modules/app_runner"
+  
+  service_name = "alex-researcher"
+  cpu          = "1 vCPU"
+  memory       = "2 GB"
+  
+  environment_variables = {
+    OPENAI_API_KEY      = var.openai_api_key
+    ALEX_API_ENDPOINT   = module.api_gateway.api_endpoint
+    ALEX_API_KEY        = module.api_gateway.api_key_value
+  }
+  
+  tags = {
+    Project     = "Alex"
+    Environment = var.environment
+  }
+}

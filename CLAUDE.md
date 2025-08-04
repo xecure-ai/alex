@@ -74,35 +74,124 @@ We spent 2+ hours implementing a complex custom model packaging approach for dep
 ### Key Lesson
 For well-supported models like sentence-transformers, the cloud providers have already solved the deployment problem. Look for their simple solution before building a complex one.
 
-## Current Status (Where We Left Off)
+## Important Learning: App Runner Docker Deployment Post-Mortem (August 2025)
+
+### What Happened
+Spent 30+ minutes troubleshooting App Runner deployment failure (exit code 255) with increasingly complex theories before identifying a simple, common architecture mismatch issue.
+
+### What Went Wrong
+1. **Jumped to unlikely theories** - Suggested timeouts, package manager issues, path problems
+2. **Overcomplicated solutions** - Tried removing uv, simplifying Docker, changing configurations
+3. **Ignored obvious clues** - M1 Mac + Docker + exit code 255 is a classic architecture mismatch pattern
+4. **Didn't search properly** - Should have immediately searched "M1 Docker App Runner exit code 255"
+5. **No common sense filtering** - Each theory was increasingly unlikely; didn't step back to think
+
+### The Right Approach (User Identified Immediately)
+- M1 Macs build ARM images by default
+- App Runner expects x86_64/amd64 architecture
+- Solution: Add `--platform linux/amd64` to Docker build
+- This is one of the most common Docker deployment issues for M1 users
+
+### Problem Solving Principles - ALWAYS:
+1. **Apply common sense first** - Is this theory likely? Is it simple?
+2. **Look for simple explanations** - Most problems have simple causes
+3. **Identify the problem before guessing solutions** - Understand what's happening first
+4. **Search for exact error patterns** - "M1 Mac Docker exit code 255" would have found it instantly
+5. **Consider common issues first** - Architecture mismatches are extremely common with M1 Macs
+6. **When stuck, step back** - If solutions seem increasingly complex, you're probably on the wrong track
+
+### Key Lesson
+When deployment works locally but fails remotely, especially with generic exit codes, check the basics first: architecture, environment variables, ports. Don't invent complex theories when simple, common issues are far more likely.
+
+## Current Status
 
 ### Completed
-1. ✅ SageMaker Serverless endpoint deployed (all-MiniLM-L6-v2 model)
-2. ✅ Guides 1, 2, and 3 complete and tested
-3. ✅ Lambda function code created (`backend/ingest/ingest.py`)
-4. ✅ Package.py script created for cross-platform Lambda deployment
-5. ✅ Complete infrastructure deployed with Terraform:
-   - OpenSearch Serverless collection
-   - Lambda function with retry logic for SageMaker cold starts
+1. ✅ **SageMaker Serverless endpoint** (Guide 2)
+   - Model: all-MiniLM-L6-v2 
+   - Serverless configuration for cost efficiency
+   - HuggingFace container with HF_MODEL_ID environment variable
+
+2. ✅ **OpenSearch + Lambda Ingest Pipeline** (Guide 3)
+   - OpenSearch Serverless vector database
+   - Lambda function with packaged dependencies
    - API Gateway with API key authentication
-6. ✅ Management scripts created:
-   - `test_api.py` - Ingest sample stock data
-   - `search_api.py` - Explore OpenSearch database
-   - `cleanup_api.py` - Database cleanup/reset
-7. ✅ Renamed backend/lambda to backend/ingest for better semantic naming
+   - Management scripts for testing and maintenance
 
-### Architecture Details
-- **backend/ingest**: Document ingestion service (Lambda function)
-  - Contains uv project with dependencies
-  - Includes management scripts for testing and data operations
-  - Package.py creates lambda_function.zip for deployment
-- **terraform/**: Infrastructure as Code
-  - Modular structure with separate modules for OpenSearch, Lambda, API Gateway
-  - Configured to deploy from backend/ingest/lambda_function.zip
+3. ✅ **Researcher Agent Service** (Guide 4)
+   - AWS App Runner deployment
+   - OpenAI Agents SDK with gpt-4.1-mini
+   - Docker with cross-platform build (`--platform linux/amd64`)
+   - Automated research generation and storage
 
-### Key Implementation Details
-- SageMaker returns nested arrays [[[embedding]]] - extraction handled in ingest.py
-- OpenSearch endpoint requires stripping https:// prefix
-- Retry logic with tenacity library for SageMaker cold starts
-- OpenSearch Serverless has eventual consistency (5-10 second delay)
-- OpenSearch Serverless doesn't support bulk delete operations
+4. ✅ **Complete Guide Documentation** (Guides 1-4)
+   - Cross-platform instructions (Mac/Windows/Linux)
+   - Architecture diagrams (Mermaid format)
+   - Troubleshooting sections
+   - All tested end-to-end
+
+### Architecture Overview
+```
+backend/
+├── ingest/          # Lambda function (uv project)
+│   ├── ingest.py    # Main Lambda handler
+│   ├── package.py   # Cross-platform packaging script
+│   ├── test_api.py  # Ingest testing
+│   ├── search_api.py # Search testing
+│   └── cleanup_api.py # Database management
+└── researcher/      # App Runner service (uv project)
+    ├── server.py    # FastAPI + OpenAI Agents
+    ├── deploy.py    # Cross-platform deployment
+    └── test_research.py # Service testing
+
+terraform/
+├── main.tf          # Root configuration
+├── variables.tf     # Required: aws_account_id, openai_api_key
+└── modules/         # Modular infrastructure
+    ├── opensearch/  # Vector database
+    ├── lambda/      # Ingest function
+    ├── api_gateway/ # REST API
+    └── app_runner/  # Researcher service
+
+guides/
+├── 1_permissions.md    # IAM setup
+├── 2_sagemaker.md     # Embedding model
+├── 3_opensearch_lambda.md # Ingest pipeline
+├── 4_researcher.md    # AI agent service
+└── architecture.md    # System overview
+```
+
+### Key Technical Decisions
+
+#### Python Package Management
+- **ALWAYS use `uv`** for all Python commands
+- Each backend service has its own uv project
+- Commands: `uv run script.py`, `uv add package`, never plain `python`
+- Cross-platform compatibility is mandatory
+
+#### Environment Variables
+- `.env` file in project root contains all configuration
+- Loaded with `python-dotenv` using `load_dotenv(override=True)`
+- Key variables:
+  - `OPENAI_API_KEY` - For researcher agent
+  - `OPENSEARCH_ENDPOINT` - Updated after infrastructure changes
+  - `ALEX_API_KEY` - For API Gateway authentication
+  - `AWS_ACCOUNT_ID` - Set via AWS CLI during deployment
+
+#### Infrastructure Patterns
+- Everything deployed via Terraform with variables
+- OpenSearch endpoint changes only after `terraform destroy`
+- API Gateway uses REST API (not HTTP API) for API key support
+- App Runner for containers, Lambda for simple functions
+
+#### Common Gotchas
+1. **OpenSearch endpoint stale in .env** - Update after terraform destroy/apply
+2. **Docker architecture on Apple Silicon** - Always use `--platform linux/amd64`
+3. **Lambda packaging** - Use package.py for cross-platform compatibility
+4. **SageMaker embeddings** - Returns [[[embedding]]], needs unpacking
+5. **OpenSearch consistency** - 5-10 second delay after ingestion
+
+### Next Steps (Not Started)
+- Frontend development (NextJS with TypeScript)
+- Additional agent capabilities
+- Portfolio analysis features
+- User authentication and multi-tenancy

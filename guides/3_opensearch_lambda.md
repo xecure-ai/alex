@@ -337,6 +337,16 @@ Use this when you want to:
 - Fix issues with corrupted documents
 - Start over with a clean database
 
+### Important Note: Terraform Destroy
+If you ever run `terraform destroy` and then `terraform apply` again, your OpenSearch collection will be recreated with a new endpoint URL. You'll need to update the `.env` file:
+
+```bash
+cd terraform
+echo "OPENSEARCH_ENDPOINT=$(terraform output -raw opensearch_endpoint)" >> ../.env
+```
+
+Then manually edit `.env` to remove the old OPENSEARCH_ENDPOINT line. This is only necessary if you destroy and recreate the infrastructure.
+
 ## Cost Considerations
 
 This deployment includes:
