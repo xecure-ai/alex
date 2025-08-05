@@ -18,9 +18,6 @@ RUN pip install uv
 # Copy project files
 COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies
-RUN uv sync --frozen
-
 # Copy application code
 COPY *.py ./
 

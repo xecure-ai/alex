@@ -26,6 +26,14 @@ async def test():
             print("MCP server started successfully")
             tools = await server.session.list_tools()
             print(f"Available tools: {len(tools.tools) if tools else 0}")
+            
+            # Test browser_navigate
+            print("\nTesting browser_navigate...")
+            result = await server.session.call_tool(
+                "browser_navigate",
+                {"url": "https://example.com"}
+            )
+            print(f"Navigate result: {result}")
     except Exception as e:
         print(f"Error: {e}")
         import traceback
