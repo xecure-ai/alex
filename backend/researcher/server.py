@@ -2,6 +2,7 @@
 Alex Researcher Service - Investment Advice Agent
 """
 import os
+import json
 from typing import Dict, Any
 from datetime import datetime, UTC
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import httpx
 from agents import Agent, Runner, function_tool
+from agents.mcp import MCPServerStdio
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Load environment
@@ -89,14 +91,28 @@ def ingest_financial_document(topic: str, analysis: str) -> Dict[str, Any]:
 AGENT_INSTRUCTIONS = """You are an expert financial advisor and investment researcher for the Alex platform.
 Your role is to provide thoughtful, well-researched investment advice and analysis.
 
+You have access to web browsing capabilities through MCP tools. The key tools you should use are:
+- browser_navigate - Navigate to a specific URL (e.g., financial websites)
+- browser_snapshot - Take a snapshot of the current page to read its content
+- browser_click - Click on elements if needed
+- browser_type - Type text into fields if needed
+- browser_wait_for - Wait for content to load
+
+IMPORTANT: Use browser_navigate to visit financial websites like Yahoo Finance, Google Finance, or MarketWatch to get current stock prices and news.
+
 When providing investment advice:
-1. Consider the user's specific question or topic
-2. Provide specific, actionable recommendations
-3. Break down complex topics into clear, understandable points
-4. Use the ingest_financial_document tool to save your key insights
+1. Use web browsing to gather current, accurate information
+2. Consider the user's specific question or topic
+3. Provide specific, actionable recommendations based on your research
+4. Break down complex topics into clear, understandable points
+5. Cite specific sources and data points from your web research
+6. Use the ingest_financial_document tool to save your key insights
 
 Important guidelines:
+- ALWAYS start by using browser_navigate to visit a financial website
+- After navigating, use browser_snapshot to read the page content
 - Provide balanced advice considering both opportunities and risks
+- Include specific numbers, dates, and sources from your research
 - Adapt your response to the topic (stocks, retirement, asset allocation, etc.)
 - Create analyses that will be valuable for long-term reference
 - Focus on fundamentals and long-term value
@@ -110,18 +126,26 @@ async def run_research_agent(topic: str) -> str:
     # Prepare the user query
     query = f"Research topic: {topic}"
     
-    # Create and run the agent
-    agent = Agent(
-        name="Alex Investment Researcher",
-        instructions=AGENT_INSTRUCTIONS,
-        model="gpt-4.1-mini",  # As specified in CLAUDE.md
-        tools=[ingest_financial_document]
-    )
+    # Configure Playwright MCP server
+    playwright_params = {
+        "command": "npx",
+        "args": ["@playwright/mcp@latest", "--headless", "--isolated", "--no-sandbox", "--ignore-https-errors", "--executable-path", "/root/.cache/ms-playwright/chromium-1181/chrome-linux/chrome", "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"]
+    }
     
-    result = await Runner.run(
-        agent,
-        input=query
-    )
+    # Create and run the agent with MCP server
+    async with MCPServerStdio(params=playwright_params, client_session_timeout_seconds=60) as mcp_server:
+        agent = Agent(
+            name="Alex Investment Researcher",
+            instructions=AGENT_INSTRUCTIONS,
+            model="gpt-4.1-mini",  # As specified in CLAUDE.md
+            tools=[ingest_financial_document],
+            mcp_servers=[mcp_server]
+        )
+        
+        result = await Runner.run(
+            agent,
+            input=query
+        )
     
     return result.final_output
 
@@ -160,6 +184,145 @@ async def health():
         "alex_api_configured": bool(ALEX_API_ENDPOINT and ALEX_API_KEY),
         "timestamp": datetime.now(UTC).isoformat()
     }
+
+@app.get("/mcp-browser-test")
+async def mcp_browser_test():
+    """Test MCP browser functionality by navigating to a page with dynamic content."""
+    try:
+        playwright_params = {
+            "command": "npx",
+            "args": ["@playwright/mcp@latest", "--headless", "--isolated", "--no-sandbox", "--ignore-https-errors", "--executable-path", "/root/.cache/ms-playwright/chromium-1181/chrome-linux/chrome", "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"]
+        }
+        
+        async with MCPServerStdio(params=playwright_params, client_session_timeout_seconds=60) as server:
+            # Navigate to httpbin.org to get current headers/IP (dynamic content)
+            navigate_result = await server.session.call_tool(
+                "browser_navigate", 
+                {"url": "https://httpbin.org/headers"}
+            )
+            
+            # Take a snapshot
+            snapshot_result = await server.session.call_tool(
+                "browser_snapshot", 
+                {}
+            )
+            
+            return {
+                "status": "success",
+                "browser_working": True,
+                "navigate_result": navigate_result.model_dump() if navigate_result else None,
+                "snapshot_preview": str(snapshot_result.content[0].text)[:1000] if snapshot_result and snapshot_result.content else None
+            }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "browser_working": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.get("/mcp-stock-test")
+async def mcp_stock_test():
+    """Test MCP browser by fetching actual stock data."""
+    try:
+        playwright_params = {
+            "command": "npx",
+            "args": ["@playwright/mcp@latest", "--headless", "--isolated", "--no-sandbox", "--ignore-https-errors", "--executable-path", "/root/.cache/ms-playwright/chromium-1181/chrome-linux/chrome", "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"]
+        }
+        
+        async with MCPServerStdio(params=playwright_params, client_session_timeout_seconds=60) as server:
+            # Navigate to Yahoo Finance for AAPL
+            navigate_result = await server.session.call_tool(
+                "browser_navigate", 
+                {"url": "https://finance.yahoo.com/quote/AAPL"}
+            )
+            
+            # Wait a bit for page to load
+            await server.session.call_tool(
+                "browser_wait_for",
+                {"time": 2000}
+            )
+            
+            # Take a snapshot
+            snapshot_result = await server.session.call_tool(
+                "browser_snapshot", 
+                {}
+            )
+            
+            snapshot_text = str(snapshot_result.content[0].text) if snapshot_result and snapshot_result.content else "No snapshot"
+            
+            # Look for price in the snapshot
+            import re
+            price_match = re.search(r'\$?(\d+\.\d+)', snapshot_text)
+            
+            return {
+                "status": "success",
+                "browser_working": True,
+                "found_price": price_match.group(0) if price_match else "No price found",
+                "snapshot_preview": snapshot_text[:2000]
+            }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "browser_working": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.get("/mcp-test")
+async def mcp_test():
+    """Test MCP server connection and list available tools."""
+    try:
+        # Configure Playwright MCP server
+        playwright_params = {
+            "command": "npx",
+            "args": ["@playwright/mcp@latest", "--headless", "--isolated", "--no-sandbox", "--ignore-https-errors", "--executable-path", "/root/.cache/ms-playwright/chromium-1181/chrome-linux/chrome", "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"]
+        }
+        
+        # Test MCP server connection
+        async with MCPServerStdio(params=playwright_params, client_session_timeout_seconds=60) as server:
+            # Get available tools
+            tools = await server.session.list_tools()
+            
+            return {
+                "status": "success",
+                "mcp_connected": True,
+                "tools_count": len(tools.tools) if tools else 0,
+                "tools": [{"name": tool.name, "description": tool.description} for tool in tools.tools] if tools else []
+            }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "mcp_connected": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@app.get("/test-agent-browser")
+async def test_agent_browser():
+    """Direct test of agent with browser tools."""
+    playwright_params = {
+        "command": "npx",
+        "args": ["@playwright/mcp@latest", "--headless", "--isolated", "--no-sandbox", "--executable-path", "/root/.cache/ms-playwright/chromium-1181/chrome-linux/chrome"]
+    }
+    
+    async with MCPServerStdio(params=playwright_params, client_session_timeout_seconds=60) as mcp_server:
+        agent = Agent(
+            name="Test Agent",
+            instructions="Use browser_navigate to go to https://example.com, then use browser_snapshot to tell me what you see.",
+            model="gpt-4.1-mini",
+            mcp_servers=[mcp_server]
+        )
+        
+        result = await Runner.run(
+            agent,
+            input="Please navigate to example.com and tell me what's on the page"
+        )
+    
+    return {"result": result.final_output}
 
 if __name__ == "__main__":
     import uvicorn

@@ -2,13 +2,23 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv
+# Install Node.js
+RUN apt-get update && apt-get install -y \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Playwright dependencies (system-level dependencies for Chromium)
+RUN npx -y playwright install --with-deps chromium
+
+# Install Python package manager
 RUN pip install uv
 
 # Copy project files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies
+# Install Python dependencies
 RUN uv sync --frozen
 
 # Copy application code
@@ -17,5 +27,5 @@ COPY server.py ./
 # Expose port
 EXPOSE 8000
 
-# Run with uvicorn
+# Run the application
 CMD ["uv", "run", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
