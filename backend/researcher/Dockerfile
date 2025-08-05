@@ -22,7 +22,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 
 # Copy application code
-COPY server.py ./
+COPY *.py ./
 
 # Expose port
 EXPOSE 8000

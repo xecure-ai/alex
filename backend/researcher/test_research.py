@@ -49,9 +49,8 @@ def get_service_url():
 
 def test_research(topic=None):
     """Test the researcher service with a topic."""
-    # Default topic if none provided
-    if not topic:
-        topic = "Apple stock investment analysis"
+    # If no topic, let the agent pick one
+    display_topic = topic if topic else "Agent's choice (trending topic)"
     
     # Get service URL
     print("Getting App Runner service URL...")
@@ -76,15 +75,17 @@ def test_research(topic=None):
         sys.exit(1)
     
     # Call research endpoint
-    print(f"\n🔬 Generating research for: {topic}")
+    print(f"\n🔬 Generating research for: {display_topic}")
     print("   This will take 20-30 seconds as the agent researches and analyzes...")
     
     try:
         research_url = f"https://{service_url}/research"
+        # Only include topic in payload if it's provided
+        payload = {"topic": topic} if topic else {}
         response = requests.post(
             research_url,
-            json={"topic": topic},
-            timeout=60  # Give it 60 seconds for research
+            json=payload,
+            timeout=180  # Give it 3 minutes for research
         )
         response.raise_for_status()
         
@@ -124,21 +125,21 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Test with default topic (Apple stock)
+  # Let agent pick a trending topic
   uv run test_research.py
   
-  # Test with custom topic
+  # Research specific topic
   uv run test_research.py "Tesla competitive advantages"
   
-  # Test with another topic
+  # Research another topic
   uv run test_research.py "Microsoft cloud revenue growth"
         """
     )
     parser.add_argument(
         "topic",
         nargs="?",
-        default="Apple stock investment analysis",
-        help="Investment topic to research (default: Apple stock investment analysis)"
+        default=None,
+        help="Investment topic to research (optional - agent will pick trending topic if not provided)"
     )
     
     args = parser.parse_args()

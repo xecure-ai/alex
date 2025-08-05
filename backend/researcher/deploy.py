@@ -91,26 +91,38 @@ def main():
     
     print("Login successful!")
     
+    # Generate a unique tag using timestamp
+    import time
+    timestamp = int(time.time())
+    image_tag = f"deploy-{timestamp}"
+    
     # Build Docker image
-    print("\nBuilding Docker image for linux/amd64...")
+    print(f"\nBuilding Docker image for linux/amd64 with tag: {image_tag}")
     print("(This ensures compatibility with AWS App Runner)")
     run_command([
         "docker", "build",
         "--platform", "linux/amd64",
-        "-t", f"{ecr_repository}:latest",
+        "-t", f"{ecr_repository}:{image_tag}",
+        "--no-cache",  # Force rebuild
         "."
     ])
     
-    # Tag for ECR
+    # Tag for ECR with both unique tag and latest
     print("\nTagging image for ECR...")
     run_command([
         "docker", "tag",
-        f"{ecr_repository}:latest",
+        f"{ecr_repository}:{image_tag}",
+        f"{ecr_url}:{image_tag}"
+    ])
+    run_command([
+        "docker", "tag",
+        f"{ecr_repository}:{image_tag}",
         f"{ecr_url}:latest"
     ])
     
     # Push to ECR
     print("\nPushing image to ECR...")
+    run_command(["docker", "push", f"{ecr_url}:{image_tag}"])
     run_command(["docker", "push", f"{ecr_url}:latest"])
     
     print("\n✅ Docker image pushed successfully!")
