@@ -84,27 +84,21 @@ resource "aws_sagemaker_endpoint" "embedding_endpoint" {
   ]
 }
 
-# OpenSearch Serverless module
-module "opensearch" {
-  source = "./modules/opensearch"
+# S3 Vectors module
+module "s3_vectors" {
+  source = "./modules/s3_vectors"
   
-  collection_name = "alex-portfolio"
-  lambda_role_arn = module.lambda.role_arn
-  
-  tags = {
-    Project     = "Alex"
-    Environment = var.environment
-  }
+  aws_account_id = data.aws_caller_identity.current.account_id
 }
 
-# Lambda function module
+# Lambda function module for S3 Vectors
 module "lambda" {
-  source = "./modules/lambda"
+  source = "./modules/lambda_s3vectors"
   
   function_name           = "alex-ingest"
   deployment_package_path = "${path.module}/../backend/ingest/lambda_function.zip"
-  opensearch_endpoint     = module.opensearch.collection_endpoint
-  opensearch_collection_arn = module.opensearch.collection_arn
+  vector_bucket_name      = module.s3_vectors.bucket_name
+  vector_bucket_arn       = module.s3_vectors.bucket_arn
   sagemaker_endpoint_name = aws_sagemaker_endpoint.embedding_endpoint.name
   sagemaker_endpoint_arn  = aws_sagemaker_endpoint.embedding_endpoint.arn
   
@@ -138,9 +132,9 @@ module "app_runner" {
   memory       = "2 GB"
   
   environment_variables = {
-    OPENAI_API_KEY      = var.openai_api_key
-    ALEX_API_ENDPOINT   = module.api_gateway.api_endpoint
-    ALEX_API_KEY        = module.api_gateway.api_key_value
+    OPENAI_API_KEY    = var.openai_api_key
+    ALEX_API_ENDPOINT = module.api_gateway.api_endpoint
+    ALEX_API_KEY      = module.api_gateway.api_key_value
   }
   
   tags = {

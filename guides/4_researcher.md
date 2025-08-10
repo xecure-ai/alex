@@ -5,7 +5,7 @@ In this guide, you'll deploy the Alex Researcher service - an AI agent that gene
 ## Prerequisites
 
 Before starting, ensure you have:
-1. Completed Guides 1-3 (SageMaker, OpenSearch, and Ingest Pipeline deployed)
+1. Completed Guides 1-3 (SageMaker, S3 Vectors, and Ingest Pipeline deployed)
 2. Docker Desktop installed and running
 3. Your `.env` file in the project root with `OPENAI_API_KEY`
 4. AWS CLI configured with your credentials
@@ -14,7 +14,7 @@ Before starting, ensure you have:
 
 The Researcher service is an AWS App Runner application that:
 - Uses OpenAI's Agents SDK to create an investment research agent
-- Automatically calls your ingest pipeline to store research in OpenSearch
+- Automatically calls your ingest pipeline to store research in S3 Vectors
 - Provides a REST API for generating financial analysis on demand
 
 Here's how it fits into the Alex architecture:
@@ -26,12 +26,12 @@ graph LR
     AR -->|Store Research| API[API Gateway]
     API -->|Process| Lambda[Lambda<br/>Ingest]
     Lambda -->|Embeddings| SM[SageMaker<br/>all-MiniLM-L6-v2]
-    Lambda -->|Store| OS[(OpenSearch<br/>Vector DB)]
-    User -->|Search| OS
+    Lambda -->|Store| S3V[(S3 Vectors<br/>90% Cheaper!)]
+    User -->|Search| S3V
     
     style AR fill:#FF9900
     style OA fill:#10B981
-    style OS fill:#3B82F6
+    style S3V fill:#90EE90
 ```
 
 ## Step 1: Deploy the Infrastructure
@@ -140,7 +140,7 @@ uv run test_research.py "Microsoft cloud revenue growth"
 
 The research takes 20-30 seconds as the agent analyzes the topic and generates comprehensive investment insights.
 
-### 3.3: Verify Data in OpenSearch
+### 3.3: Verify Data Storage
 
 Check that the research was stored:
 
@@ -214,7 +214,7 @@ You should see:
 Congratulations! You now have a complete AI research pipeline:
 1. **Researcher Agent** (App Runner) - Generates investment analysis
 2. **Ingest Pipeline** (Lambda) - Processes and stores documents
-3. **Vector Database** (OpenSearch) - Enables semantic search
+3. **Vector Database** (S3 Vectors) - Cost-effective semantic search
 4. **Embedding Model** (SageMaker) - Creates semantic representations
 
 Your system can now:

@@ -21,11 +21,11 @@ graph TB
     User[User] -->|Research| AR[App Runner<br/>AI Researcher]
     AR -->|Store| Lambda[Lambda<br/>Ingest]
     Lambda -->|Embed| SM[SageMaker<br/>Embeddings]
-    Lambda -->|Index| OS[(OpenSearch<br/>Vector DB)]
-    User -->|Search| OS
+    Lambda -->|Index| S3V[(S3 Vectors<br/>90% Cheaper!)]
+    User -->|Search| S3V
     
     style AR fill:#FF9900
-    style OS fill:#3B82F6
+    style S3V fill:#90EE90
     style SM fill:#10B981
 ```
 
@@ -58,27 +58,15 @@ First, we need to create proper IAM permissions for the Alex project. We'll crea
 
 ⚠️ **Security Note**: We're using the root user only for IAM setup. For all other tasks, we'll use our IAM user.
 
-### 1.2 Create the AlexAccess Group
+### 1.2 Create S3 Vectors Policy
+
+Since S3 Vectors is a new service, we need to create a custom policy first:
 
 1. In the AWS Console, navigate to **IAM** (Identity and Access Management)
-2. In the left sidebar, click **User groups**
-3. Click the **Create group** button
-4. For **Group name**, enter: `AlexAccess`
-5. In the **Attach permissions policies** section, search for and select this policy:
-   - `AmazonSageMakerFullAccess`
-   
-   Note: We already have Lambda, S3, CloudWatch, and API Gateway permissions from other groups.
-
-6. Click **Create group**
-
-### 1.3 Create Custom Policy for OpenSearch Serverless
-
-OpenSearch Serverless is a newer AWS service that doesn't have a managed policy yet. We need to create a custom policy for it.
-
-1. In the IAM Console, click **Policies** in the left sidebar
-2. Click **Create policy**
-3. Click the **JSON** tab
-4. Replace the default JSON with:
+2. In the left sidebar, click **Policies**
+3. Click **Create policy**
+4. Click the **JSON** tab
+5. Replace the default content with:
 
 ```json
 {
@@ -87,7 +75,7 @@ OpenSearch Serverless is a newer AWS service that doesn't have a managed policy 
         {
             "Effect": "Allow",
             "Action": [
-                "aoss:*"
+                "s3vectors:*"
             ],
             "Resource": "*"
         }
@@ -95,23 +83,25 @@ OpenSearch Serverless is a newer AWS service that doesn't have a managed policy 
 }
 ```
 
-5. Click **Next: Tags** (skip tags)
-6. Click **Next: Review**
-7. For **Policy name**, enter: `AlexOpenSearchServerlessAccess`
-8. For **Description**, enter: `Allows full access to OpenSearch Serverless for Alex project`
+6. Click **Next: Tags**, then **Next: Review**
+7. For **Policy name**, enter: `AlexS3VectorsAccess`
+8. For **Description**, enter: `Full access to S3 Vectors for Alex project`
 9. Click **Create policy**
 
-### 1.4 Attach the Custom Policy to AlexAccess Group
+### 1.3 Create the AlexAccess Group
 
-1. Go back to **User groups** in the left sidebar
-2. Click on the `AlexAccess` group you just created
-3. Click the **Permissions** tab
-4. Click **Add permissions** → **Attach policies**
-5. Search for `AlexOpenSearchServerlessAccess`
-6. Select the checkbox next to it
-7. Click **Attach policies**
+1. Still in IAM, click **User groups** in the left sidebar
+2. Click the **Create group** button
+3. For **Group name**, enter: `AlexAccess`
+4. In the **Attach permissions policies** section, search for and select these policies:
+   - `AmazonSageMakerFullAccess` (AWS managed policy)
+   - `AlexS3VectorsAccess` (the custom policy you just created)
+   
+   Note: We already have Lambda, S3, CloudWatch, and API Gateway permissions from other groups.
 
-### 1.5 Add the Group to Your IAM User
+5. Click **Create group**
+
+### 1.4 Add the Group to Your IAM User
 
 1. Still in IAM, click **Users** in the left sidebar
 2. Click on your user `aiengineer`
@@ -120,7 +110,7 @@ OpenSearch Serverless is a newer AWS service that doesn't have a managed policy 
 5. Select the checkbox next to `AlexAccess`
 6. Click **Add to groups**
 
-### 1.6 Sign Out and Sign Back In
+### 1.5 Sign Out and Sign Back In
 
 1. Click your username in the top right corner
 2. Click **Sign out**
@@ -129,7 +119,7 @@ OpenSearch Serverless is a newer AWS service that doesn't have a managed policy 
    - IAM user name: `aiengineer`
    - Your IAM password
 
-### 1.7 Verify Permissions
+### 1.6 Verify Permissions
 
 Let's verify you have the necessary permissions by running:
 

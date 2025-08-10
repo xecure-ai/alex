@@ -37,9 +37,9 @@ export TF_VAR_aws_account_id=$(aws sts get-caller-identity --query Account --out
 echo $TF_VAR_aws_account_id
 
 # Create the state bucket (using your account ID for uniqueness)
+# Note: Add --region parameter if you're not in us-east-1
 aws s3api create-bucket \
-  --bucket alex-terraform-state-${TF_VAR_aws_account_id} \
-  --region us-east-1
+  --bucket alex-terraform-state-${TF_VAR_aws_account_id}
 
 # Enable versioning for safety
 aws s3api put-bucket-versioning \
@@ -56,7 +56,8 @@ $env:TF_VAR_aws_account_id = aws sts get-caller-identity --query Account --outpu
 echo $env:TF_VAR_aws_account_id
 
 # Create the state bucket (using your account ID for uniqueness)
-aws s3api create-bucket --bucket "alex-terraform-state-$env:TF_VAR_aws_account_id" --region us-east-1
+# Note: Add --region parameter if you're not in us-east-1
+aws s3api create-bucket --bucket "alex-terraform-state-$env:TF_VAR_aws_account_id"
 
 # Enable versioning for safety
 aws s3api put-bucket-versioning --bucket "alex-terraform-state-$env:TF_VAR_aws_account_id" --versioning-configuration Status=Enabled
@@ -72,22 +73,32 @@ Now let's deploy the SageMaker infrastructure. With the HuggingFace approach, th
 # Navigate to terraform directory
 cd terraform
 
+# Set your AWS region (if not already set)
+export AWS_DEFAULT_REGION=$(aws configure get region)
+
 # Initialize Terraform with your state bucket
 # Mac/Linux:
 terraform init \
   -backend-config="bucket=alex-terraform-state-${TF_VAR_aws_account_id}" \
-  -backend-config="key=production/terraform.tfstate" \
-  -backend-config="region=us-east-1"
+  -backend-config="key=production/terraform.tfstate"
 
 # Windows PowerShell:
+$env:AWS_DEFAULT_REGION = aws configure get region
 terraform init `
   -backend-config="bucket=alex-terraform-state-$env:TF_VAR_aws_account_id" `
-  -backend-config="key=production/terraform.tfstate" `
-  -backend-config="region=us-east-1"
+  -backend-config="key=production/terraform.tfstate"
 
-# Deploy the infrastructure
-terraform apply
+# Deploy ONLY the SageMaker infrastructure
+# We use -target to avoid needing other variables yet
+terraform apply \
+  -target=aws_iam_role.sagemaker_role \
+  -target=aws_iam_role_policy_attachment.sagemaker_full_access \
+  -target=aws_sagemaker_model.embedding_model \
+  -target=aws_sagemaker_endpoint_configuration.serverless_config \
+  -target=aws_sagemaker_endpoint.embedding_endpoint
 ```
+
+**Note**: We're using `-target` to deploy only SageMaker resources for now. If prompted for any other variables, just press Enter to use defaults - they won't be used yet.
 
 When prompted, type `yes` to confirm. This will create:
 - IAM role for SageMaker
@@ -188,10 +199,10 @@ terraform destroy
 Congratulations! You've deployed a production-grade ML model on AWS. 
 
 In the next guide, we'll:
-1. Set up OpenSearch Serverless for vector storage
+1. Set up S3 Vectors for cost-effective vector storage (90% cheaper!)
 2. Create a Lambda function to connect everything
 3. Build an API for ingesting financial knowledge
 
 Your SageMaker endpoint is ready and waiting. Let's continue building Alex! 🎉
 
-Continue to: [3_opensearch_lambda.md](3_opensearch_lambda.md)
+Continue to: [3_ingest.md](3_ingest.md)

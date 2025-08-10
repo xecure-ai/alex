@@ -38,4 +38,5 @@ variable "openai_api_key" {
   description = "OpenAI API key for the researcher service"
   type        = string
   sensitive   = true
+  default     = "placeholder-will-be-set-in-guide-4"
 }

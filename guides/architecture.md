@@ -1,8 +1,8 @@
-# Alex Architecture Overview
+# Alex Architecture Overview (S3 Vectors Version)
 
 ## System Architecture
 
-The Alex platform uses a modern serverless architecture on AWS, combining AI services with scalable infrastructure:
+The Alex platform uses a modern serverless architecture on AWS, combining AI services with cost-effective infrastructure:
 
 ```mermaid
 graph TB
@@ -24,7 +24,7 @@ graph TB
     OpenAI[fa:fa-robot OpenAI API<br/>GPT-4.1-mini<br/>Research Agent]
     
     %% Data Storage
-    OpenSearch[fa:fa-database OpenSearch<br/>Serverless<br/>Vector Database]
+    S3Vectors[fa:fa-database S3 Vectors<br/>Vector Storage<br/>90% Cost Reduction!]
     ECR[fa:fa-archive ECR<br/>Docker Registry<br/>Researcher Images]
     
     %% Connections
@@ -38,7 +38,7 @@ graph TB
     AppRunner -->|Generate| OpenAI
     
     Lambda -->|Get Embeddings| SageMaker
-    Lambda -->|Store Vectors| OpenSearch
+    Lambda -->|Store Vectors| S3Vectors
     
     AppRunner -.->|Pull Image| ECR
     
@@ -47,101 +47,136 @@ graph TB
     classDef ai fill:#10B981,stroke:#047857,stroke-width:2px,color:#fff
     classDef storage fill:#3B82F6,stroke:#1E40AF,stroke-width:2px,color:#fff
     classDef future fill:#E5E7EB,stroke:#9CA3AF,stroke-width:2px,color:#6B7280
+    classDef highlight fill:#90EE90,stroke:#228B22,stroke-width:3px,color:#000
     
     class APIGW,Lambda,AppRunner,SageMaker,ECR aws
     class OpenAI ai
-    class OpenSearch storage
+    class S3Vectors storage
     class Frontend future
+    class S3Vectors highlight
 ```
-
-## Data Flow
-
-### Research Flow (Guide 4)
-1. **User** requests investment research through App Runner
-2. **App Runner** (Researcher service) uses OpenAI Agents SDK to generate analysis
-3. **OpenAI Agent** researches the topic and creates comprehensive investment insights
-4. **App Runner** calls the Ingest API to store the research
-5. **Lambda** processes the document, generates embeddings via SageMaker
-6. **OpenSearch** stores the document with vector embeddings for semantic search
-
-### Direct Ingest Flow (Guide 3)
-1. **User** sends documents directly to API Gateway
-2. **API Gateway** authenticates with API key and invokes Lambda
-3. **Lambda** processes the document and calls SageMaker for embeddings
-4. **SageMaker** returns vector representation of the text
-5. **Lambda** stores document + vectors in OpenSearch
-
-### Search Flow
-1. **User** queries the knowledge base
-2. **Lambda** generates embedding for the query via SageMaker
-3. **OpenSearch** performs vector similarity search
-4. **Results** returned with semantically similar documents
 
 ## Component Details
 
-### API Gateway (Guide 3)
-- **Type**: REST API with API Key authentication
-- **Endpoint**: `/ingest` - Document ingestion
-- **Security**: API keys prevent unauthorized access
-- **Integration**: Direct Lambda proxy integration
+### 1. **S3 Vectors** (NEW! - 90% Cost Reduction)
+- **Purpose**: Native vector storage in S3
+- **Features**: 
+  - Sub-second similarity search
+  - Automatic optimization
+  - No minimum charges
+  - Strongly consistent writes
+- **Cost**: ~$30/month (vs ~$300/month for OpenSearch)
+- **Scale**: Millions of vectors per index
 
-### Lambda Function (Guide 3)
-- **Name**: `alex-ingest`
+### 2. **API Gateway**
+- **Type**: REST API
+- **Auth**: API Key authentication
+- **Endpoints**: `/ingest` (POST)
+- **Purpose**: Secure access to Lambda functions
+
+### 3. **Lambda Functions**
+- **alex-ingest**: Processes documents and stores embeddings
 - **Runtime**: Python 3.12
-- **Dependencies**: Packaged with `package.py` for cross-platform deployment
-- **Functions**:
-  - Document validation and processing
-  - Embedding generation via SageMaker
-  - OpenSearch indexing with retry logic
-  - Metadata enrichment
+- **Memory**: 512MB
+- **Timeout**: 30 seconds
 
-### SageMaker Endpoint (Guide 2)
-- **Model**: `sentence-transformers/all-MiniLM-L6-v2`
-- **Type**: Serverless inference (auto-scaling)
-- **Purpose**: Convert text to 384-dimensional vectors
-- **Container**: HuggingFace inference container
+### 4. **App Runner**
+- **Service**: alex-researcher
+- **Purpose**: Hosts the AI research agent
+- **Resources**: 1 vCPU, 2GB RAM
+- **Features**: Auto-scaling, HTTPS endpoint
 
-### OpenSearch Serverless (Guide 3)
-- **Type**: Vector search collection
-- **Index**: `alex-knowledge`
-- **Features**:
-  - k-NN vector similarity search
-  - Full-text search capabilities
-  - Automatic scaling
-  - Encryption at rest
+### 5. **SageMaker Serverless**
+- **Model**: sentence-transformers/all-MiniLM-L6-v2
+- **Purpose**: Generate 384-dimensional embeddings
+- **Memory**: 3GB
+- **Concurrency**: 10 max
 
-### App Runner (Guide 4)
-- **Service**: `alex-researcher`
-- **Container**: Docker image from ECR
-- **Framework**: FastAPI with OpenAI Agents SDK
-- **Auto-scaling**: Managed by App Runner
-- **Health checks**: `/health` endpoint monitoring
+### 6. **External AI**
+- **Provider**: OpenAI
+- **Model**: GPT-4.1-mini
+- **Purpose**: Research generation and analysis
 
-### ECR Repository (Guide 4)
-- **Name**: `alex-researcher`
-- **Purpose**: Store Docker images for App Runner
-- **Build**: Multi-platform support (linux/amd64)
+## Data Flow
 
-## Security
+1. **Research Flow**:
+   ```
+   User → App Runner → OpenAI (generate) → API Gateway → Lambda → S3 Vectors
+   ```
 
-- **API Keys**: Protect public endpoints from abuse
-- **IAM Roles**: Least-privilege access for each service
-- **VPC**: OpenSearch runs in isolated network
-- **Encryption**: Data encrypted in transit and at rest
-- **Secrets**: Managed via environment variables
+2. **Direct Ingest Flow**:
+   ```
+   User → API Gateway → Lambda → SageMaker (embed) → S3 Vectors
+   ```
 
-## Scaling
-
-All components are serverless or auto-scaling:
-- **Lambda**: Scales automatically with requests
-- **SageMaker**: Serverless endpoint scales to zero
-- **OpenSearch**: Serverless auto-scales storage and compute
-- **App Runner**: Automatic scaling based on traffic
-- **API Gateway**: Fully managed, no scaling concerns
+3. **Search Flow** (future):
+   ```
+   User → API Gateway → Lambda → S3 Vectors (similarity search)
+   ```
 
 ## Cost Optimization
 
-- **Pay-per-use**: Lambda and SageMaker Serverless only charge when used
-- **Auto-scaling**: App Runner scales down to minimum during low traffic
-- **Serverless**: No idle compute costs for OpenSearch
-- **Free Tier**: Many services stay within AWS free tier for development
+| Component | Monthly Cost | Notes |
+|-----------|-------------|-------|
+| S3 Vectors | ~$30 | 90% cheaper than OpenSearch! |
+| SageMaker Serverless | ~$5-10 | Pay per request |
+| Lambda | ~$1 | Minimal invocations |
+| App Runner | ~$5 | 1 vCPU, 2GB RAM |
+| API Gateway | ~$1 | REST API |
+| **Total** | **~$42-47** | Previously ~$250+ |
+
+## Security Features
+
+- **API Gateway**: API key authentication
+- **IAM Roles**: Least privilege access
+- **S3 Vectors**: Always private (no public access)
+- **App Runner**: HTTPS by default
+- **Secrets**: Environment variables for API keys
+
+## Deployment Architecture
+
+```mermaid
+graph LR
+    Dev[fa:fa-laptop Developer]
+    GH[fa:fa-code-branch GitHub Repo]
+    TF[fa:fa-cog Terraform]
+    AWS[fa:fa-cloud AWS]
+    
+    Dev -->|Push| GH
+    Dev -->|Run| TF
+    TF -->|Deploy| AWS
+    
+    subgraph AWS Infrastructure
+        S3[S3 State]
+        Resources[All Resources]
+    end
+    
+    TF -.->|State| S3
+    TF -->|Create| Resources
+```
+
+## Technology Stack
+
+- **Infrastructure**: Terraform
+- **Compute**: Lambda, App Runner
+- **AI/ML**: SageMaker, OpenAI
+- **Storage**: S3 Vectors
+- **API**: API Gateway
+- **Languages**: Python 3.12
+- **Container**: Docker
+
+## Key Advantages of S3 Vectors
+
+1. **Cost**: 90% reduction vs traditional vector databases
+2. **Simplicity**: Just S3 - no complex infrastructure
+3. **Scale**: Handles millions of vectors
+4. **Performance**: Sub-second queries
+5. **Integration**: Native AWS service
+
+## Future Enhancements
+
+- Frontend application (Next.js)
+- User authentication
+- Advanced search features
+- Real-time updates
+- Analytics dashboard

@@ -65,7 +65,7 @@ def ingest_financial_document(topic: str, analysis: str) -> Dict[str, Any]:
         result = ingest_with_retries(document)
         return {
             "success": True,
-            "document_id": result.get("documentId"),
+            "document_id": result.get("document_id"),  # Changed from documentId
             "message": f"Successfully ingested analysis for {topic}"
         }
     except Exception as e:

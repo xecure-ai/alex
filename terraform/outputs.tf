@@ -13,10 +13,10 @@ output "sagemaker_role_arn" {
   value       = aws_iam_role.sagemaker_role.arn
 }
 
-# OpenSearch outputs
-output "opensearch_endpoint" {
-  description = "OpenSearch Serverless collection endpoint"
-  value       = module.opensearch.collection_endpoint
+# S3 Vectors outputs
+output "vector_bucket_name" {
+  description = "S3 Vector bucket name"
+  value       = module.s3_vectors.bucket_name
 }
 
 # Lambda outputs

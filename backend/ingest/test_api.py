@@ -110,9 +110,8 @@ def main():
     for doc in test_docs:
         print(f"  - {doc['metadata']['company_name']} ({doc['metadata']['ticker']})")
     
-    print("\n⏱️  Note: OpenSearch Serverless has eventual consistency.")
-    print("   Documents may take 5-10 seconds to become searchable.")
-    print("   Wait a moment before running search_api.py")
+    print("\n⏱️  Note: S3 Vectors updates are available immediately.")
+    print("   You can run search_api.py right away!")
 
 if __name__ == "__main__":
     main()

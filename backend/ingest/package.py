@@ -54,6 +54,12 @@ def create_deployment_package():
     print("Copying Lambda function code...")
     shutil.copy(current_dir / 'ingest.py', package_dir)
     
+    # Also copy S3 Vectors versions if they exist
+    if (current_dir / 'ingest_s3vectors.py').exists():
+        shutil.copy(current_dir / 'ingest_s3vectors.py', package_dir)
+    if (current_dir / 'search_s3vectors.py').exists():
+        shutil.copy(current_dir / 'search_s3vectors.py', package_dir)
+    
     # Create ZIP file
     print("Creating deployment package...")
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:

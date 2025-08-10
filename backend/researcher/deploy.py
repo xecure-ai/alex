@@ -9,6 +9,10 @@ import sys
 import os
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv(override=True)
 
 
 def run_command(cmd, capture_output=False, shell=False):
@@ -143,13 +147,42 @@ def main():
                 service_arn = service_arns[0]
                 print(f"Found service: {service_arn}")
                 
-                print("\nStarting deployment...")
-                run_command([
-                    "aws", "apprunner", "start-deployment",
+                # Get the current service configuration to preserve the access role
+                print("\nGetting current service configuration...")
+                service_details = run_command([
+                    "aws", "apprunner", "describe-service",
                     "--service-arn", service_arn,
-                    "--region", region
-                ])
-                print("✅ Deployment started!")
+                    "--region", region,
+                    "--query", "Service.SourceConfiguration.AuthenticationConfiguration.AccessRoleArn",
+                    "--output", "text"
+                ], capture_output=True)
+                
+                # Update the service to use the new image with unique tag
+                print(f"\nUpdating service to use new image: {ecr_url}:{image_tag}")
+                run_command([
+                    "aws", "apprunner", "update-service",
+                    "--service-arn", service_arn,
+                    "--region", region,
+                    "--source-configuration", json.dumps({
+                        "ImageRepository": {
+                            "ImageIdentifier": f"{ecr_url}:{image_tag}",
+                            "ImageConfiguration": {
+                                "Port": "8000",
+                                "RuntimeEnvironmentVariables": {
+                                    "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+                                    "ALEX_API_KEY": os.environ.get("ALEX_API_KEY", ""),
+                                    "ALEX_API_ENDPOINT": os.environ.get("ALEX_API_ENDPOINT", "")
+                                }
+                            },
+                            "ImageRepositoryType": "ECR"
+                        },
+                        "AuthenticationConfiguration": {
+                            "AccessRoleArn": service_details
+                        },
+                        "AutoDeploymentsEnabled": False
+                    })
+                ], capture_output=True)
+                print("✅ Service updated with new image!")
                 
                 # Wait for deployment to complete
                 print("\nWaiting for deployment to complete (this may take 3-5 minutes)...")
@@ -165,6 +198,9 @@ def main():
                         "--query", "Service.Status",
                         "--output", "text"
                     ], capture_output=True)
+                    
+                    # Strip any whitespace that might be causing comparison issues
+                    status = status.strip()
                     
                     if status == "RUNNING":
                         print("\n✅ Deployment complete! Service is running.")
@@ -184,9 +220,28 @@ def main():
                         print(f"   curl https://{service_url}/health")
                         break
                     elif status == "OPERATION_IN_PROGRESS":
-                        print(".", end="", flush=True)
-                        time.sleep(5)
-                        attempts += 1
+                        # Check operation status for more details
+                        operation_status = run_command([
+                            "aws", "apprunner", "list-operations",
+                            "--service-arn", service_arn,
+                            "--region", region,
+                            "--query", "OperationSummaryList[0].Status",
+                            "--output", "text"
+                        ], capture_output=True).strip()
+                        
+                        if operation_status == "SUCCEEDED":
+                            # Operation completed but service status might not be updated yet
+                            print("\n⏳ Operation succeeded, checking service status...")
+                            time.sleep(2)
+                            continue
+                        elif operation_status == "FAILED":
+                            print(f"\n❌ Deployment failed!")
+                            print("Check the AWS Console for error details.")
+                            break
+                        else:
+                            print(".", end="", flush=True)
+                            time.sleep(5)
+                            attempts += 1
                     else:
                         print(f"\n⚠️ Unexpected status: {status}")
                         print("Check the AWS Console for more details.")
