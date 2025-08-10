@@ -84,6 +84,31 @@ async def research(request: ResearchRequest) -> str:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/research/auto")
+async def research_auto():
+    """
+    Automated research endpoint for scheduled runs.
+    Picks a trending topic automatically and generates research.
+    Used by EventBridge Scheduler for periodic research updates.
+    """
+    try:
+        # Always use agent's choice for automated runs
+        response = await run_research_agent(topic=None)
+        return {
+            "status": "success",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "message": "Automated research completed",
+            "preview": response[:200] + "..." if len(response) > 200 else response
+        }
+    except Exception as e:
+        print(f"Error in automated research: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "error": str(e)
+        }
+
+
 @app.get("/health")
 async def health():
     """Detailed health check."""

@@ -142,3 +142,11 @@ module "app_runner" {
     Environment = var.environment
   }
 }
+
+# Module for automated research scheduler (disabled by default)
+module "scheduler" {
+  source = "./modules/scheduler"
+  
+  app_runner_url = module.app_runner.service_url
+  enabled        = var.scheduler_enabled
+}

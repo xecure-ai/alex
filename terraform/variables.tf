@@ -40,3 +40,9 @@ variable "openai_api_key" {
   sensitive   = true
   default     = "placeholder-will-be-set-in-guide-4"
 }
+
+variable "scheduler_enabled" {
+  description = "Enable automated research every 2 hours"
+  type        = bool
+  default     = false
+}

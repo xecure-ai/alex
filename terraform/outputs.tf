@@ -52,3 +52,13 @@ output "ecr_repository_url" {
   description = "ECR repository URL for researcher Docker images"
   value       = module.app_runner.ecr_repository_url
 }
+
+output "scheduler_status" {
+  description = "Status of the automated research scheduler"
+  value       = module.scheduler.schedule_status
+}
+
+output "scheduler_lambda_name" {
+  description = "Name of the scheduler Lambda function"
+  value       = module.scheduler.lambda_function_name
+}

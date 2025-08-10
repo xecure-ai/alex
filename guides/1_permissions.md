@@ -19,6 +19,8 @@ Here's what you'll be building across all the guides:
 ```mermaid
 graph TB
     User[User] -->|Research| AR[App Runner<br/>AI Researcher]
+    Schedule[EventBridge<br/>Every 2 Hours] -->|Trigger| SchedLambda[Lambda<br/>Scheduler]
+    SchedLambda -->|Call| AR
     AR -->|Store| Lambda[Lambda<br/>Ingest]
     Lambda -->|Embed| SM[SageMaker<br/>Embeddings]
     Lambda -->|Index| S3V[(S3 Vectors<br/>90% Cheaper!)]
@@ -27,6 +29,8 @@ graph TB
     style AR fill:#FF9900
     style S3V fill:#90EE90
     style SM fill:#10B981
+    style Schedule fill:#9333EA
+    style SchedLambda fill:#FF9900
 ```
 
 See [architecture.md](architecture.md) for the complete system architecture.
@@ -60,7 +64,7 @@ First, we need to create proper IAM permissions for the Alex project. We'll crea
 
 ### 1.2 Create S3 Vectors Policy
 
-Since S3 Vectors is a new service, we need to create a custom policy first:
+Since S3 Vectors is a new service (as of 2025), we need to create a custom policy for it:
 
 1. In the AWS Console, navigate to **IAM** (Identity and Access Management)
 2. In the left sidebar, click **Policies**
@@ -95,6 +99,7 @@ Since S3 Vectors is a new service, we need to create a custom policy first:
 3. For **Group name**, enter: `AlexAccess`
 4. In the **Attach permissions policies** section, search for and select these policies:
    - `AmazonSageMakerFullAccess` (AWS managed policy)
+   - `CloudWatchEventsFullAccess` (AWS managed policy - includes EventBridge)
    - `AlexS3VectorsAccess` (the custom policy you just created)
    
    Note: We already have Lambda, S3, CloudWatch, and API Gateway permissions from other groups.

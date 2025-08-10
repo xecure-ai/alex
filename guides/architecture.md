@@ -19,6 +19,10 @@ graph TB
     Lambda[fa:fa-bolt Lambda<br/>alex-ingest<br/>Document Processing]
     AppRunner[fa:fa-server App Runner<br/>alex-researcher<br/>AI Agent Service]
     
+    %% Scheduler Components
+    EventBridge[fa:fa-clock EventBridge<br/>Scheduler<br/>Every 2 Hours]
+    SchedulerLambda[fa:fa-bolt Lambda<br/>alex-scheduler<br/>Trigger Research]
+    
     %% AI Services
     SageMaker[fa:fa-brain SageMaker<br/>Embedding Model<br/>all-MiniLM-L6-v2]
     OpenAI[fa:fa-robot OpenAI API<br/>GPT-4.1-mini<br/>Research Agent]
@@ -37,6 +41,9 @@ graph TB
     AppRunner -->|Store Research| APIGW
     AppRunner -->|Generate| OpenAI
     
+    EventBridge -->|Every 2hrs| SchedulerLambda
+    SchedulerLambda -->|Call /research/auto| AppRunner
+    
     Lambda -->|Get Embeddings| SageMaker
     Lambda -->|Store Vectors| S3Vectors
     
@@ -48,12 +55,14 @@ graph TB
     classDef storage fill:#3B82F6,stroke:#1E40AF,stroke-width:2px,color:#fff
     classDef future fill:#E5E7EB,stroke:#9CA3AF,stroke-width:2px,color:#6B7280
     classDef highlight fill:#90EE90,stroke:#228B22,stroke-width:3px,color:#000
+    classDef scheduler fill:#9333EA,stroke:#6B21A8,stroke-width:2px,color:#fff
     
-    class APIGW,Lambda,AppRunner,SageMaker,ECR aws
+    class APIGW,Lambda,AppRunner,SageMaker,ECR,SchedulerLambda aws
     class OpenAI ai
     class S3Vectors storage
     class Frontend future
     class S3Vectors highlight
+    class EventBridge scheduler
 ```
 
 ## Component Details
@@ -76,9 +85,13 @@ graph TB
 
 ### 3. **Lambda Functions**
 - **alex-ingest**: Processes documents and stores embeddings
-- **Runtime**: Python 3.12
-- **Memory**: 512MB
-- **Timeout**: 30 seconds
+  - Runtime: Python 3.12
+  - Memory: 512MB
+  - Timeout: 30 seconds
+- **alex-scheduler**: Triggers automated research
+  - Runtime: Python 3.11
+  - Memory: 128MB
+  - Timeout: 150 seconds
 
 ### 4. **App Runner**
 - **Service**: alex-researcher
@@ -92,24 +105,35 @@ graph TB
 - **Memory**: 3GB
 - **Concurrency**: 10 max
 
-### 6. **External AI**
+### 6. **EventBridge Scheduler**
+- **Rule**: alex-research-schedule
+- **Schedule**: Every 2 hours
+- **Target**: alex-scheduler Lambda
+- **Purpose**: Automated research generation
+
+### 7. **External AI**
 - **Provider**: OpenAI
 - **Model**: GPT-4.1-mini
 - **Purpose**: Research generation and analysis
 
 ## Data Flow
 
-1. **Research Flow**:
+1. **Manual Research Flow**:
    ```
    User → App Runner → OpenAI (generate) → API Gateway → Lambda → S3 Vectors
    ```
 
-2. **Direct Ingest Flow**:
+2. **Automated Research Flow**:
+   ```
+   EventBridge (every 2hrs) → Lambda Scheduler → App Runner → OpenAI → API Gateway → Lambda → S3 Vectors
+   ```
+
+3. **Direct Ingest Flow**:
    ```
    User → API Gateway → Lambda → SageMaker (embed) → S3 Vectors
    ```
 
-3. **Search Flow** (future):
+4. **Search Flow** (future):
    ```
    User → API Gateway → Lambda → S3 Vectors (similarity search)
    ```
