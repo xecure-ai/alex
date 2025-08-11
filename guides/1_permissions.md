@@ -21,6 +21,7 @@ graph TB
     User[User] -->|Research| AR[App Runner<br/>AI Researcher]
     Schedule[EventBridge<br/>Every 2 Hours] -->|Trigger| SchedLambda[Lambda<br/>Scheduler]
     SchedLambda -->|Call| AR
+    AR -->|Generate| Bedrock[AWS Bedrock<br/>OSS 120B Model]
     AR -->|Store| Lambda[Lambda<br/>Ingest]
     Lambda -->|Embed| SM[SageMaker<br/>Embeddings]
     Lambda -->|Index| S3V[(S3 Vectors<br/>90% Cheaper!)]
@@ -31,6 +32,7 @@ graph TB
     style SM fill:#10B981
     style Schedule fill:#9333EA
     style SchedLambda fill:#FF9900
+    style Bedrock fill:#FF9900
 ```
 
 See [architecture.md](architecture.md) for the complete system architecture.
@@ -99,6 +101,7 @@ Since S3 Vectors is a new service (as of 2025), we need to create a custom polic
 3. For **Group name**, enter: `AlexAccess`
 4. In the **Attach permissions policies** section, search for and select these policies:
    - `AmazonSageMakerFullAccess` (AWS managed policy)
+   - `AmazonBedrockFullAccess` (AWS managed policy - for AI model access)
    - `CloudWatchEventsFullAccess` (AWS managed policy - includes EventBridge)
    - `AlexS3VectorsAccess` (the custom policy you just created)
    

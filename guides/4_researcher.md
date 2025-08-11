@@ -7,13 +7,13 @@ In this guide, you'll deploy the Alex Researcher service - an AI agent that gene
 Before starting, ensure you have:
 1. Completed Guides 1-3 (SageMaker, S3 Vectors, and Ingest Pipeline deployed)
 2. Docker Desktop installed and running
-3. Your `.env` file in the project root with `OPENAI_API_KEY`
-4. AWS CLI configured with your credentials
+3. AWS CLI configured with your credentials
+4. Access to AWS Bedrock OpenAI OSS models (see Step 0 below)
 
 ## What You'll Deploy
 
 The Researcher service is an AWS App Runner application that:
-- Uses OpenAI's Agents SDK to create an investment research agent
+- Uses AWS Bedrock with OpenAI's OSS 120B model for AI capabilities
 - Automatically calls your ingest pipeline to store research in S3 Vectors
 - Provides a REST API for generating financial analysis on demand
 
@@ -24,7 +24,7 @@ graph LR
     User[User] -->|Research Request| AR[App Runner<br/>Researcher]
     Schedule[EventBridge<br/>Every 2hrs] -->|Trigger| SchedLambda[Lambda<br/>Scheduler]
     SchedLambda -->|Auto Research| AR
-    AR -->|Generate Analysis| OA[OpenAI API<br/>GPT-4.1-mini]
+    AR -->|Generate Analysis| Bedrock[AWS Bedrock<br/>OSS 120B<br/>us-west-2]
     AR -->|Store Research| API[API Gateway]
     API -->|Process| Lambda[Lambda<br/>Ingest]
     Lambda -->|Embeddings| SM[SageMaker<br/>all-MiniLM-L6-v2]
@@ -32,11 +32,35 @@ graph LR
     User -->|Search| S3V
     
     style AR fill:#FF9900
-    style OA fill:#10B981
+    style Bedrock fill:#FF9900
     style S3V fill:#90EE90
     style Schedule fill:#9333EA
     style SchedLambda fill:#FF9900
 ```
+
+## Step 0: Request Access to Bedrock Models
+
+The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You need to request access to this model first.
+
+### Request Model Access
+
+1. Sign in to the AWS Console
+2. Navigate to **Amazon Bedrock** service
+3. Switch to the **US West (Oregon) us-west-2** region (top right corner)
+4. In the left sidebar, click **Model access**
+5. Click **Manage model access** or **Modify model access**
+6. Find the **OpenAI** section
+7. Check the boxes for:
+   - **gpt-oss-120b** (OpenAI GPT OSS 120B)
+   - **gpt-oss-20b** (OpenAI GPT OSS 20B) - optional, smaller model
+8. Click **Request model access** at the bottom
+9. Wait for approval (usually instant for these models)
+
+**Important Notes:**
+- These models are ONLY available in **us-west-2** region
+- Your App Runner service can be in any region and will connect to us-west-2
+- The OSS models are open-weight models from OpenAI, not the commercial GPT models
+- No API key is required - AWS IAM handles authentication
 
 ## Step 1: Deploy the Infrastructure
 
@@ -332,6 +356,12 @@ This will remove the scheduler but keep all your other services running.
 - The agent may be taking too long (>30 seconds)
 - This is normal if the agent is browsing multiple web pages
 - The research should still complete and be stored
+
+### "Invalid model identifier" or Bedrock errors
+- Ensure you've requested access to the OpenAI OSS models in us-west-2 (see Step 0)
+- Check that your IAM role has Bedrock permissions (should be added by Terraform)
+- The models are ONLY available in us-west-2 but can be accessed from any region
+- Verify model access: Go to Bedrock console → Model access → Check status
 
 ## Clean Up (Optional)
 

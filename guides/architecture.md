@@ -6,12 +6,6 @@ The Alex platform uses a modern serverless architecture on AWS, combining AI ser
 
 ```mermaid
 graph TB
-    %% External Users
-    User[fa:fa-user User]
-    
-    %% Frontend (future)
-    Frontend[fa:fa-globe Frontend<br/>Next.js App<br/>Coming Soon]
-    
     %% API Gateway
     APIGW[fa:fa-shield-alt API Gateway<br/>REST API<br/>API Key Auth]
     
@@ -25,21 +19,16 @@ graph TB
     
     %% AI Services
     SageMaker[fa:fa-brain SageMaker<br/>Embedding Model<br/>all-MiniLM-L6-v2]
-    OpenAI[fa:fa-robot OpenAI API<br/>GPT-4.1-mini<br/>Research Agent]
+    Bedrock[fa:fa-robot AWS Bedrock<br/>OSS 120B Model<br/>us-west-2]
     
     %% Data Storage
     S3Vectors[fa:fa-database S3 Vectors<br/>Vector Storage<br/>90% Cost Reduction!]
     ECR[fa:fa-archive ECR<br/>Docker Registry<br/>Researcher Images]
     
     %% Connections
-    User -->|Research Request| AppRunner
-    User -->|Direct Ingest| APIGW
-    Frontend -.->|Future| APIGW
-    Frontend -.->|Future| AppRunner
-    
-    APIGW -->|Invoke| Lambda
     AppRunner -->|Store Research| APIGW
-    AppRunner -->|Generate| OpenAI
+    AppRunner -->|Generate| Bedrock
+    APIGW -->|Invoke| Lambda
     
     EventBridge -->|Every 2hrs| SchedulerLambda
     SchedulerLambda -->|Call /research/auto| AppRunner
@@ -53,14 +42,12 @@ graph TB
     classDef aws fill:#FF9900,stroke:#232F3E,stroke-width:2px,color:#fff
     classDef ai fill:#10B981,stroke:#047857,stroke-width:2px,color:#fff
     classDef storage fill:#3B82F6,stroke:#1E40AF,stroke-width:2px,color:#fff
-    classDef future fill:#E5E7EB,stroke:#9CA3AF,stroke-width:2px,color:#6B7280
     classDef highlight fill:#90EE90,stroke:#228B22,stroke-width:3px,color:#000
     classDef scheduler fill:#9333EA,stroke:#6B21A8,stroke-width:2px,color:#fff
     
     class APIGW,Lambda,AppRunner,SageMaker,ECR,SchedulerLambda aws
-    class OpenAI ai
+    class Bedrock ai
     class S3Vectors storage
-    class Frontend future
     class S3Vectors highlight
     class EventBridge scheduler
 ```
@@ -111,21 +98,23 @@ graph TB
 - **Target**: alex-scheduler Lambda
 - **Purpose**: Automated research generation
 
-### 7. **External AI**
-- **Provider**: OpenAI
-- **Model**: GPT-4.1-mini
+### 7. **AWS Bedrock**
+- **Provider**: AWS Bedrock
+- **Model**: OpenAI OSS 120B (open-weight model)
+- **Region**: us-west-2 (model only available here)
 - **Purpose**: Research generation and analysis
+- **Features**: 128K context window, cross-region access
 
 ## Data Flow
 
 1. **Manual Research Flow**:
    ```
-   User → App Runner → OpenAI (generate) → API Gateway → Lambda → S3 Vectors
+   User → App Runner → Bedrock (generate) → API Gateway → Lambda → S3 Vectors
    ```
 
 2. **Automated Research Flow**:
    ```
-   EventBridge (every 2hrs) → Lambda Scheduler → App Runner → OpenAI → API Gateway → Lambda → S3 Vectors
+   EventBridge (every 2hrs) → Lambda Scheduler → App Runner → Bedrock → API Gateway → Lambda → S3 Vectors
    ```
 
 3. **Direct Ingest Flow**:
@@ -183,7 +172,7 @@ graph LR
 
 - **Infrastructure**: Terraform
 - **Compute**: Lambda, App Runner
-- **AI/ML**: SageMaker, OpenAI
+- **AI/ML**: SageMaker, AWS Bedrock
 - **Storage**: S3 Vectors
 - **API**: API Gateway
 - **Languages**: Python 3.12
