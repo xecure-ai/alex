@@ -62,3 +62,21 @@ output "scheduler_lambda_name" {
   description = "Name of the scheduler Lambda function"
   value       = module.scheduler.lambda_function_name
 }
+
+# Aurora outputs
+output "aurora_cluster_arn" {
+  description = "ARN of the Aurora cluster for Data API access"
+  value       = module.aurora.cluster_arn
+  sensitive   = false
+}
+
+output "aurora_secret_arn" {
+  description = "ARN of the secret containing database credentials"
+  value       = module.aurora.secret_arn
+  sensitive   = true
+}
+
+output "aurora_database_name" {
+  description = "Name of the database"
+  value       = module.aurora.database_name
+}

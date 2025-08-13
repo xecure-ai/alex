@@ -70,12 +70,12 @@ CREATE TABLE users (
 CREATE TABLE instruments (
     symbol VARCHAR(20) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    instrument_type VARCHAR(50),            -- 'equity', 'etf', 'mutual_fund', 'bond_fund'
+    instrument_type VARCHAR(50),            -- Literal['etf', 'mutual_fund', 'stock', 'bond', 'bond_fund', 'commodity', 'reit']
     
-    -- Allocation percentages (0-100)
-    allocation_regions JSONB,               -- {"north_america": 60, "europe": 20, "asia": 20}
-    allocation_sectors JSONB,               -- {"technology": 30, "healthcare": 20, ...}
-    allocation_asset_class JSONB,           -- {"equity": 80, "fixed_income": 20}
+    -- Allocation percentages (0-100) - validated by Pydantic to sum to 100
+    allocation_regions JSONB,               -- Keys: north_america, europe, asia, latin_america, africa, middle_east, oceania, global, international
+    allocation_sectors JSONB,               -- Keys: technology, healthcare, financials, consumer_discretionary, etc.
+    allocation_asset_class JSONB,           -- Keys: equity, fixed_income, real_estate, commodities, cash, alternatives
     
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -236,6 +236,116 @@ Since Part 4, we need additional AWS permissions. Add these to your IAM user's g
 - `CloudFrontFullAccess` - For CDN deployment
 - `SecretsManagerReadWrite` - For database credentials
 
+### Custom RDS Policy Required
+
+Create a custom IAM policy named `AlexRDSCustomPolicy` with the following permissions:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "RDSPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "rds:CreateDBCluster",
+                "rds:CreateDBInstance",
+                "rds:CreateDBSubnetGroup",
+                "rds:DeleteDBCluster",
+                "rds:DeleteDBInstance",
+                "rds:DeleteDBSubnetGroup",
+                "rds:DescribeDBClusters",
+                "rds:DescribeDBInstances",
+                "rds:DescribeDBSubnetGroups",
+                "rds:ModifyDBCluster",
+                "rds:ModifyDBInstance",
+                "rds:AddTagsToResource",
+                "rds:ListTagsForResource",
+                "rds:RemoveTagsFromResource"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2Permissions",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeVpcs",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeSecurityGroups",
+                "ec2:CreateSecurityGroup",
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupIngress"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "SecretsManagerPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:CreateSecret",
+                "secretsmanager:DeleteSecret",
+                "secretsmanager:DescribeSecret",
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:PutSecretValue",
+                "secretsmanager:UpdateSecret"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "KMSPermissions",
+            "Effect": "Allow",
+            "Action": [
+                "kms:CreateGrant",
+                "kms:Decrypt",
+                "kms:DescribeKey",
+                "kms:Encrypt"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+**Note**: These permissions are required for Terraform to manage Aurora Serverless v2 resources. The `ListTagsForResource` permission is particularly important for Terraform state management.
+
+## Cost Management Strategy
+
+### Aurora Serverless v2 Costs
+- **Running cost**: $1.44-$2.88/day ($43-$87/month)
+- **Cannot scale to zero** (unlike v1)
+- **Recommendation**: Create, learn, destroy within 3-5 days
+
+### Cost Control Commands
+Students can use the included `aurora_cost_management.py` script:
+
+```bash
+# From the terraform directory:
+cd terraform
+
+# Check current status and costs
+uv run aurora_cost_management.py status
+
+# Minimize costs when not actively working (still $1.44/day)
+uv run aurora_cost_management.py pause
+
+# Resume for active development
+uv run aurora_cost_management.py resume
+
+# COMPLETELY STOP charges (deletes database!)
+uv run aurora_cost_management.py destroy
+
+# Recreate after destroy
+uv run aurora_cost_management.py recreate
+```
+
+### Recommended Timeline
+- **Day 1**: Create Aurora, complete Part 5
+- **Day 2-3**: Complete Parts 6-7
+- **Day 4**: Complete Part 8, capture learnings
+- **Day 5**: Destroy Aurora to stop charges
+- **Total cost**: ~$7-14 for the entire course
+
 ### Additional Permissions Needed
 Create a custom policy with:
 ```json
@@ -282,21 +392,24 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 
 2. **Create Database Schema**
    - Write SQL migration files (001_schema.sql)
-   - Create migration runner script
+   - Create migration runner script with proper SQL statement splitting
    - Run migrations against Aurora using Data API
+   - All JSONB columns validated through Pydantic before insertion
    - ✅ **Test**: Verify all tables exist with correct structure
 
 3. **Build Shared Database Package** (`backend/database/`)
    - Create uv project with Data API client wrapper
-   - Implement query builder for common operations
-   - Create database tools for agents (using boto3 rds-data client)
-   - Write unit tests
-   - ✅ **Test**: Run pytest suite locally
+   - Implement Pydantic schemas for validation (src/schemas.py)
+   - Create database models with automatic type casting
+   - Handle JSONB, numeric, date, and UUID type conversions
+   - Write comprehensive test suite
+   - ✅ **Test**: Run all tests with `uv run test_db.py`
 
 4. **Seed Instruments Table**
-   - Create seed data with popular ETFs (SPY, QQQ, BND, etc.)
-   - Include allocation breakdowns
-   - ✅ **Test**: Query instruments, verify allocations sum to 100
+   - Create seed data with 22 popular ETFs (SPY, QQQ, BND, etc.)
+   - Validate all data through Pydantic InstrumentCreate schema
+   - Ensure all allocations sum to 100% with automatic validation
+   - ✅ **Test**: Run `uv run seed_data.py`, verify Pydantic validation
 
 5. **Create Database Reset Script** (`backend/database/reset_db.py`)
    - Drop all tables in correct order (handle foreign keys)
@@ -310,6 +423,33 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
    - Multiple accounts (401k, IRA, Taxable)
    - Various positions across different instruments
    - ✅ **Test**: Load data, query full portfolio
+
+### Pydantic Schema Structure
+
+All database operations use Pydantic schemas for validation:
+
+```python
+# backend/database/src/schemas.py
+
+# Literal types for constrained values (LLM-compatible)
+RegionType = Literal["north_america", "europe", "asia", ...]
+AssetClassType = Literal["equity", "fixed_income", "real_estate", ...]
+SectorType = Literal["technology", "healthcare", "financials", ...]
+
+# Input schemas with validation
+class InstrumentCreate(BaseModel):
+    symbol: str = Field(description="Ticker symbol (e.g., 'SPY')")
+    allocation_regions: Dict[RegionType, float]  # Must sum to 100
+    allocation_sectors: Dict[SectorType, float]  # Must sum to 100
+    allocation_asset_class: Dict[AssetClassType, float]  # Must sum to 100
+
+# Output schemas for LLM structured responses
+class PortfolioAnalysis(BaseModel):
+    total_value: Decimal
+    asset_allocation: Dict[AssetClassType, float]
+    risk_score: int = Field(ge=1, le=10)
+    recommendations: List[str]
+```
 
 ### Database Reset Script Structure
 ```python
@@ -381,19 +521,19 @@ TEST_USER = {
 - [ ] JSONB columns functioning for flexible data
 
 #### Database Package
-- [ ] Package installable via `uv add --editable ../database`
-- [ ] Data API client wrapper handles all operations
-- [ ] Retry logic implemented for transient failures
-- [ ] Connection uses IAM authentication (no passwords in code)
+- [x] Package installable via `uv add --editable ../database`
+- [x] Data API client wrapper handles all operations with automatic type casting
+- [x] Pydantic schemas validate all data before database insertion
+- [x] Connection uses IAM authentication (no passwords in code)
 
 #### Data Population
-- [ ] 20+ instruments loaded with complete allocation data
-- [ ] All allocation percentages sum to 100 for each instrument
-- [ ] Test user created with sample portfolio when requested
-- [ ] Reset script is idempotent (can run multiple times safely)
+- [x] 22 instruments loaded with complete allocation data
+- [x] All allocation percentages sum to 100 (validated by Pydantic)
+- [x] Test user created with sample portfolio when requested
+- [x] Reset script is idempotent (can run multiple times safely)
 
 #### Testing
-- [ ] Can query database via AWS CLI:
+- [x] Can query database via AWS CLI:
   ```bash
   aws rds-data execute-statement \
     --resource-arn $AURORA_CLUSTER_ARN \
@@ -401,9 +541,44 @@ TEST_USER = {
     --database alex \
     --sql "SELECT COUNT(*) FROM instruments"
   ```
-- [ ] Python package can perform CRUD operations
-- [ ] Reset script completes without errors
-- [ ] All pytest tests pass in database package
+- [x] Python package can perform CRUD operations
+- [x] Reset script completes without errors (`uv run reset_db.py --with-test-data`)
+- [x] All tests pass in database package (`uv run test_db.py`)
+
+### Part 5 Completion Summary ✅
+
+**What We Built:**
+- Aurora Serverless v2 PostgreSQL cluster with Data API (no VPC complexity)
+- Complete database schema with 7 tables
+- Shared database package with Pydantic validation
+- 22 validated ETF instruments with allocation data
+- Comprehensive test suite (3 focused test files)
+
+**Key Features:**
+- All data validated through Pydantic schemas before database insertion
+- Literal types for constrained values (regions, sectors, asset classes)
+- Automatic type casting for JSONB, numeric, date, and UUID fields
+- Natural language Field descriptions for LLM compatibility
+- Schemas ready for OpenAI/Anthropic function calling
+
+**Files Created:**
+```
+backend/database/
+├── src/                    # Package source
+│   ├── client.py          # Data API wrapper with type casting
+│   ├── models.py          # Database models
+│   └── schemas.py         # Pydantic schemas (LLM-compatible)
+├── migrations/            # SQL schema
+├── reset_db.py           # Database reset and populate
+├── seed_data.py          # Load 22 ETF instruments
+├── test_data_api.py      # Initial Aurora setup
+├── test_db.py            # Complete test suite
+└── verify_database.py    # State verification
+```
+
+**Ready for Part 6:** Database is fully operational with clean test output! ✅
+
+---
 
 ## Part 6: Agent Orchestra - Core Services
 
@@ -911,10 +1086,10 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 ## Success Criteria
 
 ### Part 5 Success
-- [ ] Aurora Data API accessible from Lambda (no VPC)
-- [ ] All tables created with correct schema
-- [ ] Database package installable in other services
-- [ ] Test data loads successfully
+- [x] Aurora Data API accessible from Lambda (no VPC)
+- [x] All tables created with correct schema
+- [x] Database package installable in other services
+- [x] Test data loads successfully with Pydantic validation
 
 ### Part 6 Success
 - [ ] Orchestrator delegates to all agents
@@ -1054,6 +1229,12 @@ curl -X OPTIONS https://api.gateway.url/portfolio \
 - Create database package first - all agents depend on it
 - Each backend folder is a separate uv project with its own pyproject.toml
 - Database package installed as local dependency: `uv add --editable ../database`
+- **Pydantic Integration**:
+  - All data validation through Pydantic schemas (not raw JSON)
+  - Literal types for constrained values (regions, sectors, asset classes)
+  - Natural language Field descriptions for LLM compatibility
+  - Automatic type casting in Data API client (JSONB, numeric, date, UUID)
+  - Schemas suitable for OpenAI/Anthropic function calling
 - Integration tests live in backend/planner/tests/ to avoid dependency issues
 - Test Lambda packaging carefully with local dependencies
 - Ensure Terraform modules are incremental

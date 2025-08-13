@@ -150,3 +150,18 @@ module "scheduler" {
   app_runner_url = module.app_runner.service_url
   enabled        = var.scheduler_enabled
 }
+
+# Aurora Serverless v2 with Data API
+module "aurora" {
+  source = "./modules/aurora"
+  
+  cluster_name   = "alex-aurora-cluster"
+  database_name  = "alex"
+  min_capacity   = 0.5  # Minimum for cost savings
+  max_capacity   = 1    # Keep low for development
+  
+  tags = {
+    Project     = "Alex"
+    Environment = var.environment
+  }
+}
