@@ -224,6 +224,41 @@ alex/
     └── 8_observability.md
 ```
 
+## IMPORTANT - Read this - Agent design
+
+For Agents, we will be using OpenAI Agents SDK. This is the name of the production release of what used to be called Swarm.
+Each Agent should be its own directory under backend, with its own uv project and lambda function.
+
+The correct package to install is `openai-agents`
+`uv add openai-agents`
+`uv add "openai-agents[litellm]"`
+
+This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Structured Ouputs and Tools. This is the approach to be used. Only use Tools and Structured Outputs where they make sense.
+
+BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace(). Check the docs, be up to date.
+
+```python
+from pydantic import BaseModel, Field
+from agents import Agent, Runner, trace, function_tool
+from agents.extensions.models.litellm_model import LitellmModel
+
+class MyResultObject(BaseModel):
+    my_field: str = Field(description="Natural language description here")
+
+@function_tool
+async def my_tool(arg1: str, arg2: str) -> str:
+    """ The docstring here, including listing the args """
+    return "result"
+
+async def run_agent():
+    model = LitellmModel(model="bedrock/...")
+    tools = [my_tool]
+    with trace("Clear title of trace - use this thoughtfully - only this one argument"):
+        agent = Agent(name="My Agent", instructions="the instructions - import from a separate templates module", model=model, tools=tools)
+        result = await Runner.run(agent, input="the task prompt - import from a separate templates module as appropriate", max_turns=20)
+    return result.final_output_as(MyResultObject)
+```
+
 ## Before We Begin: Additional IAM Permissions
 
 Since Part 4, we need additional AWS permissions. Add these to your IAM user's groups or policies:

@@ -5,3 +5,5 @@
 - The guides need to be clear and bulletproof, with some troubleshooting at the end
 - Keep in simple and clear
 - Favor command line over AWS console
+- See gameplan.md for instructions on our gameplan
+- See agent_architecture.md for the design
