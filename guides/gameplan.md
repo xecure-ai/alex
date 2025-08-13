@@ -155,12 +155,12 @@ CREATE TABLE retirement (
 - **OpenAI Agents SDK** with Bedrock using LiteLLM integration for agent orchestration
 
 ### Infrastructure Choices
-- **RDS PostgreSQL Serverless v2** - Scales to zero, handles Lambda cold starts
+- **Aurora Serverless v2 PostgreSQL with Data API** - No VPC needed, scales to zero
 - **Lambda** for ALL backend services (agents and API)
-- **API Gateway** for REST API endpoints
+- **API Gateway** for REST API endpoints with CORS
 - **SQS** for async job queue
-- **CloudFront + S3** for NextJS static site
-- **Clerk** for authentication (no custom auth code)
+- **S3 + CloudFront** for static React SPA
+- **Clerk** for authentication (client-side only)
 - **LangFuse** for observability (native OpenAI Agents SDK support)
 
 ### Project Structure
@@ -210,10 +210,12 @@ alex/
 │       ├── lambda_handler.py  # Lambda + API Gateway
 │       └── package.py
 │
-├── frontend/              # NextJS app (Guide 7)
-│   ├── app/
-│   ├── components/
-│   └── lib/
+├── frontend/              # React SPA (Guide 7)
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── lib/
+│   └── vite.config.ts
 │
 └── guides/
     ├── 5_database.md
@@ -222,30 +224,72 @@ alex/
     └── 8_observability.md
 ```
 
+## Before We Begin: Additional IAM Permissions
+
+Since Part 4, we need additional AWS permissions. Add these to your IAM user's groups or policies:
+
+### Required AWS Managed Policies
+- `AmazonRDSDataFullAccess` - For Aurora Data API
+- `AWSLambda_FullAccess` - For Lambda functions
+- `AmazonSQSFullAccess` - For queue management
+- `AmazonEventBridgeFullAccess` - For schedulers
+- `CloudFrontFullAccess` - For CDN deployment
+- `SecretsManagerReadWrite` - For database credentials
+
+### Additional Permissions Needed
+Create a custom policy with:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "rds:CreateDBCluster",
+        "rds:ModifyDBCluster",
+        "rds:DeleteDBCluster",
+        "rds:DescribeDBClusters"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+✅ **Verify**: Run `aws rds describe-db-clusters` - should return empty list or existing clusters
+
 ## Part 5: Database & Shared Infrastructure
 
 ### Objective
-Set up RDS PostgreSQL Serverless v2 and create a reusable database library that all agents can use.
+Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable database library that all agents can use.
 
 ### Steps
 
-1. **Deploy RDS Serverless v2 with Terraform**
-   - Create RDS instance in VPC
-   - Configure security groups for Lambda access
+1. **Deploy Aurora Serverless v2 with Terraform**
+   - Create Aurora cluster with Data API enabled
+   - No VPC configuration needed (Data API uses HTTPS)
    - Store credentials in Secrets Manager
-   - Output connection string
-   - ✅ **Test**: Connect with psql from local machine through bastion or VPN
+   - Configure IAM roles for Lambda access
+   - ✅ **Test**: Execute query via AWS CLI using Data API
 
 2. **Create Database Schema**
    - Write SQL migration files (001_schema.sql)
    - Create migration runner script
-   - Run migrations against RDS
+   - Run migrations against Aurora using Data API
    - ✅ **Test**: Verify all tables exist with correct structure
 
 3. **Build Shared Database Package** (`backend/database/`)
-   - Create uv project with SQLAlchemy models
-   - Implement connection pooling for Lambda
-   - Create database tools for agents
+   - Create uv project with Data API client wrapper
+   - Implement query builder for common operations
+   - Create database tools for agents (using boto3 rds-data client)
    - Write unit tests
    - ✅ **Test**: Run pytest suite locally
 
@@ -254,17 +298,112 @@ Set up RDS PostgreSQL Serverless v2 and create a reusable database library that 
    - Include allocation breakdowns
    - ✅ **Test**: Query instruments, verify allocations sum to 100
 
-5. **Create Test Data Loader**
+5. **Create Database Reset Script** (`backend/database/reset_db.py`)
+   - Drop all tables in correct order (handle foreign keys)
+   - Recreate schema from migrations
+   - Load default instruments (20+ popular ETFs)
+   - Optionally create test user with sample portfolio
+   - ✅ **Test**: `uv run reset_db.py --with-test-data`
+
+6. **Create Test Data Loader**
    - Script to create test user with sample portfolio
    - Multiple accounts (401k, IRA, Taxable)
-   - Various positions
+   - Various positions across different instruments
    - ✅ **Test**: Load data, query full portfolio
 
+### Database Reset Script Structure
+```python
+# backend/database/reset_db.py
+"""
+Usage:
+  uv run reset_db.py                    # Just load default instruments
+  uv run reset_db.py --drop-all        # Drop and recreate all tables
+  uv run reset_db.py --with-test-data  # Include test user and portfolio
+"""
+
+# Default instruments to always load
+DEFAULT_INSTRUMENTS = [
+    # Equity ETFs
+    {"symbol": "SPY", "name": "SPDR S&P 500", "type": "etf",
+     "asset_class": {"equity": 100},
+     "regions": {"north_america": 100},
+     "sectors": {"technology": 28, "healthcare": 13, "financials": 13, ...}},
+    
+    # Bond ETFs
+    {"symbol": "BND", "name": "Vanguard Total Bond", "type": "etf",
+     "asset_class": {"fixed_income": 100},
+     "regions": {"north_america": 100},
+     "sectors": {"government": 65, "corporate": 35}},
+    
+    # International
+    {"symbol": "VXUS", "name": "Vanguard Total Intl Stock", "type": "etf",
+     "asset_class": {"equity": 100},
+     "regions": {"europe": 40, "asia": 35, "emerging": 25}},
+    
+    # Plus 15+ more popular ETFs...
+]
+
+# Test portfolio if --with-test-data
+TEST_USER = {
+    "clerk_user_id": "user_test_123",
+    "display_name": "Test User",
+    "years_until_retirement": 30,
+    "accounts": [
+        {"name": "401k", "positions": [
+            {"symbol": "SPY", "quantity": 100},
+            {"symbol": "BND", "quantity": 200}
+        ]},
+        {"name": "Roth IRA", "positions": [
+            {"symbol": "VXUS", "quantity": 50}
+        ]}
+    ]
+}
+```
+
 ### Deliverables
-- Working RDS database
-- Shared database package
-- Populated instruments table
+- Working Aurora database with Data API
+- Shared database package using Data API client
+- Database reset script with defaults
+- Populated instruments table (20+ ETFs)
 - Test data for development
+
+### Acceptance Criteria for Part 5
+
+#### Infrastructure
+- [ ] Aurora Serverless v2 cluster is running with Data API enabled
+- [ ] Database credentials stored in Secrets Manager
+- [ ] Data API endpoint accessible via AWS CLI
+- [ ] No VPC or networking configuration required
+
+#### Database Schema
+- [ ] All tables created successfully (users, instruments, accounts, positions, reports, retirement, analysis_jobs)
+- [ ] Foreign key constraints working properly
+- [ ] JSONB columns functioning for flexible data
+
+#### Database Package
+- [ ] Package installable via `uv add --editable ../database`
+- [ ] Data API client wrapper handles all operations
+- [ ] Retry logic implemented for transient failures
+- [ ] Connection uses IAM authentication (no passwords in code)
+
+#### Data Population
+- [ ] 20+ instruments loaded with complete allocation data
+- [ ] All allocation percentages sum to 100 for each instrument
+- [ ] Test user created with sample portfolio when requested
+- [ ] Reset script is idempotent (can run multiple times safely)
+
+#### Testing
+- [ ] Can query database via AWS CLI:
+  ```bash
+  aws rds-data execute-statement \
+    --resource-arn $AURORA_CLUSTER_ARN \
+    --secret-arn $AURORA_SECRET_ARN \
+    --database alex \
+    --sql "SELECT COUNT(*) FROM instruments"
+  ```
+- [ ] Python package can perform CRUD operations
+- [ ] Reset script completes without errors
+- [ ] All pytest tests pass in database package
 
 ## Part 6: Agent Orchestra - Core Services
 
@@ -337,54 +476,107 @@ User Request → API → SQS → Planner (Lambda)
 - Full portfolio analysis capability
 - Async job processing via SQS
 
+### Acceptance Criteria for Part 6
+
+#### Lambda Infrastructure
+- [ ] All 5 Lambda functions deployed (Planner, InstrumentTagger, Reporter, Charter, Retirement)
+- [ ] SQS queue created with proper dead letter queue
+- [ ] Orchestrator has 15-minute timeout configured
+- [ ] All Lambdas have IAM roles with correct permissions
+- [ ] Environment variable for BEDROCK_MODEL_ID set
+
+#### Orchestrator Functionality
+- [ ] Receives messages from SQS successfully
+- [ ] Updates job status in database (pending → running → completed/failed)
+- [ ] Invokes other Lambda functions via boto3
+- [ ] Handles failures gracefully with error messages
+- [ ] Completes full analysis in under 3 minutes
+
+#### InstrumentTagger Agent
+- [ ] Identifies instruments missing allocation data
+- [ ] Successfully calls Bedrock Claude model
+- [ ] Returns structured JSON with allocations
+- [ ] All percentages sum to 100
+- [ ] Updates database with new data
+
+#### Report Writer Agent  
+- [ ] Generates markdown analysis report
+- [ ] Includes portfolio summary and recommendations
+- [ ] Properly formatted for frontend display
+- [ ] Saves to database reports table
+
+#### Chart Maker Agent
+- [ ] Calculates portfolio allocations correctly
+- [ ] Returns JSON formatted for Recharts
+- [ ] Includes asset class, region, and sector breakdowns
+- [ ] All chart data percentages sum to 100
+
+#### Retirement Specialist Agent
+- [ ] Projects retirement income based on portfolio
+- [ ] Generates projection chart data
+- [ ] Considers years until retirement
+- [ ] Saves analysis to retirement table
+
+#### Integration Testing
+- [ ] End-to-end test: Send SQS message → Receive complete analysis
+- [ ] Test with portfolio containing unknown instruments
+- [ ] Verify all agents called and data stored
+- [ ] Job status correctly updated throughout
+- [ ] Can handle concurrent job requests
+
 ## Part 7: Frontend & Authentication
 
 ### Objective
-Build a modern NextJS frontend with Clerk authentication, deployed to CloudFront, with Lambda-based API backend.
+Build a pure client-side React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
 
 ### Steps
 
 1. **Deploy API Lambda**
    - Lambda function with API Gateway trigger
-   - FastAPI or simple request routing
-   - JWT validation for Clerk tokens
+   - CORS configuration for browser access (restrict to your domain)
+   - JWT validation for Clerk tokens using PyJWT and JWKS
+   - Every endpoint verifies the JWT signature with Clerk's public key
+   - Extract user_id from validated JWT for row-level security
    - Database operations for portfolios
    - Trigger analysis jobs via SQS
-   - ✅ **Test**: API endpoints work via curl/Postman
+   - ✅ **Test**: API endpoints reject invalid tokens, accept valid ones
 
 2. **Set Up Clerk**
    - Create Clerk application
    - Configure OAuth providers (Google, GitHub)
-   - Set up webhook Lambda for user sync to RDS
-   - Configure JWT for API calls
-   - ✅ **Test**: Complete sign-up/sign-in flow
+   - Set up webhook Lambda for user sync to Aurora
+   - Get publishable key for frontend
+   - Configure allowed origins for CORS
+   - ✅ **Test**: Clerk dashboard shows test sign-ups
 
-3. **Build NextJS Application Structure**
-   - Create app with TypeScript
-   - Set up routing (app directory)
-   - Configure Clerk middleware
-   - Create layouts
-   - ✅ **Test**: Dev server runs, routing works
+3. **Build Static React App**
+   - Create React app with Vite (faster than CRA)
+   - TypeScript for type safety
+   - React Router for client-side routing
+   - Clerk React SDK for auth
+   - No SSR/ISR - pure client-side
+   - ✅ **Test**: Dev server runs, auth works locally
 
 4. **Connect Frontend to API**
-   - Configure API Gateway endpoint
-   - Handle Clerk JWT in requests
-   - CRUD for portfolios
-   - Trigger and poll agent analysis
-   - ✅ **Test**: Full flow works end-to-end
+   - Configure API Gateway endpoint as environment variable
+   - Clerk automatically adds JWT to requests
+   - Implement API client with fetch
+   - Handle CORS preflight requests
+   - ✅ **Test**: Browser can call API with auth
 
 5. **Build UI Components**
    - Portfolio input forms
    - Position management
    - Chart components (Recharts)
-   - Report viewer (markdown)
-   - ✅ **Test**: Components render, forms submit
+   - Markdown viewer for reports
+   - Loading states and error handling
+   - ✅ **Test**: All features work in dev mode
 
-6. **Deploy to S3/CloudFront**
-   - Build static export
-   - Upload to S3
+6. **Deploy Static Site to S3/CloudFront**
+   - Build production bundle with Vite
+   - Upload to S3 bucket (static website hosting)
    - Configure CloudFront distribution
-   - Set up custom domain (optional)
+   - Set index.html as default and error document (for SPA routing)
    - ✅ **Test**: Production URL works, auth flows work
 
 ### Frontend Pages
@@ -395,12 +587,71 @@ Build a modern NextJS frontend with Clerk authentication, deployed to CloudFront
 - `/settings` - User preferences
 
 ### Deliverables
-- API Lambda with API Gateway endpoints
+- API Lambda with API Gateway endpoints + CORS
 - Clerk webhook Lambda for user sync
-- Working NextJS app with auth
-- Deployed to CloudFront
+- Pure static React SPA with Clerk auth
+- Deployed to S3/CloudFront
 - Full CRUD for portfolios
 - Agent analysis triggering
+
+### Acceptance Criteria for Part 7
+
+#### API Gateway & CORS Configuration
+- [ ] API Gateway REST API deployed with all endpoints
+- [ ] CORS headers properly configured:
+  - `Access-Control-Allow-Origin`: Your CloudFront domain (NOT *)
+  - `Access-Control-Allow-Headers`: Authorization, Content-Type
+  - `Access-Control-Allow-Methods`: GET, POST, PUT, DELETE, OPTIONS
+- [ ] OPTIONS preflight requests return 200 immediately
+- [ ] Test CORS with browser DevTools - no CORS errors
+- [ ] API rejects requests from unauthorized origins
+
+#### JWT Authentication
+- [ ] Every Lambda validates JWT using Clerk's public keys
+- [ ] Invalid tokens return 401 Unauthorized
+- [ ] Expired tokens are rejected
+- [ ] User ID extracted from token for row-level security
+- [ ] Test with curl using invalid token - should fail:
+  ```bash
+  curl -H "Authorization: Bearer invalid_token" \
+    https://api.gateway.url/portfolio
+  # Should return 401
+  ```
+
+#### Clerk Integration
+- [ ] Webhook Lambda processes Clerk user events
+- [ ] New users automatically added to database
+- [ ] User updates sync to database
+- [ ] Frontend gets token via `clerk.session.getToken()`
+- [ ] Sign in/out flow works smoothly
+
+#### Frontend Functionality
+- [ ] React app builds without errors
+- [ ] Routing works for all pages (/dashboard, /portfolio, /reports)
+- [ ] API calls include Authorization header automatically
+- [ ] Loading states shown during API calls
+- [ ] Error states handle API failures gracefully
+
+#### Portfolio Management
+- [ ] Create new portfolio positions
+- [ ] Update existing positions
+- [ ] Delete positions
+- [ ] View all accounts and positions
+- [ ] Trigger analysis job and get job ID
+
+#### Static Deployment
+- [ ] S3 bucket configured for static website hosting
+- [ ] CloudFront distribution pointing to S3
+- [ ] index.html set as default and error document
+- [ ] Cache headers configured appropriately
+- [ ] HTTPS enforced via CloudFront
+
+#### End-to-End Testing
+- [ ] Sign up new user → User appears in database
+- [ ] Add portfolio position → Position saved to database
+- [ ] Trigger analysis → Job ID returned → Poll status → Get results
+- [ ] Sign out → API calls fail with 401
+- [ ] Test from different browser → CORS works correctly
 
 ## Part 8: Observability, Monitoring & Security
 
@@ -433,10 +684,10 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 
 4. **Implement Security Hardening**
    - API rate limiting (API Gateway)
-   - VPC endpoints for S3, Bedrock
-   - Secrets rotation
+   - Secrets rotation for Aurora credentials
    - WAF rules for CloudFront
    - Least privilege IAM
+   - Data API access controls
    - ✅ **Test**: Security scan with OWASP ZAP
 
 5. **Set Up Cost Monitoring**
@@ -456,11 +707,11 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 
 ### Security Checklist
 - [ ] All secrets in Secrets Manager
-- [ ] VPC endpoints configured
+- [ ] Data API IAM authentication configured
 - [ ] API rate limiting enabled
 - [ ] WAF rules active
 - [ ] IAM roles follow least privilege
-- [ ] Database encrypted
+- [ ] Database encrypted at rest
 - [ ] S3 buckets private
 - [ ] CloudTrail enabled
 
@@ -470,24 +721,124 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 - Security hardening complete
 - Cost tracking operational
 
+### Acceptance Criteria for Part 8
+
+#### LangFuse Integration for Rich Observability
+- [ ] LangFuse accessible and configured
+- [ ] All agent Lambda functions send detailed traces
+- [ ] Orchestrator creates parent trace with:
+  - Job metadata (user, portfolio size, job_id)
+  - Agent coordination timeline
+  - Decision points ("needs tagging", "retirement analysis required")
+- [ ] Each agent creates child trace with:
+  - Agent persona/role description
+  - Reasoning steps (chain of thought)
+  - Input/output tokens with cost
+  - Execution time and status
+  - Custom metadata (e.g., "instruments_tagged": 5)
+- [ ] Visual trace hierarchy shows:
+  ```
+  📊 Portfolio Analysis Job #123
+  ├── 🎯 Financial Planner (Orchestrator)
+  │   ├── Decision: Missing data for ARKK, SOFI
+  │   └── Routing to: InstrumentTagger
+  ├── 🏷️ InstrumentTagger 
+  │   ├── Tagged: ARKK → Tech ETF (100% equity)
+  │   └── Tagged: SOFI → Fintech Stock (100% equity)
+  ├── 📝 Report Writer (Parallel)
+  │   └── Generated: 2,500 word analysis
+  ├── 📊 Chart Maker (Parallel)
+  │   └── Created: 3 visualizations
+  └── 🎯 Retirement Specialist (Parallel)
+      └── Projection: 85% success rate
+  ```
+- [ ] Traces linked by job_id for correlation
+- [ ] Cost breakdown per agent and total
+- [ ] Success/failure status clearly visible
+
+#### CloudWatch Monitoring
+- [ ] Custom dashboard created with:
+  - Lambda invocation counts
+  - Lambda error rates
+  - API Gateway request counts
+  - SQS queue depth
+  - Aurora Data API latency
+- [ ] Alarms configured for:
+  - Lambda errors > 5% 
+  - SQS DLQ messages > 0
+  - API Gateway 5xx errors
+  - Database connection failures
+- [ ] Logs properly structured with JSON
+
+#### Security Hardening
+- [ ] API Gateway rate limiting enabled (e.g., 100 requests/minute per IP)
+- [ ] WAF rules active on CloudFront:
+  - SQL injection protection
+  - XSS protection
+  - Rate limiting
+- [ ] All Lambda environment variables use Secrets Manager
+- [ ] Database credentials rotated successfully
+- [ ] IAM roles follow least privilege principle
+- [ ] S3 buckets have versioning enabled
+- [ ] CloudTrail logging enabled for audit
+
+#### Cost Controls
+- [ ] AWS Budget alert at $50/month
+- [ ] Cost allocation tags on all resources:
+  - Project: alex
+  - Environment: production
+  - Owner: [your-name]
+- [ ] Per-user cost tracking via LangFuse
+- [ ] Aurora auto-pause configured (pause after 5 minutes idle)
+
+#### Performance Validation
+- [ ] Lambda cold starts < 2 seconds
+- [ ] API response times < 500ms (excluding analysis jobs)
+- [ ] Analysis completion < 3 minutes
+- [ ] Frontend loads < 2 seconds on 4G connection
+- [ ] Database queries < 100ms
+
+#### Security Testing
+- [ ] OWASP ZAP scan shows no high-risk vulnerabilities
+- [ ] Attempt SQL injection - properly blocked
+- [ ] Attempt XSS - properly sanitized
+- [ ] Try accessing API without token - returns 401
+- [ ] Try accessing another user's data - returns 403
+
+#### Documentation
+- [ ] Runbook created for common issues
+- [ ] Architecture diagram up to date
+- [ ] API documentation complete
+- [ ] Cost breakdown documented
+- [ ] Security measures documented
+
 ## Testing Strategy
 
 ### Local Testing at Each Stage
 
 **Guide 5 - Database**
 ```bash
-# Test RDS connection
-psql $DATABASE_URL -c "SELECT 1"
+# Test Aurora Data API connection
+aws rds-data execute-statement \
+  --resource-arn $AURORA_CLUSTER_ARN \
+  --secret-arn $AURORA_SECRET_ARN \
+  --database alex \
+  --sql "SELECT 1"
 
-# Test migrations
+# Reset database to clean state
 cd backend/database
+uv run reset_db.py --drop-all --confirm
+
+# Run migrations
 uv run migrations/migrate.py
+
+# Load defaults and test data
+uv run reset_db.py --with-test-data
 
 # Test database package
 uv run pytest tests/
 
-# Load and verify test data
-uv run scripts/load_sample_data.py
+# Verify data loaded correctly
 uv run scripts/verify_data.py
 ```
 
@@ -516,15 +867,19 @@ uv run tests/test_full_analysis.py
 # Test Clerk integration
 cd frontend
 npm run dev
-# Complete auth flow
+# Complete auth flow in browser
 
-# Test API proxy
-curl http://localhost:3000/api/portfolio \
-  -H "Authorization: Bearer $CLERK_TOKEN"
+# Test API directly from browser console
+fetch('https://api.alex.example.com/portfolio', {
+  headers: { 'Authorization': `Bearer ${await clerk.session.getToken()}` }
+})
 
 # Test production build
 npm run build
-npm run start
+npm run preview
+
+# Deploy to S3
+aws s3 sync dist/ s3://alex-frontend-bucket --delete
 
 # Test CloudFront deployment
 curl https://alex.cloudfront.net
@@ -556,7 +911,7 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 ## Success Criteria
 
 ### Part 5 Success
-- [ ] RDS accessible from Lambda/App Runner
+- [ ] Aurora Data API accessible from Lambda (no VPC)
 - [ ] All tables created with correct schema
 - [ ] Database package installable in other services
 - [ ] Test data loads successfully
@@ -569,10 +924,11 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 - [ ] Charts render correctly in frontend
 
 ### Part 7 Success
-- [ ] Users can sign up/in via Clerk
-- [ ] Portfolio CRUD operations work
+- [ ] Users can sign up/in via Clerk (client-side)
+- [ ] API Gateway CORS configured correctly
+- [ ] Portfolio CRUD operations work from browser
 - [ ] Agent analysis can be triggered
-- [ ] Reports display correctly
+- [ ] Reports display correctly in React app
 
 ### Part 8 Success
 - [ ] All agent calls traced in LangFuse
@@ -580,25 +936,87 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 - [ ] Security scan passes
 - [ ] Costs tracked per user
 
+## CORS Configuration Details
+
+### Critical CORS Setup for API Gateway
+
+Since we're using a static frontend calling API Gateway directly, CORS must be configured perfectly:
+
+#### API Gateway CORS Configuration
+```python
+# In Terraform for API Gateway
+cors_configuration = {
+  allow_origins = ["https://your-cloudfront-domain.cloudfront.net"]  # NOT "*"
+  allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allow_headers = ["Authorization", "Content-Type"]
+  expose_headers = ["x-job-id"]  # For returning job IDs
+  max_age = 300
+}
+```
+
+#### Lambda Response Headers
+Every Lambda MUST return CORS headers:
+```python
+def lambda_handler(event, context):
+    # Your logic here
+    
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Access-Control-Allow-Origin': 'https://your-domain.cloudfront.net',
+            'Access-Control-Allow-Headers': 'Authorization,Content-Type',
+            'Content-Type': 'application/json'
+        },
+        'body': json.dumps(response_data)
+    }
+```
+
+#### Testing CORS
+1. **Browser DevTools Network Tab**:
+   - Look for OPTIONS preflight requests
+   - Verify they return 200 with CORS headers
+   - Check no CORS errors in console
+
+2. **Command Line Test**:
+```bash
+# Test OPTIONS preflight
+curl -X OPTIONS https://api.gateway.url/portfolio \
+  -H "Origin: https://your-cloudfront-domain.cloudfront.net" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Authorization,Content-Type" -v
+
+# Should see:
+# < Access-Control-Allow-Origin: https://your-cloudfront-domain.cloudfront.net
+# < Access-Control-Allow-Methods: GET,POST,PUT,DELETE,OPTIONS
+```
+
+3. **Common CORS Issues**:
+   - Missing OPTIONS integration in API Gateway
+   - Lambda not returning CORS headers
+   - Using * instead of specific domain
+   - Forgetting to handle preflight requests
+
 ## Risk Mitigation
 
 ### Technical Risks
 1. **Lambda cold starts** → Use provisioned concurrency for critical paths
-2. **Database connection limits** → Use RDS Proxy if needed
+2. **Data API throttling** → Implement retry logic with backoff
 3. **Bedrock throttling** → Implement exponential backoff
 4. **Large portfolios** → Pagination and async processing
 
 ### Cost Risks
 1. **Bedrock usage** → Set per-user limits
-2. **RDS always running** → Use Aurora Serverless v2 min capacity 0.5
+2. **Aurora always running** → Use Aurora Serverless v2 min capacity 0.5 ACU
 3. **CloudFront transfer** → Use caching aggressively
 4. **LangFuse storage** → Rotate old traces
 
 ### Security Risks
 1. **API abuse** → Rate limiting and WAF
-2. **Data leakage** → Row-level security in database
-3. **Token theft** → Short JWT expiry, refresh tokens
+2. **Data leakage** → Row-level security in database (user_id from JWT)
+3. **Token theft** → Short JWT expiry (60s), automatic refresh
 4. **SQL injection** → Use parameterized queries only
+5. **CORS misconfiguration** → Restrict to specific domain only
+6. **Missing JWT validation** → Every Lambda must verify tokens
 
 ## Timeline Estimate
 
@@ -620,14 +1038,15 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 
 ## Key Decisions Log
 
-1. **RDS over DynamoDB** - Need relational queries for portfolio analysis
-2. **Clerk over Cognito** - Simpler for students, better DX
-3. **CloudFront over Amplify** - More control, standard pattern
-4. **LangFuse over CloudWatch** - Better agent-specific observability
-5. **Claude 4 Sonnet over OSS** - Superior financial analysis quality
-6. **Lambda for orchestrator** - 15 min timeout is sufficient, simpler than App Runner
-7. **Shared database package** - DRY principle, consistent data access
-8. **InstrumentTagger agent** - Auto-populate reference data, reduce manual entry
+1. **Aurora Serverless v2 with Data API** - No VPC complexity, HTTP-based access
+2. **PostgreSQL over DynamoDB** - Need relational queries for portfolio analysis
+3. **Clerk over Cognito** - Simpler for students, better DX
+4. **CloudFront over Amplify** - More control, standard pattern
+5. **LangFuse over CloudWatch** - Better agent-specific observability
+6. **Claude 4 Sonnet over OSS** - Superior financial analysis quality
+7. **Lambda for all services** - Consistent, simple, no containers
+8. **Shared database package** - DRY principle, consistent data access
+9. **InstrumentTagger agent** - Auto-populate reference data, reduce manual entry
 
 ## Notes for Implementation
 
@@ -643,6 +1062,68 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 - Make Bedrock model configurable via environment variable in all agents
 - Default to Claude 4 Sonnet but allow easy switching
 
+### LangFuse Implementation for Amazing Visualization
+
+Each agent should use OpenAI Agents SDK with LangFuse callback for automatic tracing:
+
+```python
+from langfuse.openai import OpenAI
+from agents import Agent
+
+# In Orchestrator (creates parent trace)
+def lambda_handler(event, context):
+    job_id = event['job_id']
+    
+    langfuse = Langfuse()
+    trace = langfuse.trace(
+        name="Portfolio Analysis Orchestration",
+        user_id=event['user_id'],
+        metadata={
+            "job_id": job_id,
+            "portfolio_value": calculate_total_value(),
+            "num_positions": len(positions),
+            "agents_to_invoke": ["tagger", "reporter", "charter", "retirement"]
+        }
+    )
+    
+    # Each agent call becomes a span
+    with trace.span(name="InstrumentTagger Decision"):
+        missing = find_missing_instruments()
+        if missing:
+            trace.event("Routing Decision", {"reason": "Missing instrument data", "symbols": missing})
+            invoke_tagger(missing, parent_trace_id=trace.id)
+
+# In each Agent (creates child trace)
+def agent_handler(event, context):
+    trace = langfuse.trace(
+        name="🏷️ InstrumentTagger Agent",
+        parent_trace_id=event.get('parent_trace_id'),
+        metadata={
+            "agent_role": "Classify and tag financial instruments",
+            "model": os.environ['BEDROCK_MODEL_ID']
+        }
+    )
+    
+    # Rich events for visualization
+    for symbol in symbols:
+        with trace.span(name=f"Tagging {symbol}"):
+            result = classify_instrument(symbol)
+            trace.event("Classification Complete", {
+                "symbol": symbol,
+                "asset_class": result['asset_class'],
+                "confidence": result['confidence']
+            })
+```
+
+Key Features for Impressive LangFuse Display:
+1. **Hierarchical traces** - Parent/child relationships show collaboration
+2. **Rich metadata** - Portfolio stats, decision points, results
+3. **Named spans** - Clear step-by-step within each agent
+4. **Events** - Key decisions and milestones
+5. **Emojis in trace names** - Visual distinction between agents
+6. **Parallel execution visible** - Shows agents running simultaneously
+7. **Cost tracking** - Token usage and dollar amounts per agent
+
 ### For Students (Guides)
 - Each guide should be completable independently
 - Include architecture diagrams
@@ -652,7 +1133,7 @@ docker run -t owasp/zap2docker-stable zap-baseline.py \
 
 ## Decisions Made
 
-1. **RDS Proxy**: Not needed for MVP - keep it simple
+1. **Data API over direct connections**: No connection pooling complexity
 2. **LangFuse**: Cloud version (as long as pricing is reasonable - free tier should suffice)
 3. **Custom domain**: Optional but recommended with SSL for professional presentation
 4. **Instrument data**: Start with top 20 ETFs, UI allows adding new instruments
