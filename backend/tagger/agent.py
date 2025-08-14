@@ -3,7 +3,7 @@ InstrumentTagger Agent - Classifies financial instruments using OpenAI Agents SD
 """
 
 import os
-from typing import List
+from typing import List, Optional
 import logging
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
@@ -38,7 +38,7 @@ class AllocationBreakdown(BaseModel):
 
 class RegionAllocation(BaseModel):
     """Regional allocation percentages"""
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
     
     north_america: float = Field(default=0.0, ge=0, le=100)
     europe: float = Field(default=0.0, ge=0, le=100)
@@ -47,7 +47,7 @@ class RegionAllocation(BaseModel):
     africa: float = Field(default=0.0, ge=0, le=100)
     middle_east: float = Field(default=0.0, ge=0, le=100)
     oceania: float = Field(default=0.0, ge=0, le=100)
-    global_market: float = Field(default=0.0, ge=0, le=100, description="Global or diversified")
+    global_: float = Field(default=0.0, ge=0, le=100, alias="global", description="Global or diversified")
     international: float = Field(default=0.0, ge=0, le=100, description="International developed markets")
 
 class SectorAllocation(BaseModel):
@@ -63,10 +63,14 @@ class SectorAllocation(BaseModel):
     materials: float = Field(default=0.0, ge=0, le=100)
     energy: float = Field(default=0.0, ge=0, le=100)
     utilities: float = Field(default=0.0, ge=0, le=100)
-    real_estate_sector: float = Field(default=0.0, ge=0, le=100, description="Real estate sector")
+    real_estate: float = Field(default=0.0, ge=0, le=100, description="Real estate sector")
     communication: float = Field(default=0.0, ge=0, le=100)
-    government: float = Field(default=0.0, ge=0, le=100, description="Government bonds")
+    treasury: float = Field(default=0.0, ge=0, le=100, description="Treasury bonds")
     corporate: float = Field(default=0.0, ge=0, le=100, description="Corporate bonds")
+    mortgage: float = Field(default=0.0, ge=0, le=100, description="Mortgage-backed securities")
+    government_related: float = Field(default=0.0, ge=0, le=100, description="Government-related bonds")
+    commodities: float = Field(default=0.0, ge=0, le=100, description="Commodities")
+    diversified: float = Field(default=0.0, ge=0, le=100, description="Diversified sectors")
     other: float = Field(default=0.0, ge=0, le=100, description="Other sectors")
 
 class InstrumentClassification(BaseModel):
@@ -92,7 +96,7 @@ class InstrumentClassification(BaseModel):
     @field_validator('allocation_regions')
     def validate_regions_sum(cls, v: RegionAllocation):
         total = (v.north_america + v.europe + v.asia + v.latin_america + 
-                v.africa + v.middle_east + v.oceania + v.global_market + v.international)
+                v.africa + v.middle_east + v.oceania + v.global_ + v.international)
         if abs(total - 100.0) > 0.01:
             raise ValueError(f"Regional allocations must sum to 100.0, got {total}")
         return v
@@ -101,8 +105,9 @@ class InstrumentClassification(BaseModel):
     def validate_sectors_sum(cls, v: SectorAllocation):
         total = (v.technology + v.healthcare + v.financials + v.consumer_discretionary +
                 v.consumer_staples + v.industrials + v.materials + v.energy +
-                v.utilities + v.real_estate_sector + v.communication + 
-                v.government + v.corporate + v.other)
+                v.utilities + v.real_estate + v.communication + 
+                v.treasury + v.corporate + v.mortgage + v.government_related +
+                v.commodities + v.diversified + v.other)
         if abs(total - 100.0) > 0.01:
             raise ValueError(f"Sector allocations must sum to 100.0, got {total}")
         return v
@@ -154,7 +159,7 @@ async def classify_instrument(
 
 async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassification]:
     """
-    Tag multiple instruments.
+    Tag multiple instruments concurrently with bounded parallelism.
     
     Args:
         instruments: List of dicts with symbol, name, and optionally instrument_type
@@ -162,22 +167,38 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
     Returns:
         List of classifications
     """
-    classifications = []
+    import asyncio
     
-    for instrument in instruments:
-        try:
-            classification = await classify_instrument(
-                symbol=instrument['symbol'],
-                name=instrument.get('name', ''),
-                instrument_type=instrument.get('instrument_type', 'etf')
-            )
-            classifications.append(classification)
-            logger.info(f"Successfully classified {instrument['symbol']}")
-            
-        except Exception as e:
-            logger.error(f"Error classifying {instrument['symbol']}: {e}")
-            # Continue with other instruments
-            
+    # Create a semaphore to limit concurrent classifications (to avoid overwhelming Bedrock)
+    # Conservative default to avoid rate limits - can be increased via env var if needed
+    MAX_CONCURRENT = int(os.getenv('TAGGER_MAX_CONCURRENT', '3'))
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+    
+    async def classify_with_semaphore(instrument: dict) -> Optional[InstrumentClassification]:
+        """Classify a single instrument with semaphore for rate limiting."""
+        async with semaphore:
+            try:
+                classification = await classify_instrument(
+                    symbol=instrument['symbol'],
+                    name=instrument.get('name', ''),
+                    instrument_type=instrument.get('instrument_type', 'etf')
+                )
+                logger.info(f"Successfully classified {instrument['symbol']}")
+                return classification
+                
+            except Exception as e:
+                logger.error(f"Error classifying {instrument['symbol']}: {e}")
+                return None
+    
+    # Create tasks for all instruments
+    tasks = [classify_with_semaphore(instrument) for instrument in instruments]
+    
+    # Run all tasks concurrently and gather results
+    results = await asyncio.gather(*tasks)
+    
+    # Filter out None values (failed classifications)
+    classifications = [r for r in results if r is not None]
+    
     return classifications
 
 def classification_to_db_format(classification: InstrumentClassification) -> InstrumentCreate:
@@ -210,7 +231,7 @@ def classification_to_db_format(classification: InstrumentClassification) -> Ins
         'africa': classification.allocation_regions.africa,
         'middle_east': classification.allocation_regions.middle_east,
         'oceania': classification.allocation_regions.oceania,
-        'global': classification.allocation_regions.global_market,
+        'global': classification.allocation_regions.global_,
         'international': classification.allocation_regions.international
     }
     # Remove zero values
@@ -226,10 +247,14 @@ def classification_to_db_format(classification: InstrumentClassification) -> Ins
         'materials': classification.allocation_sectors.materials,
         'energy': classification.allocation_sectors.energy,
         'utilities': classification.allocation_sectors.utilities,
-        'real_estate': classification.allocation_sectors.real_estate_sector,
+        'real_estate': classification.allocation_sectors.real_estate,
         'communication': classification.allocation_sectors.communication,
-        'government': classification.allocation_sectors.government,
+        'treasury': classification.allocation_sectors.treasury,
         'corporate': classification.allocation_sectors.corporate,
+        'mortgage': classification.allocation_sectors.mortgage,
+        'government_related': classification.allocation_sectors.government_related,
+        'commodities': classification.allocation_sectors.commodities,
+        'diversified': classification.allocation_sectors.diversified,
         'other': classification.allocation_sectors.other
     }
     # Remove zero values

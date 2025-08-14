@@ -87,7 +87,7 @@ class AccountInfo(BaseModel):
     id: str
     name: str
     cash_balance: float = 0.0
-    positions: List[PositionInfo] = []
+    positions: List[PositionInfo] = Field(default_factory=list)
 
 class UserPreferences(BaseModel):
     """User preferences"""
@@ -176,6 +176,19 @@ async def invoke_lambda_agent(agent_name: str, function_name: str, payload: Dict
         )
         
         result = json.loads(response['Payload'].read())
+        
+        # Unwrap Lambda response if it has the standard format
+        if isinstance(result, dict) and 'statusCode' in result and 'body' in result:
+            # Parse the body if it's a JSON string
+            if isinstance(result['body'], str):
+                try:
+                    result = json.loads(result['body'])
+                except json.JSONDecodeError:
+                    # If body is not JSON, return as is
+                    result = {'message': result['body']}
+            else:
+                result = result['body']
+        
         logger.info(f"{agent_name} completed successfully")
         return result
         
@@ -184,7 +197,7 @@ async def invoke_lambda_agent(agent_name: str, function_name: str, payload: Dict
         return {'error': str(e)}
 
 @function_tool
-async def invoke_tagger(instruments: List[InstrumentToTag]) -> str:
+async def invoke_tagger(instruments: List[InstrumentToTag]) -> Dict[str, Any]:
     """
     Invoke the InstrumentTagger Lambda to classify instruments.
     
@@ -192,17 +205,17 @@ async def invoke_tagger(instruments: List[InstrumentToTag]) -> str:
         instruments: List of instruments to tag
         
     Returns:
-        JSON string with tagging results
+        Tagging results dictionary
     """
     result = await invoke_lambda_agent(
         "InstrumentTagger",
         TAGGER_FUNCTION,
         {'instruments': [inst.model_dump() for inst in instruments]}
     )
-    return json.dumps(result)
+    return result
 
 @function_tool
-async def invoke_reporter(portfolio_data: PortfolioData) -> str:
+async def invoke_reporter(portfolio_data: PortfolioData) -> Dict[str, Any]:
     """
     Invoke the Report Writer Lambda to generate analysis narrative.
     
@@ -210,7 +223,7 @@ async def invoke_reporter(portfolio_data: PortfolioData) -> str:
         portfolio_data: Complete portfolio data
         
     Returns:
-        JSON string with report generation results
+        Report generation results dictionary
     """
     result = await invoke_lambda_agent(
         "Report Writer",
@@ -220,10 +233,10 @@ async def invoke_reporter(portfolio_data: PortfolioData) -> str:
             'user_preferences': portfolio_data.user_preferences.model_dump()
         }
     )
-    return json.dumps(result)
+    return result
 
 @function_tool
-async def invoke_charter(portfolio_data: PortfolioData) -> str:
+async def invoke_charter(portfolio_data: PortfolioData) -> Dict[str, Any]:
     """
     Invoke the Chart Maker Lambda to create visualizations.
     
@@ -231,17 +244,17 @@ async def invoke_charter(portfolio_data: PortfolioData) -> str:
         portfolio_data: Complete portfolio data
         
     Returns:
-        JSON string with chart data in Recharts format
+        Chart data dictionary in Recharts format
     """
     result = await invoke_lambda_agent(
         "Chart Maker",
         CHARTER_FUNCTION,
         {'portfolio_data': portfolio_data.model_dump()}
     )
-    return json.dumps(result)
+    return result
 
 @function_tool
-async def invoke_retirement(portfolio_data: PortfolioData) -> str:
+async def invoke_retirement(portfolio_data: PortfolioData) -> Dict[str, Any]:
     """
     Invoke the Retirement Specialist Lambda for projections.
     
@@ -249,7 +262,7 @@ async def invoke_retirement(portfolio_data: PortfolioData) -> str:
         portfolio_data: Complete portfolio data with user retirement goals
         
     Returns:
-        JSON string with retirement analysis and projections
+        Retirement analysis and projections dictionary
     """
     result = await invoke_lambda_agent(
         "Retirement Specialist",
@@ -259,7 +272,7 @@ async def invoke_retirement(portfolio_data: PortfolioData) -> str:
             'user_preferences': portfolio_data.user_preferences.model_dump()
         }
     )
-    return json.dumps(result)
+    return result
 
 @function_tool
 async def search_market_knowledge(query: str, k: int = 5) -> str:

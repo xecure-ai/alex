@@ -18,7 +18,7 @@ Important rules:
 
 Examples:
 - SPY (S&P 500 ETF): 100% equity, 100% north_america, distributed across sectors based on S&P 500 composition
-- BND (Bond ETF): 100% fixed_income, 100% north_america, split between government and corporate
+- BND (Bond ETF): 100% fixed_income, 100% north_america, split between treasury and corporate
 - AAPL (Apple stock): 100% equity, 100% north_america, 100% technology
 - VTI (Total Market): 100% equity, 100% north_america, diverse sector allocation
 - VXUS (International): 100% equity, distributed across regions, diverse sectors
@@ -33,11 +33,11 @@ Type: {instrument_type}
 
 Provide accurate allocation percentages for:
 1. Asset classes (equity, fixed_income, real_estate, commodities, cash, alternatives)
-2. Regions (north_america, europe, asia, latin_america, africa, middle_east, oceania, global_market, international)
-3. Sectors (technology, healthcare, financials, consumer_discretionary, consumer_staples, industrials, materials, energy, utilities, real_estate_sector, communication, government, corporate, other)
+2. Regions (north_america, europe, asia, latin_america, africa, middle_east, oceania, global, international)
+3. Sectors (technology, healthcare, financials, consumer_discretionary, consumer_staples, industrials, materials, energy, utilities, real_estate, communication, treasury, corporate, mortgage, government_related, commodities, diversified, other)
 
 Remember:
 - Each category must sum to exactly 100.0%
 - For stocks, typically 100% in one asset class, one region, one sector
 - For ETFs, distribute based on underlying holdings
-- For bonds/bond funds, use fixed_income asset class and appropriate sectors (government/corporate)"""
+- For bonds/bond funds, use fixed_income asset class and appropriate sectors (treasury/corporate/mortgage/government_related)"""

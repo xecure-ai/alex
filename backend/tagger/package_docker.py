@@ -75,7 +75,7 @@ def main():
             # Install requirements and the database package
             "pip install --target /var/task/lambda-package "
             "-r /var/task/requirements_docker.txt "
-            "--platform manylinux2014_x86_64 --only-binary=:all: --upgrade && "
+            "--only-binary=:all: --upgrade && "
             "pip install --target /var/task/lambda-package /var/database"
         ],
         check=True,

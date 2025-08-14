@@ -148,10 +148,10 @@ resource "aws_lambda_function" "tagger" {
   filename         = "${path.module}/../backend/tagger/tagger_lambda.zip"
   function_name    = "alex-tagger"
   role            = aws_iam_role.lambda_agents_role.arn
-  handler         = "lambda_handler_simple.lambda_handler"
+  handler         = "lambda_handler.lambda_handler"
   runtime         = "python3.12"
-  timeout         = 60
-  memory_size     = 512
+  timeout         = 180
+  memory_size     = 1024
   
   environment {
     variables = {

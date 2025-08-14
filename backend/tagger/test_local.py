@@ -44,7 +44,7 @@ async def test_single_instrument():
         ("Africa", regions.africa),
         ("Middle East", regions.middle_east),
         ("Oceania", regions.oceania),
-        ("Global", regions.global_market),
+        ("Global", regions.global_),
         ("International", regions.international)
     ]
     for name, value in region_values:
@@ -65,9 +65,9 @@ async def test_single_instrument():
         ("Materials", sectors.materials),
         ("Energy", sectors.energy),
         ("Utilities", sectors.utilities),
-        ("Real Estate", sectors.real_estate_sector),
+        ("Real Estate", sectors.real_estate),
         ("Communication", sectors.communication),
-        ("Government", sectors.government),
+        ("Treasury", sectors.treasury),
         ("Corporate", sectors.corporate),
         ("Other", sectors.other)
     ]
@@ -116,8 +116,8 @@ async def test_multiple_instruments():
             region_values.append(f"North America:{result.allocation_regions.north_america:.0f}%")
         if result.allocation_regions.europe > 0:
             region_values.append(f"Europe:{result.allocation_regions.europe:.0f}%")
-        if result.allocation_regions.global_market > 0:
-            region_values.append(f"Global:{result.allocation_regions.global_market:.0f}%")
+        if result.allocation_regions.global_ > 0:
+            region_values.append(f"Global:{result.allocation_regions.global_:.0f}%")
         print(f"  Region: {', '.join(region_values)}")
         
         # Top sectors
