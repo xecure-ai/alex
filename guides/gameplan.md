@@ -4,6 +4,19 @@
 
 This document outlines the complete plan for building the Alex Financial Planner SaaS platform. This is the roadmap for Parts 5-8 of the course.
 
+## Current Status - Part 6 in progress.
+
+- Part 5 is completed and verified.
+- Part 6: steps 1 and 2 are completed (initial planner, tagger). Directories have been created for remaining steps.
+
+## IMPORTANT - Mandatory rules - please pay attention to this. You MUST:
+
+1. Be SIMPLE. Keep code simple, readable and clean. Short methods. Clean up temporary test files. Docstrings, but be sparing with inline comments. Exception handlers only when needed.  
+2. Work INCREMENTALLY with CARE. Check your work. Do your own code reviews and you go.  
+3. Use OpenAI Agents SDK (Bedrock + LiteLLM) always for LLM calls, using the idiomatic code in this gameplan  
+4. You MUST use modern, current versions of APIs. It is August 2025 - be up to date! Don't guess package names; if in doubt, research and check.  
+5. Everything must be cross-platform. Favor python scripts over shell scripts. Everything is in uv projects according to the instructions below, so always do `uv run xxx` never `python xxx`. When packaging for Lambda, you must use docker to ensure AWS architecture compatibility; see implementation in backend/tagger/package_docker.py as an example.
+
 ## Package Management Strategy (uv)
 
 ### Project Structure
@@ -22,7 +35,7 @@ uv add --editable ../database  # Add shared database package (for services that 
 ### Cross-Platform Approach
 - **Always use Python scripts** instead of shell/PowerShell scripts
 - Scripts are called with `uv run script_name.py` (works on Mac/Linux/Windows)
-- Examples: `package.py` for Lambda packaging, `deploy.py` for deployments, `migrate.py` for database migrations
+- Examples: `package_docker.py` for Lambda packaging using docker so that AWS architecture is supported, `deploy.py` for deployments, `migrate.py` for database migrations
 - This ensures consistent behavior across all operating systems
 
 ### Benefits
@@ -49,100 +62,31 @@ Transform Alex from a research tool into a complete financial planning SaaS plat
 - Interactive frontend (NextJS)
 - Full observability and monitoring (LangFuse)
 
-## Database Design
+## Database Architecture Summary
 
-### Schema Overview
-
-```sql
--- Minimal users table (Clerk handles auth)
-CREATE TABLE users (
-    clerk_user_id VARCHAR(255) PRIMARY KEY,
-    display_name VARCHAR(255),
-    years_until_retirement INTEGER,
-    target_retirement_income DECIMAL(12,2),  -- Annual income goal
-    
-    -- Allocation targets for rebalancing
-    asset_class_targets JSONB,              -- {"equity": 70, "fixed_income": 30}
-    region_targets JSONB                    -- {"north_america": 50, "international": 50}
-);
-
--- Reference data for instruments
-CREATE TABLE instruments (
-    symbol VARCHAR(20) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    instrument_type VARCHAR(50),            -- Literal['etf', 'mutual_fund', 'stock', 'bond', 'bond_fund', 'commodity', 'reit']
-    
-    -- Allocation percentages (0-100) - validated by Pydantic to sum to 100
-    allocation_regions JSONB,               -- Keys: north_america, europe, asia, latin_america, africa, middle_east, oceania, global, international
-    allocation_sectors JSONB,               -- Keys: technology, healthcare, financials, consumer_discretionary, etc.
-    allocation_asset_class JSONB,           -- Keys: equity, fixed_income, real_estate, commodities, cash, alternatives
-    
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- User's investment accounts
-CREATE TABLE accounts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id) ON DELETE CASCADE,
-    account_name VARCHAR(255) NOT NULL,     -- "401k", "Roth IRA"
-    account_purpose TEXT,                    -- "Long-term retirement savings"
-    cash_balance DECIMAL(12,2) DEFAULT 0,   -- Uninvested cash
-    cash_interest DECIMAL(5,4) DEFAULT 0,   -- Annual interest rate (0.045 = 4.5%)
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Current positions in each account
-CREATE TABLE positions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    account_id UUID REFERENCES accounts(id) ON DELETE CASCADE,
-    symbol VARCHAR(20) REFERENCES instruments(symbol),
-    quantity DECIMAL(20,8) NOT NULL,        -- Supports fractional shares
-    as_of_date DATE DEFAULT CURRENT_DATE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- AI-generated portfolio reports
-CREATE TABLE reports (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id) ON DELETE CASCADE,
-    report_date DATE DEFAULT CURRENT_DATE,
-    
-    -- AI-generated content
-    report_summary TEXT,                     -- Executive summary
-    report_detail TEXT,                      -- Full markdown analysis
-    
-    -- Chart data for visualization (Recharts format)
-    asset_class_chart JSONB,                -- Pie chart data
-    region_chart JSONB,                     -- Pie/bar chart data  
-    sector_chart JSONB,                     -- Pie/bar chart data
-    
-    -- Metadata
-    generated_by VARCHAR(100),              -- 'alex-analyzer-v1'
-    processing_time_ms INTEGER,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Retirement projections
-CREATE TABLE retirement (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id) ON DELETE CASCADE,
-    
-    estimated_income DECIMAL(12,2),         -- Projected annual retirement income
-    summary TEXT,                            -- Key insights in markdown
-    detail TEXT,                             -- Full analysis in markdown
-    chart JSONB,                            -- Projection chart data
-    
-    created_at TIMESTAMP DEFAULT NOW()
-);
-```
+### Core Tables (7 total)
+1. **users** - Minimal table linking to Clerk auth (display_name, retirement goals, allocation targets)
+2. **instruments** - Reference data for ETFs/stocks (symbol, name, type, allocation breakdowns)
+3. **accounts** - User investment accounts (401k, IRA, etc.) with cash balances
+4. **positions** - Holdings in each account (symbol, quantity, supports fractional shares)
+5. **price_history** - Historical price data for instruments
+6. **jobs** - Async job tracking for analysis requests (status, results, errors)
+7. **agent_logs** - Agent execution tracking with LangFuse trace IDs
 
 ### Key Design Decisions
-- **Minimal users table** - Clerk handles authentication, we just store FK and preferences
-- **JSONB for allocations** - Flexible for different fund structures
-- **No cost basis yet** - Keep it simple for MVP, can add later
-- **TEXT for markdown** - Agent-generated analysis in markdown format
-- **JSONB for charts** - Direct rendering in Recharts/Chart.js
+- **Aurora Serverless v2 PostgreSQL with Data API** - No VPC needed, HTTP-based access
+- **JSONB for flexible data** - Allocation percentages, job payloads, chart data
+- **Pydantic validation** - All data validated before DB insertion, allocations sum to 100%
+- **Clerk handles auth** - We only store clerk_user_id as foreign key
+- **UUID primary keys** - For accounts, positions, jobs using uuid_generate_v4()
+- **Automatic timestamps** - Triggers update updated_at columns
+
+### Pydantic Schema Highlights
+- **Literal types for constraints** - RegionType, AssetClassType, SectorType, InstrumentType, JobType
+- **Automatic validation** - All allocations validated to sum to 100% with 0.01 tolerance
+- **LLM-compatible** - Field descriptions and examples for structured outputs
+- **Separate Create/Update schemas** - InstrumentCreate, JobUpdate, etc. for different operations
+- **Analysis output schemas** - PortfolioAnalysis, RebalanceRecommendation for agent responses
 
 ## Technical Architecture
 
@@ -176,7 +120,7 @@ alex/
 │   ├── database/            # Shared library (Guide 5) - uv project
 │   │   ├── pyproject.toml
 │   │   ├── migrations/
-│   │   ├── src/alex_database/
+│   │   ├── src/
 │   │   └── tests/
 │   │
 │   ├── planner/            # Orchestrator (Guide 6) - uv project
@@ -229,9 +173,9 @@ alex/
 For Agents, we will be using OpenAI Agents SDK. This is the name of the production release of what used to be called Swarm.
 Each Agent should be its own directory under backend, with its own uv project and lambda function.
 
-The correct package to install is `openai-agents`
-`uv add openai-agents`
-`uv add "openai-agents[litellm]"`
+The correct package to install is `openai-agents`  
+`uv add openai-agents`  
+`uv add "openai-agents[litellm]"`  
 
 This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Structured Ouputs and Tools. This is the approach to be used. Only use Tools and Structured Outputs where they make sense.
 
@@ -254,95 +198,10 @@ async def run_agent():
     model = LitellmModel(model="bedrock/...")
     tools = [my_tool]
     with trace("Clear title of trace - use this thoughtfully - only this one argument"):
-        agent = Agent(name="My Agent", instructions="the instructions - import from a separate templates module", model=model, tools=tools)
+        agent = Agent(name="My Agent", instructions="the instructions - import from a separate templates module", model=model, tools=tools, output_type=MyResultObject)
         result = await Runner.run(agent, input="the task prompt - import from a separate templates module as appropriate", max_turns=20)
     return result.final_output_as(MyResultObject)
 ```
-
-## Before We Begin: Additional IAM Permissions
-
-Since Part 4, we need additional AWS permissions. Add these to your IAM user's groups or policies:
-
-### Required AWS Managed Policies
-- `AmazonRDSDataFullAccess` - For Aurora Data API
-- `AWSLambda_FullAccess` - For Lambda functions
-- `AmazonSQSFullAccess` - For queue management
-- `AmazonEventBridgeFullAccess` - For schedulers
-- `CloudFrontFullAccess` - For CDN deployment
-- `SecretsManagerReadWrite` - For database credentials
-
-### Custom RDS Policy Required
-
-Create a custom IAM policy named `AlexRDSCustomPolicy` with the following permissions:
-
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "RDSPermissions",
-            "Effect": "Allow",
-            "Action": [
-                "rds:CreateDBCluster",
-                "rds:CreateDBInstance",
-                "rds:CreateDBSubnetGroup",
-                "rds:DeleteDBCluster",
-                "rds:DeleteDBInstance",
-                "rds:DeleteDBSubnetGroup",
-                "rds:DescribeDBClusters",
-                "rds:DescribeDBInstances",
-                "rds:DescribeDBSubnetGroups",
-                "rds:ModifyDBCluster",
-                "rds:ModifyDBInstance",
-                "rds:AddTagsToResource",
-                "rds:ListTagsForResource",
-                "rds:RemoveTagsFromResource"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "EC2Permissions",
-            "Effect": "Allow",
-            "Action": [
-                "ec2:DescribeVpcs",
-                "ec2:DescribeSubnets",
-                "ec2:DescribeAvailabilityZones",
-                "ec2:DescribeSecurityGroups",
-                "ec2:CreateSecurityGroup",
-                "ec2:AuthorizeSecurityGroupIngress",
-                "ec2:RevokeSecurityGroupIngress"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "SecretsManagerPermissions",
-            "Effect": "Allow",
-            "Action": [
-                "secretsmanager:CreateSecret",
-                "secretsmanager:DeleteSecret",
-                "secretsmanager:DescribeSecret",
-                "secretsmanager:GetSecretValue",
-                "secretsmanager:PutSecretValue",
-                "secretsmanager:UpdateSecret"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Sid": "KMSPermissions",
-            "Effect": "Allow",
-            "Action": [
-                "kms:CreateGrant",
-                "kms:Decrypt",
-                "kms:DescribeKey",
-                "kms:Encrypt"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-```
-
-**Note**: These permissions are required for Terraform to manage Aurora Serverless v2 resources. The `ListTagsForResource` permission is particularly important for Terraform state management.
 
 ## Cost Management Strategy
 
@@ -380,36 +239,6 @@ uv run aurora_cost_management.py recreate
 - **Day 4**: Complete Part 8, capture learnings
 - **Day 5**: Destroy Aurora to stop charges
 - **Total cost**: ~$7-14 for the entire course
-
-### Additional Permissions Needed
-Create a custom policy with:
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ],
-      "Resource": "arn:aws:bedrock:*::foundation-model/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "rds:CreateDBCluster",
-        "rds:ModifyDBCluster",
-        "rds:DeleteDBCluster",
-        "rds:DescribeDBClusters"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-✅ **Verify**: Run `aws rds describe-db-clusters` - should return empty list or existing clusters
 
 ## Part 5: Database & Shared Infrastructure
 
@@ -452,6 +281,9 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
    - Load default instruments (20+ popular ETFs)
    - Optionally create test user with sample portfolio
    - ✅ **Test**: `uv run reset_db.py --with-test-data`
+   - Usage: `uv run reset_db.py` (drops tables, runs migrations, loads seed data)
+   - Usage: `uv run reset_db.py --with-test-data` (also creates test user)
+   - Usage: `uv run reset_db.py --skip-drop` (just reload data without dropping)
 
 6. **Create Test Data Loader**
    - Script to create test user with sample portfolio
@@ -459,81 +291,6 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
    - Various positions across different instruments
    - ✅ **Test**: Load data, query full portfolio
 
-### Pydantic Schema Structure
-
-All database operations use Pydantic schemas for validation:
-
-```python
-# backend/database/src/schemas.py
-
-# Literal types for constrained values (LLM-compatible)
-RegionType = Literal["north_america", "europe", "asia", ...]
-AssetClassType = Literal["equity", "fixed_income", "real_estate", ...]
-SectorType = Literal["technology", "healthcare", "financials", ...]
-
-# Input schemas with validation
-class InstrumentCreate(BaseModel):
-    symbol: str = Field(description="Ticker symbol (e.g., 'SPY')")
-    allocation_regions: Dict[RegionType, float]  # Must sum to 100
-    allocation_sectors: Dict[SectorType, float]  # Must sum to 100
-    allocation_asset_class: Dict[AssetClassType, float]  # Must sum to 100
-
-# Output schemas for LLM structured responses
-class PortfolioAnalysis(BaseModel):
-    total_value: Decimal
-    asset_allocation: Dict[AssetClassType, float]
-    risk_score: int = Field(ge=1, le=10)
-    recommendations: List[str]
-```
-
-### Database Reset Script Structure
-```python
-# backend/database/reset_db.py
-"""
-Usage:
-  uv run reset_db.py                    # Just load default instruments
-  uv run reset_db.py --drop-all        # Drop and recreate all tables
-  uv run reset_db.py --with-test-data  # Include test user and portfolio
-"""
-
-# Default instruments to always load
-DEFAULT_INSTRUMENTS = [
-    # Equity ETFs
-    {"symbol": "SPY", "name": "SPDR S&P 500", "type": "etf",
-     "asset_class": {"equity": 100},
-     "regions": {"north_america": 100},
-     "sectors": {"technology": 28, "healthcare": 13, "financials": 13, ...}},
-    
-    # Bond ETFs
-    {"symbol": "BND", "name": "Vanguard Total Bond", "type": "etf",
-     "asset_class": {"fixed_income": 100},
-     "regions": {"north_america": 100},
-     "sectors": {"government": 65, "corporate": 35}},
-    
-    # International
-    {"symbol": "VXUS", "name": "Vanguard Total Intl Stock", "type": "etf",
-     "asset_class": {"equity": 100},
-     "regions": {"europe": 40, "asia": 35, "emerging": 25}},
-    
-    # Plus 15+ more popular ETFs...
-]
-
-# Test portfolio if --with-test-data
-TEST_USER = {
-    "clerk_user_id": "user_test_123",
-    "display_name": "Test User",
-    "years_until_retirement": 30,
-    "accounts": [
-        {"name": "401k", "positions": [
-            {"symbol": "SPY", "quantity": 100},
-            {"symbol": "BND", "quantity": 200}
-        ]},
-        {"name": "Roth IRA", "positions": [
-            {"symbol": "VXUS", "quantity": 50}
-        ]}
-    ]
-}
-```
 
 ### Deliverables
 - Working Aurora database with Data API
@@ -545,15 +302,15 @@ TEST_USER = {
 ### Acceptance Criteria for Part 5
 
 #### Infrastructure
-- [ ] Aurora Serverless v2 cluster is running with Data API enabled
-- [ ] Database credentials stored in Secrets Manager
-- [ ] Data API endpoint accessible via AWS CLI
-- [ ] No VPC or networking configuration required
+- [x] Aurora Serverless v2 cluster is running with Data API enabled
+- [x] Database credentials stored in Secrets Manager
+- [x] Data API endpoint accessible via AWS CLI
+- [x] No VPC or networking configuration required
 
 #### Database Schema
-- [ ] All tables created successfully (users, instruments, accounts, positions, reports, retirement, analysis_jobs)
-- [ ] Foreign key constraints working properly
-- [ ] JSONB columns functioning for flexible data
+- [x] All tables created successfully (users, instruments, accounts, positions, price_history, jobs, agent_logs)
+- [x] Foreign key constraints working properly
+- [x] JSONB columns functioning for flexible data
 
 #### Database Package
 - [x] Package installable via `uv add --editable ../database`
@@ -610,8 +367,6 @@ backend/database/
 ├── test_db.py            # Complete test suite
 └── verify_database.py    # State verification
 ```
-
-**Ready for Part 6:** Database is fully operational with clean test output! ✅
 
 ---
 
@@ -713,7 +468,7 @@ User Request → API → SQS → Planner (Lambda)
 - [ ] Generates markdown analysis report
 - [ ] Includes portfolio summary and recommendations
 - [ ] Properly formatted for frontend display
-- [ ] Saves to database reports table
+- [ ] Saves analysis results to jobs table
 
 #### Chart Maker Agent
 - [ ] Calculates portfolio allocations correctly
@@ -725,7 +480,7 @@ User Request → API → SQS → Planner (Lambda)
 - [ ] Projects retirement income based on portfolio
 - [ ] Generates projection chart data
 - [ ] Considers years until retirement
-- [ ] Saves analysis to retirement table
+- [ ] Saves projections to jobs table results
 
 #### Integration Testing
 - [ ] End-to-end test: Send SQS message → Receive complete analysis
@@ -1035,15 +790,15 @@ aws rds-data execute-statement \
   --database alex \
   --sql "SELECT 1"
 
-# Reset database to clean state
+# Reset database to clean state (drops, migrates, seeds)
 cd backend/database
-uv run reset_db.py --drop-all --confirm
+uv run reset_db.py
 
-# Run migrations
-uv run migrations/migrate.py
-
-# Load defaults and test data
+# Or with test data
 uv run reset_db.py --with-test-data
+
+# Or just reload data without dropping
+uv run reset_db.py --skip-drop
 
 # Test database package
 uv run pytest tests/
@@ -1205,6 +960,48 @@ curl -X OPTIONS https://api.gateway.url/portfolio \
    - Lambda not returning CORS headers
    - Using * instead of specific domain
    - Forgetting to handle preflight requests
+
+## Lambda Deployment Technique for Binary Compatibility
+
+### The Architecture Issue
+Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python dependencies on macOS (ARM64) or Windows, binary packages like `pydantic_core` are compiled for the wrong architecture, causing runtime failures with errors like:
+- `ImportError: cannot import name 'ValidationError' from 'pydantic_core'`
+- Binary incompatibility errors for packages with C extensions
+
+### Solution: Docker-Based Packaging
+Use Docker with the official AWS Lambda Python runtime image to compile dependencies for the correct architecture. This ensures all binary packages are compatible with Lambda's runtime environment.
+
+### Implementation Reference
+See `backend/tagger/package_docker.py` for the complete implementation. Key aspects:
+
+1. **Use Official Lambda Runtime Image**:
+   ```python
+   "public.ecr.aws/lambda/python:3.12"
+   ```
+
+2. **Force x86_64 Architecture**:
+   ```python
+   "--platform", "linux/amd64"
+   ```
+
+3. **Install with Binary Compatibility**:
+   ```python
+   "--platform manylinux2014_x86_64 --only-binary=:all:"
+   ```
+
+4. **Cross-Platform Script**:
+   - Python script works on Mac/Linux/Windows
+   - Called via `uv run package_docker.py`
+   - No shell scripts needed
+
+### Usage Pattern
+```bash
+cd backend/[service_name]
+uv run package_docker.py          # Create deployment package
+uv run package_docker.py --deploy  # Create and deploy to Lambda
+```
+
+This technique is essential for any Lambda deployment with compiled dependencies and should be used for all agent Lambda functions in this project.
 
 ## Risk Mitigation
 
@@ -1385,24 +1182,8 @@ This is our chosen approach because:
 - Cost-effective (~$0.10/month)
 - Simple for students to understand and deploy
 
-### Database Addition for Async Jobs
-```sql
--- Job tracking for async operations
-CREATE TABLE analysis_jobs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id),
-    status VARCHAR(50) DEFAULT 'pending', -- pending, running, completed, failed
-    request_data JSONB,                   -- Input parameters
-    result_data JSONB,                    -- Results when complete
-    error_message TEXT,                   -- If failed
-    created_at TIMESTAMP DEFAULT NOW(),
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP
-);
-
-CREATE INDEX idx_jobs_status ON analysis_jobs(status);
-CREATE INDEX idx_jobs_user ON analysis_jobs(clerk_user_id);
-```
+### Job Tracking
+The `jobs` table (already in schema) tracks async operations with status updates and results.
 
 ### Frontend UX Pattern
 ```typescript

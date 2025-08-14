@@ -1,0 +1,322 @@
+# Lambda Functions for Alex Agents
+# Part 6 - Agent Orchestra
+
+# ========================================
+# SQS Queue for Async Job Processing
+# ========================================
+
+resource "aws_sqs_queue" "analysis_jobs" {
+  name                       = "alex-analysis-jobs"
+  delay_seconds             = 0
+  max_message_size          = 262144
+  message_retention_seconds = 86400  # 1 day
+  receive_wait_time_seconds = 10     # Long polling
+  visibility_timeout_seconds = 900   # 15 minutes (Lambda timeout)
+  
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.analysis_jobs_dlq.arn
+    maxReceiveCount     = 3
+  })
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+  }
+}
+
+resource "aws_sqs_queue" "analysis_jobs_dlq" {
+  name = "alex-analysis-jobs-dlq"
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+  }
+}
+
+# ========================================
+# IAM Role for Lambda Functions
+# ========================================
+
+resource "aws_iam_role" "lambda_execution_role" {
+  name = "alex-lambda-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+  }
+}
+
+# Lambda basic execution policy
+resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Policy for Lambda to access other services
+resource "aws_iam_role_policy" "lambda_services_policy" {
+  name = "alex-lambda-services-policy"
+  role = aws_iam_role.lambda_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = "arn:aws:bedrock:*::foundation-model/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = module.aurora.secret_arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:SendMessage"
+        ]
+        Resource = [
+          aws_sqs_queue.analysis_jobs.arn,
+          aws_sqs_queue.analysis_jobs_dlq.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:alex-*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::alex-vectors-*",
+          "arn:aws:s3:::alex-vectors-*/*"
+        ]
+      }
+    ]
+  })
+}
+
+# ========================================
+# InstrumentTagger Lambda Function
+# ========================================
+
+resource "aws_lambda_function" "tagger" {
+  filename         = "../backend/tagger/tagger_lambda.zip"
+  function_name    = "alex-tagger"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "lambda_handler_simple.lambda_handler"
+  runtime         = "python3.12"
+  timeout         = 60
+  memory_size     = 512
+  
+  environment {
+    variables = {
+      BEDROCK_MODEL_ID = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      AWS_REGION       = var.aws_region
+      AURORA_CLUSTER_ARN = module.aurora.cluster_arn
+      AURORA_SECRET_ARN  = module.aurora.secret_arn
+    }
+  }
+  
+  source_code_hash = fileexists("../backend/tagger/tagger_lambda.zip") ? filebase64sha256("../backend/tagger/tagger_lambda.zip") : null
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+    Agent   = "tagger"
+  }
+}
+
+# ========================================
+# Financial Planner (Orchestrator) Lambda
+# ========================================
+
+resource "aws_lambda_function" "planner" {
+  filename         = "../backend/planner/planner_lambda.zip"
+  function_name    = "alex-planner"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "lambda_handler.lambda_handler"
+  runtime         = "python3.12"
+  timeout         = 900  # 15 minutes
+  memory_size     = 3072
+  
+  environment {
+    variables = {
+      BEDROCK_MODEL_ID   = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      AWS_REGION         = var.aws_region
+      AURORA_CLUSTER_ARN = module.aurora.cluster_arn
+      AURORA_SECRET_ARN  = module.aurora.secret_arn
+      VECTORS_BUCKET     = "alex-vectors-${data.aws_caller_identity.current.account_id}"
+    }
+  }
+  
+  source_code_hash = fileexists("../backend/planner/planner_lambda.zip") ? filebase64sha256("../backend/planner/planner_lambda.zip") : null
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+    Agent   = "planner"
+  }
+}
+
+# SQS trigger for Planner Lambda
+resource "aws_lambda_event_source_mapping" "planner_sqs_trigger" {
+  event_source_arn = aws_sqs_queue.analysis_jobs.arn
+  function_name    = aws_lambda_function.planner.arn
+  batch_size       = 1  # Process one job at a time
+  
+  depends_on = [
+    aws_iam_role_policy.lambda_services_policy
+  ]
+}
+
+# ========================================
+# Report Writer Lambda Function
+# ========================================
+
+resource "aws_lambda_function" "reporter" {
+  filename         = "../backend/reporter/reporter_lambda.zip"
+  function_name    = "alex-reporter"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "lambda_handler.lambda_handler"
+  runtime         = "python3.12"
+  timeout         = 120
+  memory_size     = 1024
+  
+  environment {
+    variables = {
+      BEDROCK_MODEL_ID   = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      AWS_REGION         = var.aws_region
+      AURORA_CLUSTER_ARN = module.aurora.cluster_arn
+      AURORA_SECRET_ARN  = module.aurora.secret_arn
+    }
+  }
+  
+  source_code_hash = fileexists("../backend/reporter/reporter_lambda.zip") ? filebase64sha256("../backend/reporter/reporter_lambda.zip") : null
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+    Agent   = "reporter"
+  }
+}
+
+# ========================================
+# Chart Maker Lambda Function
+# ========================================
+
+resource "aws_lambda_function" "charter" {
+  filename         = "../backend/charter/charter_lambda.zip"
+  function_name    = "alex-charter"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "lambda_handler.lambda_handler"
+  runtime         = "python3.12"
+  timeout         = 60
+  memory_size     = 512
+  
+  environment {
+    variables = {
+      BEDROCK_MODEL_ID   = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      AWS_REGION         = var.aws_region
+      AURORA_CLUSTER_ARN = module.aurora.cluster_arn
+      AURORA_SECRET_ARN  = module.aurora.secret_arn
+    }
+  }
+  
+  source_code_hash = fileexists("../backend/charter/charter_lambda.zip") ? filebase64sha256("../backend/charter/charter_lambda.zip") : null
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+    Agent   = "charter"
+  }
+}
+
+# ========================================
+# Retirement Specialist Lambda Function
+# ========================================
+
+resource "aws_lambda_function" "retirement" {
+  filename         = "../backend/retirement/retirement_lambda.zip"
+  function_name    = "alex-retirement"
+  role            = aws_iam_role.lambda_execution_role.arn
+  handler         = "lambda_handler.lambda_handler"
+  runtime         = "python3.12"
+  timeout         = 120
+  memory_size     = 1024
+  
+  environment {
+    variables = {
+      BEDROCK_MODEL_ID   = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+      AWS_REGION         = var.aws_region
+      AURORA_CLUSTER_ARN = module.aurora.cluster_arn
+      AURORA_SECRET_ARN  = module.aurora.secret_arn
+    }
+  }
+  
+  source_code_hash = fileexists("../backend/retirement/retirement_lambda.zip") ? filebase64sha256("../backend/retirement/retirement_lambda.zip") : null
+  
+  tags = {
+    Project = "alex"
+    Part    = "6"
+    Agent   = "retirement"
+  }
+}
+
+# ========================================
+# Outputs
+# ========================================
+
+output "sqs_queue_url" {
+  value = aws_sqs_queue.analysis_jobs.id
+  description = "URL of the SQS queue for job submission"
+}
+
+output "lambda_functions" {
+  value = {
+    tagger     = aws_lambda_function.tagger.function_name
+    planner    = aws_lambda_function.planner.function_name
+    reporter   = aws_lambda_function.reporter.function_name
+    charter    = aws_lambda_function.charter.function_name
+    retirement = aws_lambda_function.retirement.function_name
+  }
+  description = "Names of deployed Lambda functions"
+}
