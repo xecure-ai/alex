@@ -38,6 +38,7 @@ sagemaker_runtime = boto3.client('sagemaker-runtime')
 
 # Get configuration from environment
 BEDROCK_MODEL_ID = os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-3-5-sonnet-20241022-v2:0')
+BEDROCK_MODEL_REGION = os.getenv('BEDROCK_MODEL_REGION', os.getenv('AWS_REGION', 'us-east-1'))
 VECTORS_BUCKET = os.getenv('VECTORS_BUCKET', 'alex-vectors')
 SAGEMAKER_ENDPOINT = os.getenv('SAGEMAKER_ENDPOINT', 'alex-embeddings')
 REGION = os.getenv('AWS_REGION', 'us-east-1')
@@ -290,10 +291,15 @@ async def search_market_knowledge(query: str, k: int = 5) -> str:
         # Get embedding for query
         query_embedding = get_embedding(query)
         
+        # Get the correct bucket name with account ID
+        sts_client = boto3.client('sts')
+        account_id = sts_client.get_caller_identity()['Account']
+        vectors_bucket = f"alex-vectors-{account_id}"
+        
         # Search S3 Vectors using boto3
         s3_vectors = boto3.client('s3vectors')
         response = s3_vectors.query_vectors(
-            vectorBucketName=VECTORS_BUCKET,
+            vectorBucketName=vectors_bucket,
             indexName='financial-research',
             queryVector={"float32": query_embedding},
             topK=k,
@@ -304,23 +310,30 @@ async def search_market_knowledge(query: str, k: int = 5) -> str:
         # Format results into context
         context_parts = []
         for vector in response.get('vectors', [])[:3]:  # Top 3 most relevant
-            text = vector.get('metadata', {}).get('text', '')
+            metadata = vector.get('metadata', {})
+            text = metadata.get('text', '')
             if text:
-                context_parts.append(text)
+                # Include company context if available
+                company = metadata.get('company_name', '')
+                ticker = metadata.get('ticker', '')
+                if company or ticker:
+                    context_parts.append(f"[{company} ({ticker})]: {text}")
+                else:
+                    context_parts.append(text)
         
         if context_parts:
-            return "\n\n".join(context_parts)
+            return "Relevant market research:\n\n" + "\n\n".join(context_parts)
         else:
-            return "No relevant market context found."
+            return "No relevant market context found in knowledge base."
             
     except Exception as e:
         logger.error(f"Error retrieving market context: {e}")
-        return "Unable to retrieve market context at this time."
+        # Return gracefully - don't fail the entire analysis
+        return f"Market research unavailable (S3 Vectors error: {str(e)})"
 
-@function_tool  
 async def update_job_status(job_id: str, status: str, result_json: Optional[str] = None, error_message: Optional[str] = None) -> bool:
     """
-    Update the job status in the database.
+    Update the job status in the database (direct call version).
     
     Args:
         job_id: Job ID to update
@@ -349,6 +362,22 @@ async def update_job_status(job_id: str, status: str, result_json: Optional[str]
     except Exception as e:
         logger.error(f"Error updating job status: {e}")
         return False
+
+@function_tool  
+async def update_job_status_tool(job_id: str, status: str, result_json: Optional[str] = None, error_message: Optional[str] = None) -> bool:
+    """
+    Update the job status in the database (agent tool version).
+    
+    Args:
+        job_id: Job ID to update
+        status: New status (running, completed, failed)
+        result_json: JSON string of results if completed
+        error_message: Error message if failed
+        
+    Returns:
+        Success boolean
+    """
+    return await update_job_status(job_id, status, result_json, error_message)
 
 async def load_portfolio_data(job_id: str) -> PortfolioData:
     """Load portfolio data for a job from the database."""
@@ -424,6 +453,12 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
     """
     Run the orchestrator agent to coordinate portfolio analysis.
     """
+    # Set region for Bedrock if different from default
+    if BEDROCK_MODEL_REGION != REGION:
+        os.environ["AWS_REGION_NAME"] = BEDROCK_MODEL_REGION
+        os.environ["AWS_REGION"] = BEDROCK_MODEL_REGION
+        os.environ["AWS_DEFAULT_REGION"] = BEDROCK_MODEL_REGION
+    
     # Initialize the model
     model = LitellmModel(model=f"bedrock/{BEDROCK_MODEL_ID}")
     
@@ -435,7 +470,7 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
         invoke_charter,
         invoke_retirement,
         search_market_knowledge,
-        update_job_status
+        update_job_status_tool
     ]
     
     # Create the analysis task
@@ -452,7 +487,8 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
             name="Financial Planner Orchestrator",
             instructions=ORCHESTRATOR_INSTRUCTIONS,
             model=model,
-            tools=tools
+            tools=tools,
+            output_type=AnalysisResult
         )
         
         result = await Runner.run(

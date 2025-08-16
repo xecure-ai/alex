@@ -46,3 +46,20 @@ variable "scheduler_enabled" {
   type        = bool
   default     = false
 }
+
+# Bedrock Model Configuration for Part 6 Agents
+variable "bedrock_model_id" {
+  description = "Bedrock model ID to use for all Part 6 agents"
+  type        = string
+  # Default to Claude 3.5 Haiku inference profile for cross-region routing
+  # Students can switch to Sonnet or other models based on their needs
+  default     = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+}
+
+variable "bedrock_model_region" {
+  description = "AWS region where the Bedrock model is available"
+  type        = string
+  # us-west-2 has inference profiles which help with rate limits
+  # Students can use their default region if models are available there
+  default     = "us-west-2"
+}

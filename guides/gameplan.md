@@ -4,10 +4,10 @@
 
 This document outlines the complete plan for building the Alex Financial Planner SaaS platform. This is the roadmap for Parts 5-8 of the course.
 
-## Current Status - Part 6 in progress.
+## Current Status
 
-- Part 5 is completed and verified.
-- Part 6: steps 1 and 2 are completed (initial planner, tagger). Directories have been created for remaining steps.
+- Parts 1-5: complete, tested and guides written in guides directory
+- Part 6: completed; currently being tested and checked; then Guide 6 will be written.
 
 ## IMPORTANT - Mandatory rules - please pay attention to this. You MUST:
 
@@ -17,12 +17,25 @@ This document outlines the complete plan for building the Alex Financial Planner
 4. You MUST use modern, current versions of APIs. It is August 2025 - be up to date! Don't guess package names; if in doubt, research and check.  
 5. Everything must be cross-platform. Favor python scripts over shell scripts. Everything is in uv projects according to the instructions below, so always do `uv run xxx` never `python xxx`. When packaging for Lambda, you must use docker to ensure AWS architecture compatibility; see implementation in backend/tagger/package_docker.py as an example.
 
+## IMPORTANT - Methodical debugging with the root cause in mind
+
+When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause. ALWAYS prove the root cause. As an example: at one point you used Structured Outputs in a call to an LLM. You used `response.final_output_as(PydanticModel)` to parse the output. This was returning a string. You wrongly came to an illogical conclusion - that an LLM might occasionally return a string instead of a json object. You started writing clumsy code to handle strings, and endless exception handlers. The true problem was that you failed to follow the documented API - you weren't passing in `output_type=PydanticModel` when creating the agent.
+
+Subsequently, after encoutering a different prpblem, you incorrectly guessed that it's not possible to specify tools and output_type at the same time, so you removed output_type. It was a completely false guess. When errors immediately appeared with the results, you tried to stick bandaids on each error, with exception handlers and multiple `isinstance` tests - trying to correct for every output type that you didn't expect. It was disastrous.
+
+Lessons learned:
+
+1. When hitting a bug, BE AWARE that you have a tendency to jump to conclusions. Don't!
+2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
+3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix it properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
+
 ## Package Management Strategy (uv)
 
 ### Project Structure
 - Each folder within `backend/` is a separate uv project with its own `pyproject.toml`
 - This enables independent Lambda packaging and service-specific dependencies
 - The `backend/database/` package is shared across all services as an editable dependency
+- The top level `backend/` is also a uv project in order to have the utility `deploy_all_lambdas.py`
 
 ### Setup Process for Each Project
 ```bash
@@ -44,7 +57,7 @@ uv add --editable ../database  # Add shared database package (for services that 
 - Consistent database models via shared package
 - Cross-platform compatibility without maintaining multiple script versions
 
-## Current State (Parts 1-4 Complete)
+## Current State (Parts 1-5 Complete)
 
 ### Existing Infrastructure
 - ✅ SageMaker Serverless endpoint (embeddings)
@@ -53,14 +66,6 @@ uv add --editable ../database  # Add shared database package (for services that 
 - ✅ App Runner researcher service
 - ✅ EventBridge scheduler (optional)
 - ✅ API Gateway with API key auth
-
-### What We're Building Next
-Transform Alex from a research tool into a complete financial planning SaaS platform with:
-- Multi-user support with authentication (Clerk)
-- Portfolio management and analysis
-- AI-powered financial planning agents
-- Interactive frontend (NextJS)
-- Full observability and monitoring (LangFuse)
 
 ## Database Architecture Summary
 
@@ -91,7 +96,7 @@ Transform Alex from a research tool into a complete financial planning SaaS plat
 ## Technical Architecture
 
 ### AI Models
-- **Claude 4 Sonnet** via AWS Bedrock for all agents (complex financial analysis)
+- **Claude 4 Haiku** via AWS Bedrock for all agents (complex financial analysis)
   - Configurable via environment variable `BEDROCK_MODEL_ID`
   - Default: `anthropic.claude-4-sonnet-20250805-v1:0`
   - Can be changed to other Bedrock models as needed
@@ -177,7 +182,7 @@ The correct package to install is `openai-agents`
 `uv add openai-agents`  
 `uv add "openai-agents[litellm]"`  
 
-This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Structured Ouputs and Tools. This is the approach to be used. Only use Tools and Structured Outputs where they make sense.
+This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Structured Ouputs and Tools. This is the approach to be used. Only use Tools and Structured Outputs where they make sense. Structured Outputs need output_type specified when creating the Agent, and then final_output_as when receiving the object.
 
 BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace(). Check the docs, be up to date.
 
@@ -203,44 +208,7 @@ async def run_agent():
     return result.final_output_as(MyResultObject)
 ```
 
-## Cost Management Strategy
-
-### Aurora Serverless v2 Costs
-- **Running cost**: $1.44-$2.88/day ($43-$87/month)
-- **Cannot scale to zero** (unlike v1)
-- **Recommendation**: Create, learn, destroy within 3-5 days
-
-### Cost Control Commands
-Students can use the included `aurora_cost_management.py` script:
-
-```bash
-# From the terraform directory:
-cd terraform
-
-# Check current status and costs
-uv run aurora_cost_management.py status
-
-# Minimize costs when not actively working (still $1.44/day)
-uv run aurora_cost_management.py pause
-
-# Resume for active development
-uv run aurora_cost_management.py resume
-
-# COMPLETELY STOP charges (deletes database!)
-uv run aurora_cost_management.py destroy
-
-# Recreate after destroy
-uv run aurora_cost_management.py recreate
-```
-
-### Recommended Timeline
-- **Day 1**: Create Aurora, complete Part 5
-- **Day 2-3**: Complete Parts 6-7
-- **Day 4**: Complete Part 8, capture learnings
-- **Day 5**: Destroy Aurora to stop charges
-- **Total cost**: ~$7-14 for the entire course
-
-## Part 5: Database & Shared Infrastructure
+## Part 5: Database & Shared Infrastructure (DONE)
 
 ### Objective
 Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable database library that all agents can use.
@@ -353,24 +321,9 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 - Natural language Field descriptions for LLM compatibility
 - Schemas ready for OpenAI/Anthropic function calling
 
-**Files Created:**
-```
-backend/database/
-├── src/                    # Package source
-│   ├── client.py          # Data API wrapper with type casting
-│   ├── models.py          # Database models
-│   └── schemas.py         # Pydantic schemas (LLM-compatible)
-├── migrations/            # SQL schema
-├── reset_db.py           # Database reset and populate
-├── seed_data.py          # Load 22 ETF instruments
-├── test_data_api.py      # Initial Aurora setup
-├── test_db.py            # Complete test suite
-└── verify_database.py    # State verification
-```
-
 ---
 
-## Part 6: Agent Orchestra - Core Services
+## Part 6: Agent Orchestra - Core Services (BUILT AND BEING TESTED)
 
 ### Objective
 Build the AI agent ecosystem where a main orchestrator delegates to specialized agents.
@@ -441,10 +394,63 @@ User Request → API → SQS → Planner (Lambda)
 - Full portfolio analysis capability
 - Async job processing via SQS
 
+### Testing strategy for Part 6
+
+Prerequisites:
+
+  1. Make sure you're in the project root directory
+  2. Ensure your AWS credentials are configured
+  3. Have the .env file configured with your settings
+
+### Running the Full Integration Test:
+
+Navigate to the planner directory  
+`cd backend/planner`
+
+Run the full test using   
+`uv run run_full_test.py`
+
+What the Test Does:
+
+1. Creates a test job in the Aurora database for the test user
+2. Submits the job to the SQS queue (alex-analysis-jobs)
+3. Triggers the Planner Lambda which orchestrates all agents:
+    - InstrumentTagger (classifies unknown instruments)
+    - Report Writer (generates analysis narrative)
+    - Chart Maker (creates visualization data)
+    - Retirement Specialist (projects future outcomes)
+4. Monitors progress by polling the database status
+5. Shows results when complete (typically 90-120 seconds)
+
+Other Useful Test Commands:
+
+Test the planner locally (without Lambda)  
+`uv run test_local.py`
+
+Test just the SQS integration
+`uv run test_integration.py`
+
+Check job status in the database
+`uv run check_jobs.py`
+
+Test individual agents
+`cd ../tagger && uv run test_local.py`
+`cd ../reporter && uv run test_local.py`
+
+Monitoring:
+
+- CloudWatch Logs: Check /aws/lambda/alex-planner and other agent logs
+- SQS Console: Monitor the alex-analysis-jobs queue
+- Database: Use check_jobs.py to see job statuses
+
+Configuration:
+
+The test uses Claude 3.5 Haiku by default. To change models, update .env file: BEDROCK_MODEL_ID and BEDROCK_MODEL_REGION
+
 ### Acceptance Criteria for Part 6
 
 #### Lambda Infrastructure
-- [ ] All 5 Lambda functions deployed (Planner, InstrumentTagger, Reporter, Charter, Retirement)
+- [ ] All 5 Lambda functions deployed (Planner, Tagger, Reporter, Charter, Retirement)
 - [ ] SQS queue created with proper dead letter queue
 - [ ] Orchestrator has 15-minute timeout configured
 - [ ] All Lambdas have IAM roles with correct permissions
@@ -457,7 +463,7 @@ User Request → API → SQS → Planner (Lambda)
 - [ ] Handles failures gracefully with error messages
 - [ ] Completes full analysis in under 3 minutes
 
-#### InstrumentTagger Agent
+#### Tagger Agent
 - [ ] Identifies instruments missing allocation data
 - [ ] Successfully calls Bedrock Claude model
 - [ ] Returns structured JSON with allocations

@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Get configuration
 BEDROCK_MODEL_ID = os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-3-5-sonnet-20241022-v2:0')
+BEDROCK_MODEL_REGION = os.getenv('BEDROCK_MODEL_REGION', os.getenv('AWS_REGION', 'us-east-1'))
 
 class AllocationBreakdown(BaseModel):
     """Allocation percentages that must sum to 100"""
@@ -128,6 +129,12 @@ async def classify_instrument(
     Returns:
         Complete classification with allocations
     """
+    # Set region for Bedrock if specified
+    if BEDROCK_MODEL_REGION != os.getenv('AWS_REGION', 'us-east-1'):
+        os.environ["AWS_REGION_NAME"] = BEDROCK_MODEL_REGION
+        os.environ["AWS_REGION"] = BEDROCK_MODEL_REGION
+        os.environ["AWS_DEFAULT_REGION"] = BEDROCK_MODEL_REGION
+    
     # Initialize the model
     model = LitellmModel(model=f"bedrock/{BEDROCK_MODEL_ID}")
     
@@ -169,32 +176,20 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
     """
     import asyncio
     
-    # Create a semaphore to limit concurrent classifications (to avoid overwhelming Bedrock)
-    # Conservative default to avoid rate limits - can be increased via env var if needed
-    MAX_CONCURRENT = int(os.getenv('TAGGER_MAX_CONCURRENT', '3'))
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-    
-    async def classify_with_semaphore(instrument: dict) -> Optional[InstrumentClassification]:
-        """Classify a single instrument with semaphore for rate limiting."""
-        async with semaphore:
-            try:
-                classification = await classify_instrument(
-                    symbol=instrument['symbol'],
-                    name=instrument.get('name', ''),
-                    instrument_type=instrument.get('instrument_type', 'etf')
-                )
-                logger.info(f"Successfully classified {instrument['symbol']}")
-                return classification
-                
-            except Exception as e:
-                logger.error(f"Error classifying {instrument['symbol']}: {e}")
-                return None
-    
-    # Create tasks for all instruments
-    tasks = [classify_with_semaphore(instrument) for instrument in instruments]
-    
-    # Run all tasks concurrently and gather results
-    results = await asyncio.gather(*tasks)
+    # Process instruments sequentially (simple and reliable)
+    results = []
+    for instrument in instruments:
+        try:
+            classification = await classify_instrument(
+                symbol=instrument['symbol'],
+                name=instrument.get('name', ''),
+                instrument_type=instrument.get('instrument_type', 'etf')
+            )
+            logger.info(f"Successfully classified {instrument['symbol']}")
+            results.append(classification)
+        except Exception as e:
+            logger.error(f"Error classifying {instrument['symbol']}: {e}")
+            results.append(None)
     
     # Filter out None values (failed classifications)
     classifications = [r for r in results if r is not None]
