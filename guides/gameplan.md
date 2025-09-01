@@ -21,13 +21,16 @@ This document outlines the complete plan for building the Alex Financial Planner
 
 When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause. ALWAYS prove the root cause. As an example: at one point you used Structured Outputs in a call to an LLM. You used `response.final_output_as(PydanticModel)` to parse the output. This was returning a string. You wrongly came to an illogical conclusion - that an LLM might occasionally return a string instead of a json object. You started writing clumsy code to handle strings, and endless exception handlers. The true problem was that you failed to follow the documented API - you weren't passing in `output_type=PydanticModel` when creating the agent.
 
-Subsequently, after encoutering a different prpblem, you incorrectly guessed that it's not possible to specify tools and output_type at the same time, so you removed output_type. It was a completely false guess. When errors immediately appeared with the results, you tried to stick bandaids on each error, with exception handlers and multiple `isinstance` tests - trying to correct for every output type that you didn't expect. It was disastrous.
+Subsequently, after encoutering a different problem, you incorrectly guessed that it's not possible to specify tools and output_type at the same time, so you removed output_type. It was a completely false guess. When errors immediately appeared with the results, you tried to stick bandaids on each error, with exception handlers and multiple `isinstance` tests - trying to correct for every output type that you didn't expect. It was disastrous. (This is now fixed).
 
-Lessons learned:
+Lessons learned from prior issue:
 
 1. When hitting a bug, BE AWARE that you have a tendency to jump to conclusions. Don't!
 2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
 3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix it properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
+4. Do not prematurely declare victory. Prove that the issue is fully fixed.
+
+We are now working on a new issue, that is reflected in guides/debugging_plan.md, and is not yet fixed.
 
 ## Package Management Strategy (uv)
 
@@ -213,53 +216,6 @@ async def run_agent():
 ### Objective
 Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable database library that all agents can use.
 
-### Steps
-
-1. **Deploy Aurora Serverless v2 with Terraform**
-   - Create Aurora cluster with Data API enabled
-   - No VPC configuration needed (Data API uses HTTPS)
-   - Store credentials in Secrets Manager
-   - Configure IAM roles for Lambda access
-   - ✅ **Test**: Execute query via AWS CLI using Data API
-
-2. **Create Database Schema**
-   - Write SQL migration files (001_schema.sql)
-   - Create migration runner script with proper SQL statement splitting
-   - Run migrations against Aurora using Data API
-   - All JSONB columns validated through Pydantic before insertion
-   - ✅ **Test**: Verify all tables exist with correct structure
-
-3. **Build Shared Database Package** (`backend/database/`)
-   - Create uv project with Data API client wrapper
-   - Implement Pydantic schemas for validation (src/schemas.py)
-   - Create database models with automatic type casting
-   - Handle JSONB, numeric, date, and UUID type conversions
-   - Write comprehensive test suite
-   - ✅ **Test**: Run all tests with `uv run test_db.py`
-
-4. **Seed Instruments Table**
-   - Create seed data with 22 popular ETFs (SPY, QQQ, BND, etc.)
-   - Validate all data through Pydantic InstrumentCreate schema
-   - Ensure all allocations sum to 100% with automatic validation
-   - ✅ **Test**: Run `uv run seed_data.py`, verify Pydantic validation
-
-5. **Create Database Reset Script** (`backend/database/reset_db.py`)
-   - Drop all tables in correct order (handle foreign keys)
-   - Recreate schema from migrations
-   - Load default instruments (20+ popular ETFs)
-   - Optionally create test user with sample portfolio
-   - ✅ **Test**: `uv run reset_db.py --with-test-data`
-   - Usage: `uv run reset_db.py` (drops tables, runs migrations, loads seed data)
-   - Usage: `uv run reset_db.py --with-test-data` (also creates test user)
-   - Usage: `uv run reset_db.py --skip-drop` (just reload data without dropping)
-
-6. **Create Test Data Loader**
-   - Script to create test user with sample portfolio
-   - Multiple accounts (401k, IRA, Taxable)
-   - Various positions across different instruments
-   - ✅ **Test**: Load data, query full portfolio
-
-
 ### Deliverables
 - Working Aurora database with Data API
 - Shared database package using Data API client
@@ -335,9 +291,9 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
    - 15 minute timeout, 3GB memory
    - Configurable Bedrock model via `BEDROCK_MODEL_ID` env var
    - Default: `anthropic.claude-4-sonnet-20250805-v1:0`
+   - Automatically tags missing instruments via Python code (not agent tool)
    - Delegates to other agents via Lambda invocations
-   - Calls InstrumentTagger for missing instrument data
-   - Has database tools and S3 Vectors access
+   - Has S3 Vectors access for market knowledge
    - Updates job status in database
    - ✅ **Test**: Local invocation, SQS message processing
 
@@ -375,7 +331,7 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
 ### Agent Communication Flow
 ```
 User Request → API → SQS → Planner (Lambda)
-                             ├→ InstrumentTagger (Lambda) [if needed]
+                             ├→ [Python: Auto-tag missing instruments]
                              ├→ Report Writer (Lambda)
                              ├→ Chart Maker (Lambda)
                              └→ Retirement Specialist (Lambda)
@@ -386,6 +342,8 @@ User Request → API → SQS → Planner (Lambda)
                                  ↓
                              Job marked complete
 ```
+
+**Simplification Note**: InstrumentTagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable.
 
 ### Deliverables
 - Working orchestrator Lambda with SQS trigger

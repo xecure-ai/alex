@@ -40,7 +40,7 @@ sagemaker_runtime = boto3.client('sagemaker-runtime')
 current_portfolio_data = None
 
 # Get configuration from environment
-BEDROCK_MODEL_ID = os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-20250514-v1:0')
+BEDROCK_MODEL_ID = os.getenv('BEDROCK_MODEL_ID', 'anthropic.claude-sonnet-4-20250514-v1:0')
 BEDROCK_MODEL_REGION = os.getenv('BEDROCK_MODEL_REGION', 'us-west-2')
 VECTORS_BUCKET = os.getenv('VECTORS_BUCKET', 'alex-vectors')
 SAGEMAKER_ENDPOINT = os.getenv('SAGEMAKER_ENDPOINT', 'alex-embeddings')
@@ -228,13 +228,35 @@ async def invoke_reporter() -> str:
     """
     logger.info("*** TOOL CALLED: invoke_reporter ***")
     
-    # Return hard-coded analysis narrative
-    return """Portfolio Analysis Report: The portfolio demonstrates strong diversification across multiple asset classes. 
-    Current allocation shows 65% equities (with balanced US and international exposure), 25% fixed income securities, 
-    and 10% alternative investments. The equity portion is well-distributed across technology, healthcare, and consumer sectors. 
-    Risk metrics indicate moderate volatility with a Sharpe ratio of 1.2. Year-to-date performance shows +12.5% returns, 
-    outperforming benchmark indices by 2.3%. The portfolio is well-positioned for long-term growth while maintaining 
-    appropriate risk management through diversification."""
+    try:
+        # Get the portfolio data from global variable
+        global current_portfolio_data
+        if not current_portfolio_data:
+            logger.error("Portfolio data not available")
+            return "Error: Portfolio data not available for reporter"
+        
+        result = await invoke_lambda_agent(
+            "Report Writer",
+            REPORTER_FUNCTION,
+            {
+                'portfolio_data': current_portfolio_data.model_dump(),
+                'user_preferences': current_portfolio_data.user_preferences.model_dump()
+            }
+        )
+        logger.info("*** invoke_reporter completed ***")
+        
+        # Convert result to string
+        if isinstance(result, dict):
+            if 'error' in result:
+                return f"Reporter error: {result['error']}"
+            elif 'analysis' in result:
+                return result['analysis']
+            else:
+                return f"Reporter analysis completed: {json.dumps(result)}"
+        return str(result)
+    except Exception as e:
+        logger.error(f"invoke_reporter exception: {str(e)}")
+        return f"Reporter failed with error: {str(e)}"
 
 @function_tool
 async def invoke_charter() -> str:
@@ -246,14 +268,32 @@ async def invoke_charter() -> str:
     """
     logger.info("*** TOOL CALLED: invoke_charter ***")
     
-    # Return hard-coded chart creation summary
-    return """Visualization Suite Generated: Created 5 interactive charts for portfolio analysis.
-    1. Asset Allocation Pie Chart - showing distribution across equities (65%), bonds (25%), alternatives (10%)
-    2. Performance Timeline - displaying 5-year historical returns with quarterly markers
-    3. Risk Heat Map - illustrating correlation matrix between asset classes
-    4. Sector Breakdown - detailed view of equity holdings across 11 GICS sectors
-    5. Geographic Distribution - mapping international exposure across developed and emerging markets
-    All charts have been rendered with drill-down capabilities and exported in both PDF and interactive HTML formats."""
+    try:
+        # Get the portfolio data from global variable
+        global current_portfolio_data
+        if not current_portfolio_data:
+            logger.error("Portfolio data not available")
+            return "Error: Portfolio data not available for charter"
+        
+        result = await invoke_lambda_agent(
+            "Chart Maker",
+            CHARTER_FUNCTION,
+            {'portfolio_data': current_portfolio_data.model_dump()}
+        )
+        logger.info("*** invoke_charter completed ***")
+        
+        # Convert result to string
+        if isinstance(result, dict):
+            if 'error' in result:
+                return f"Charter error: {result['error']}"
+            elif 'charts' in result:
+                return f"Charts created: {', '.join(result['charts'].keys()) if isinstance(result['charts'], dict) else 'visualization data'}"
+            else:
+                return f"Charter completed: {json.dumps(result)}"
+        return str(result)
+    except Exception as e:
+        logger.error(f"invoke_charter exception: {str(e)}")
+        return f"Charter failed with error: {str(e)}"
 
 @function_tool
 async def invoke_retirement() -> str:
@@ -265,16 +305,35 @@ async def invoke_retirement() -> str:
     """
     logger.info("*** TOOL CALLED: invoke_retirement ***")
     
-    # Return hard-coded retirement analysis
-    return """Retirement Projection Analysis: Based on current portfolio value and contribution patterns, 
-    retirement goals are achievable with 87% confidence level. Monte Carlo simulation (10,000 scenarios) shows:
-    - Target retirement age: 65 (in 30 years)
-    - Required annual income: $80,000 (inflation-adjusted)
-    - Projected portfolio value at retirement: $2.4M (median scenario)
-    - Safe withdrawal rate: 4% annually
-    - Portfolio longevity: 95% probability of lasting 30+ years in retirement
-    Recommendations: Maintain current contribution rate of $24,000/year, consider increasing equity allocation 
-    by 5% given long time horizon, and review annually. Social Security benefits not included in base calculation."""
+    try:
+        # Get the portfolio data from global variable
+        global current_portfolio_data
+        if not current_portfolio_data:
+            logger.error("Portfolio data not available")
+            return "Error: Portfolio data not available for retirement"
+        
+        result = await invoke_lambda_agent(
+            "Retirement Specialist",
+            RETIREMENT_FUNCTION,
+            {
+                'portfolio_data': current_portfolio_data.model_dump(),
+                'user_preferences': current_portfolio_data.user_preferences.model_dump()
+            }
+        )
+        logger.info("*** invoke_retirement completed ***")
+        
+        # Convert result to string
+        if isinstance(result, dict):
+            if 'error' in result:
+                return f"Retirement error: {result['error']}"
+            elif 'projections' in result:
+                return f"Retirement projections: {result['projections']}"
+            else:
+                return f"Retirement analysis: {json.dumps(result)}"
+        return str(result)
+    except Exception as e:
+        logger.error(f"invoke_retirement exception: {str(e)}")
+        return f"Retirement failed with error: {str(e)}"
 
 @function_tool
 async def search_market_knowledge(query: str, k: int = 5) -> str:
@@ -539,7 +598,6 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
         os.environ["AWS_DEFAULT_REGION"] = BEDROCK_MODEL_REGION
     
     # Initialize the model
-    logger.info(f"Using Bedrock model: {BEDROCK_MODEL_ID}")
     model = LitellmModel(model=f"bedrock/{BEDROCK_MODEL_ID}")
     
     # Define only the essential tools
@@ -550,8 +608,6 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
     ]
     
     logger.info(f"Registered {len(tools)} tools for orchestrator")
-    for tool in tools:
-        logger.info(f"  Tool type: {type(tool)}, Tool: {tool}")
     
     # Create the analysis task with simplified parameters
     num_accounts = len(portfolio_data.accounts)
@@ -579,7 +635,6 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
         )
         
         logger.info(f"Starting Runner.run with max_turns=20...")
-        logger.info(f"Task being sent: {task[:200]}...")
         result = await Runner.run(
             agent,
             input=task,
@@ -588,23 +643,8 @@ async def run_orchestrator(portfolio_data: PortfolioData) -> AnalysisResult:
         
         logger.info(f"Runner completed")
         
-        # Check if any tools were actually called
-        tool_calls_found = 0
-        if hasattr(result, 'messages'):
-            logger.info(f"Result has {len(result.messages)} messages")
-            for i, msg in enumerate(result.messages):
-                if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                    tool_calls_found += len(msg.tool_calls)
-                    for tc in msg.tool_calls:
-                        logger.info(f"Tool call found in message {i}: {tc}")
-        else:
-            logger.info("Result has no messages attribute")
-        logger.info(f"Total tool calls in conversation: {tool_calls_found}")
-        
         final_result = result.final_output_as(AnalysisResult)
         logger.info(f"Final result status: {final_result.status}")
-        if final_result.error_message:
-            logger.info(f"Error message: {final_result.error_message}")
         
         return final_result
 

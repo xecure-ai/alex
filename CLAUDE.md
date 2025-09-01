@@ -5,7 +5,7 @@
 - The project root is ~/projects/alex
 - There is a .env file in the project root; you may not be able to see it for security reasons, but it's there, with OPENAI_API_KEY
 - The guides folder contains instructions for each step of the project. These guides are for students, NOT for Ed (the user). For example: if we need to add a Python package, Ed (or you) need to run `uv add package_name`. The students will NOT need to do this, because it will be in pyproject.toml, and in the repo.
-- The students might be in any AWS region. BE VERY THOUGHTFUL about this. Some infrastructure must be in us-east-1, but mostly it must be in the student's region.
+- The students might be in any AWS region. BE VERY THOUGHTFUL about this. Some infrastructure must be in us-east-1, but mostly it must be in the student's region. Some models are in us-west-2.
 - ALWAYS be as simple as possible. Always be idiomatic - use simple, popular, common, up-to-date approaches.
 - Approach in small steps that can be tested carefully.
 
