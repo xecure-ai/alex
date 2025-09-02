@@ -1,0 +1,29 @@
+variable "aws_region" {
+  description = "AWS region for resources"
+  type        = string
+}
+
+variable "aurora_cluster_arn" {
+  description = "ARN of the Aurora cluster from Part 5"
+  type        = string
+}
+
+variable "aurora_secret_arn" {
+  description = "ARN of the Secrets Manager secret from Part 5"
+  type        = string
+}
+
+variable "vector_bucket" {
+  description = "S3 Vectors bucket name from Part 3"
+  type        = string
+}
+
+variable "bedrock_model_id" {
+  description = "Bedrock model ID to use for agents"
+  type        = string
+}
+
+variable "bedrock_region" {
+  description = "AWS region for Bedrock"
+  type        = string
+}

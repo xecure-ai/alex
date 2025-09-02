@@ -8,11 +8,12 @@ This document outlines the complete plan for building the Alex Financial Planner
 
 - Parts 1-5: complete, tested and guides written in guides directory
 - Part 6: completed; currently being tested and checked; then Guide 6 will be written.
+- Before completing Part 6, we will do a review and tidy up of parts 1-5.
 
 ## IMPORTANT - Mandatory rules - please pay attention to this. You MUST:
 
 1. Be SIMPLE. Keep code simple, readable and clean. Short methods. Clean up temporary test files. Docstrings, but be sparing with inline comments. Exception handlers only when needed.  
-2. Work INCREMENTALLY with CARE. Check your work. Do your own code reviews and you go.  
+2. Work INCREMENTALLY with CARE. Check your work. Do your own code reviews as you go.  
 3. Use OpenAI Agents SDK (Bedrock + LiteLLM) always for LLM calls, using the idiomatic code in this gameplan  
 4. You MUST use modern, current versions of APIs. It is August 2025 - be up to date! Don't guess package names; if in doubt, research and check.  
 5. Everything must be cross-platform. Favor python scripts over shell scripts. Everything is in uv projects according to the instructions below, so always do `uv run xxx` never `python xxx`. When packaging for Lambda, you must use docker to ensure AWS architecture compatibility; see implementation in backend/tagger/package_docker.py as an example.
@@ -21,8 +22,6 @@ This document outlines the complete plan for building the Alex Financial Planner
 
 When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause. ALWAYS prove the root cause. As an example: at one point you used Structured Outputs in a call to an LLM. You used `response.final_output_as(PydanticModel)` to parse the output. This was returning a string. You wrongly came to an illogical conclusion - that an LLM might occasionally return a string instead of a json object. You started writing clumsy code to handle strings, and endless exception handlers. The true problem was that you failed to follow the documented API - you weren't passing in `output_type=PydanticModel` when creating the agent.
 
-Subsequently, after encoutering a different problem, you incorrectly guessed that it's not possible to specify tools and output_type at the same time, so you removed output_type. It was a completely false guess. When errors immediately appeared with the results, you tried to stick bandaids on each error, with exception handlers and multiple `isinstance` tests - trying to correct for every output type that you didn't expect. It was disastrous. (This is now fixed).
-
 Lessons learned from prior issue:
 
 1. When hitting a bug, BE AWARE that you have a tendency to jump to conclusions. Don't!
@@ -30,7 +29,26 @@ Lessons learned from prior issue:
 3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix it properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
 4. Do not prematurely declare victory. Prove that the issue is fully fixed.
 
-We are now working on a new issue, that is reflected in guides/debugging_plan.md, and is not yet fixed.
+## Infrastructure Management Strategy (Terraform)
+
+### Why Separate Terraform Directories?
+For this educational project, we use a unique approach designed to simplify the learning experience:
+- **Each guide has its own Terraform directory** (e.g., `terraform/2_sagemaker`, `terraform/3_ingestion`)
+- **Local state files** instead of remote S3 state (automatically gitignored)
+- **Independent deployments** - each part can be deployed without affecting others
+- **No state bucket complexity** - eliminates setup and management overhead
+- **Progressive deployment** - students can't accidentally deploy later parts
+
+This approach differs from production setups where you might use:
+- Remote state in S3 with state locking
+- Modules with shared state
+- Terragrunt or similar orchestration tools
+
+However, for learning purposes, our approach provides:
+- **Isolation**: Mistakes in one part don't affect others
+- **Simplicity**: No state bucket setup required
+- **Clarity**: Each guide maps to exactly one Terraform directory
+- **Safety**: Can't accidentally destroy earlier work
 
 ## Package Management Strategy (uv)
 
@@ -119,10 +137,13 @@ uv add --editable ../database  # Add shared database package (for services that 
 ```
 alex/
 ├── terraform/
-│   └── modules/
-│       ├── rds/              # Database infrastructure
-│       ├── cloudfront/       # Frontend CDN
-│       └── langfuse/         # Observability (if self-hosted)
+│   ├── 2_sagemaker/         # Part 2: SageMaker endpoint
+│   ├── 3_ingestion/         # Part 3: S3 Vectors & Lambda
+│   ├── 4_researcher/        # Part 4: App Runner service
+│   ├── 5_database/          # Part 5: Aurora Serverless
+│   ├── 6_agents/            # Part 6: Agent Lambdas
+│   ├── 7_frontend/          # Part 7: API & Frontend infra
+│   └── 8_observability/     # Part 8: Monitoring setup
 │
 ├── backend/
 │   ├── database/            # Shared library (Guide 5) - uv project

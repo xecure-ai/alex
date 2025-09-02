@@ -160,26 +160,33 @@ aws rds-data execute-statement --help
 
 Now let's deploy the database infrastructure with Terraform.
 
-### Deploy the Database
+### Configure and Deploy the Database
 
-**Mac/Linux:**
 ```bash
-cd terraform
-source ../.env
-export TF_VAR_aws_account_id=$AWS_ACCOUNT_ID
-export TF_VAR_openai_api_key="placeholder-will-use-bedrock"
-terraform apply
+# Navigate to the database terraform directory
+cd terraform/5_database
+
+# Copy the example variables file
+cp terraform.tfvars.example terraform.tfvars
 ```
 
-**Windows PowerShell:**
-```powershell
-cd terraform
-Get-Content ..\.env | ForEach-Object {
-    if ($_ -match '^AWS_ACCOUNT_ID=(.+)$') {
-        $env:TF_VAR_aws_account_id = $matches[1]
-    }
-}
-$env:TF_VAR_openai_api_key = "placeholder-will-use-bedrock"
+Edit `terraform.tfvars` and set your values:
+```hcl
+aws_region = "us-east-1"  # Your AWS region
+min_capacity = 0.5        # Minimum ACUs (0.5 = ~$43/month)
+max_capacity = 1.0        # Maximum ACUs (keep low for dev)
+```
+
+Deploy the database:
+
+```bash
+# Initialize Terraform (creates local state file)
+terraform init
+
+# Review what will be created
+terraform plan
+
+# Deploy the database infrastructure
 terraform apply
 ```
 
@@ -189,18 +196,38 @@ Type `yes` when prompted. This will create:
 - Security group and subnet configuration
 - The `alex` database
 
-Deployment takes about 10-15 minutes. You'll see outputs like:
-```
-aurora_cluster_arn = "arn:aws:rds:us-east-1:..."
-aurora_secret_arn = "arn:aws:secretsmanager:us-east-1:..."
-```
+Deployment takes about 10-15 minutes. After deployment, Terraform will display important outputs including the cluster ARN and secret ARN.
+
+### Save Your Configuration
+
+**Important**: Update your `.env` file with the database values:
+
+1. View the Terraform outputs:
+   ```bash
+   terraform output
+   ```
+
+2. Go back to project root and edit `.env`:
+   ```bash
+   cd ../..
+   nano .env  # or use your preferred editor
+   ```
+
+3. Add these lines with values from Terraform output:
+   ```
+   # Part 5 - Database
+   AURORA_CLUSTER_ARN=arn:aws:rds:us-east-1:123456789012:cluster:alex-aurora-cluster
+   AURORA_SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:alex-aurora-credentials-xxxxx
+   ```
+
+💡 **Tip**: The exact ARN values are shown in your Terraform output. Copy them carefully!
 
 ## Step 2: Initialize the Database
 
 Now let's test the connection and create our schema.
 
 ```bash
-cd ../backend/database
+cd ../../backend/database
 
 # Test the Data API connection
 uv run test_data_api.py

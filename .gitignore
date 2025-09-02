@@ -137,6 +137,10 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+
+# Terraform variables (contain secrets)
+*.tfvars
+!*.tfvars.example
 .venv
 env/
 venv/

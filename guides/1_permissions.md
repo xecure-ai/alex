@@ -1,6 +1,6 @@
 # Building Alex: Part 1 - AWS Permissions Setup
 
-Welcome to Project Alex - the Agentic Lifetime Equities Explainer! 
+Welcome to Project Alex - the Agentic Learning Equities eXplainer! 
 
 Alex is an AI-powered personal financial planner that will help users manage their investment portfolios and plan for retirement. Throughout this course, we'll build a complete AI system using AWS services.
 
@@ -41,13 +41,27 @@ See [architecture.md](architecture.md) for the complete system architecture.
 
 This first guide focuses on setting up the necessary AWS permissions. We'll create a dedicated IAM group with only the permissions needed for the Alex project.
 
+## Important Note on Infrastructure Management
+
+This project uses Terraform for infrastructure deployment with a specific approach designed for educational purposes:
+- **Separate Terraform directories**: Each guide has its own Terraform directory (e.g., `terraform/2_sagemaker`, `terraform/3_ingestion`)
+- **Local state files**: We use local state files instead of remote S3 state for simplicity (automatically gitignored)
+- **Independent deployments**: Each part can be deployed independently without affecting other parts
+- **No state bucket needed**: This eliminates the complexity of setting up and managing a Terraform state bucket
+
+This approach allows you to:
+- Deploy each part as you progress through the guides
+- Avoid accidental deployment of later parts
+- Keep infrastructure changes isolated
+- Simplify the learning experience
+
 ## Prerequisites
 
 Before starting, ensure you have:
 - An AWS account with root access
 - AWS CLI installed and configured with your `aiengineer` IAM user
-- Python 3.11 or later
 - Basic familiarity with AWS services
+- Terraform installed (version 1.5 or later)
 
 **Note for VS Code/Cursor users**: To view the architecture diagrams in this guide, install the "Markdown Preview Mermaid Support" extension (ID: `bierner.markdown-mermaid`). This will render the diagrams in your Markdown preview.
 
@@ -143,9 +157,42 @@ aws sagemaker list-endpoints
 
 This should return an empty list (no error).
 
+## Step 3: Initial Project Setup
+
+Before moving to the next guide, let's set up your environment files:
+
+### Create Your Environment File
+
+```bash
+# Navigate to project root
+cd alex  # or wherever you cloned the repo
+
+# Copy the example environment file
+cp .env.example .env
+
+# Get your AWS account ID
+aws sts get-caller-identity --query Account --output text
+```
+
+Edit the `.env` file and add your AWS account ID and default region:
+```
+AWS_ACCOUNT_ID=123456789012     # Your actual account ID
+DEFAULT_AWS_REGION=us-east-1    # Your preferred default region
+```
+
+You'll add more values to this file as you progress through the guides.
+
+### Important Files
+
+This project uses two types of configuration files:
+- **`.env`** - Environment variables for Python scripts and backend services
+- **`terraform.tfvars`** - Configuration for Terraform infrastructure
+
+Both are gitignored for security. You'll create them from the provided examples.
+
 ## Next Steps
 
-Excellent! You now have the necessary permissions to build Alex. 
+Excellent! You now have the necessary permissions and initial setup complete.
 
 Continue to the next guide: [2_sagemaker.md](2_sagemaker.md) where we'll deploy our first AI component - a SageMaker Serverless endpoint for generating text embeddings.
 

@@ -24,83 +24,39 @@ Before starting:
 - Complete [1_permissions.md](1_permissions.md) 
 - Have Terraform installed (version 1.5+)
 
-## Step 1: Set Up Environment and State Storage
+## Step 1: Configure Terraform Variables
 
-First, let's set up your AWS account ID as an environment variable and create the Terraform state bucket.
+First, let's set up the Terraform configuration for this guide:
 
-### Mac/Linux:
 ```bash
-# Get and export your AWS account ID
-export TF_VAR_aws_account_id=$(aws sts get-caller-identity --query Account --output text)
+# Navigate to the SageMaker terraform directory
+cd terraform/2_sagemaker
 
-# Verify it's set
-echo $TF_VAR_aws_account_id
-
-# Create the state bucket (using your account ID for uniqueness)
-# Note: Add --region parameter if you're not in us-east-1
-aws s3api create-bucket \
-  --bucket alex-terraform-state-${TF_VAR_aws_account_id}
-
-# Enable versioning for safety
-aws s3api put-bucket-versioning \
-  --bucket alex-terraform-state-${TF_VAR_aws_account_id} \
-  --versioning-configuration Status=Enabled
+# Copy the example variables file
+cp terraform.tfvars.example terraform.tfvars
 ```
 
-### Windows PowerShell:
-```powershell
-# Get and export your AWS account ID
-$env:TF_VAR_aws_account_id = aws sts get-caller-identity --query Account --output text
-
-# Verify it's set
-echo $env:TF_VAR_aws_account_id
-
-# Create the state bucket (using your account ID for uniqueness)
-# Note: Add --region parameter if you're not in us-east-1
-aws s3api create-bucket --bucket "alex-terraform-state-$env:TF_VAR_aws_account_id"
-
-# Enable versioning for safety
-aws s3api put-bucket-versioning --bucket "alex-terraform-state-$env:TF_VAR_aws_account_id" --versioning-configuration Status=Enabled
+Edit `terraform.tfvars` and set your AWS region (should match your DEFAULT_AWS_REGION):
+```hcl
+aws_region = "us-east-1"  # Use your DEFAULT_AWS_REGION from .env
 ```
-
-**Important**: The `TF_VAR_` prefix tells Terraform to use this as a variable. Keep this terminal/PowerShell window open throughout the deployment!
 
 ## Step 2: Deploy with Terraform
 
 Now let's deploy the SageMaker infrastructure. With the HuggingFace approach, there's no need to prepare model artifacts - the model will be downloaded automatically from HuggingFace Hub!
 
 ```bash
-# Navigate to terraform directory
-cd terraform
+# Initialize Terraform (creates local state file)
+terraform init
 
-# Set your AWS region (if not already set)
-export AWS_DEFAULT_REGION=$(aws configure get region)
+# Review what will be created
+terraform plan
 
-# Initialize Terraform with your state bucket
-# Mac/Linux:
-terraform init \
-  -backend-config="bucket=alex-terraform-state-${TF_VAR_aws_account_id}" \
-  -backend-config="key=production/terraform.tfstate"
-
-# Windows PowerShell:
-$env:AWS_DEFAULT_REGION = aws configure get region
-terraform init `
-  -backend-config="bucket=alex-terraform-state-$env:TF_VAR_aws_account_id" `
-  -backend-config="key=production/terraform.tfstate"
-
-# Deploy ONLY the SageMaker infrastructure
-# We use -target to avoid needing other variables yet
-terraform apply \
-  -target=aws_iam_role.sagemaker_role \
-  -target=aws_iam_role_policy_attachment.sagemaker_full_access \
-  -target=aws_sagemaker_model.embedding_model \
-  -target=aws_sagemaker_endpoint_configuration.serverless_config \
-  -target=aws_sagemaker_endpoint.embedding_endpoint
+# Deploy the SageMaker infrastructure
+terraform apply
 ```
 
-**Note**: We're using `-target` to deploy only SageMaker resources for now. If prompted for any other variables, just press Enter to use defaults - they won't be used yet.
-
-When prompted, type `yes` to confirm. This will create:
+When prompted, type `yes` to confirm the deployment. This will create:
 - IAM role for SageMaker
 - SageMaker model configuration (with HuggingFace model ID)
 - Serverless endpoint
@@ -113,13 +69,28 @@ Terraform created several resources:
 2. **SageMaker Model**: Configuration pointing to HuggingFace model `sentence-transformers/all-MiniLM-L6-v2`
 3. **Serverless Endpoint**: The API endpoint for generating embeddings
 
-After deployment, you'll see outputs like:
-```
-sagemaker_endpoint_name = "alex-embedding-endpoint"
-sagemaker_role_arn = "arn:aws:iam::YOUR_ACCOUNT_ID:role/alex-sagemaker-execution-role"
-```
+After deployment, Terraform will display important outputs including setup instructions.
 
-Save the `sagemaker_endpoint_name` - you'll need it for the Lambda function.
+### Save Your Configuration
+
+**Important**: Update your `.env` file with the endpoint name:
+
+1. Note the endpoint name from Terraform output (should be `alex-embedding-endpoint`)
+2. Go back to your project root and edit `.env`:
+   ```bash
+   cd ../..
+   nano .env  # or use your preferred editor
+   ```
+3. Add or update this line:
+   ```
+   # Part 2 - SageMaker
+   SAGEMAKER_ENDPOINT=alex-embedding-endpoint
+   ```
+
+💡 **Tip**: Terraform outputs are shown at the end of `terraform apply`. You can also view them anytime with:
+```bash
+terraform output
+```
 
 ## Step 4: Test the Endpoint
 
@@ -183,16 +154,137 @@ We chose serverless because:
 
 For production systems with strict latency requirements, you might choose always-on endpoints.
 
-## Clean Up (Optional)
+## MLOps in SageMaker
 
-If you need to tear down the infrastructure:
+### What is MLOps?
+
+MLOps (Machine Learning Operations) is the practice of applying DevOps principles to machine learning systems. SageMaker is AWS's comprehensive platform for MLOps, providing tools for the entire ML lifecycle: data preparation, model training, deployment, monitoring, and retraining.
+
+In production ML systems, you need to manage:
+- **Model Versioning**: Track different versions of your models as they evolve
+- **A/B Testing**: Compare model performance in production
+- **Model Monitoring**: Detect when models degrade over time
+- **Automated Retraining**: Retrain models when performance drops
+- **Model Registry**: Central repository for approved models
+- **Pipeline Automation**: Orchestrate the entire ML workflow
+
+### Model Drift and Why It Matters
+
+**Model drift** occurs when a model's performance degrades over time because the data it sees in production differs from its training data. For our embedding model, drift might occur if:
+- Language usage evolves (new financial terms emerge)
+- User behavior changes (different types of queries)
+- Market conditions shift (new investment products)
+
+SageMaker Model Monitor can automatically detect drift by:
+- Analyzing prediction distributions over time
+- Comparing current inputs to training data baselines
+- Alerting when statistical properties change significantly
+- Triggering automated retraining pipelines
+
+### Explore SageMaker in the AWS Console
+
+Let's explore what else SageMaker can do. Navigate to the SageMaker console and explore these sections:
+
+1. **Go to SageMaker Console**:
+   ```
+   https://console.aws.amazon.com/sagemaker/
+   ```
+
+2. **Explore Key MLOps Features** (left sidebar):
+   - **Model Registry**: Browse to see how teams manage model versions
+   - **Pipelines**: View how ML workflows are automated
+   - **Model Monitor**: See how drift detection works
+   - **Experiments**: Track training runs and hyperparameters
+   - **Feature Store**: Centralized feature management
+   - **Ground Truth**: Data labeling service
+
+3. **Check Your Endpoint**:
+   - Click "Inference" → "Endpoints"
+   - Find `alex-embedding-endpoint`
+   - Click on it to see metrics, configuration, and monitoring options
+   - Notice the "Data capture" option for model monitoring
+
+4. **Explore Model Versions**:
+   - Click "Inference" → "Models"
+   - See how SageMaker tracks model artifacts and configurations
+   - Each model has a unique ARN for versioning
+
+### SageMaker vs Bedrock: When to Use Each
+
+You've already worked with Bedrock, so let's clarify when to use each service:
+
+| Aspect | SageMaker | Bedrock |
+|--------|-----------|----------|
+| **Use Case** | Deploy YOUR own models or fine-tuned models | Use pre-trained foundation models via API |
+| **Model Source** | Open source, custom trained, or fine-tuned | AWS-hosted models (Claude, Llama, etc.) |
+| **Customization** | Full control over model, training, infrastructure | Limited to prompt engineering and RAG |
+| **Cost Model** | Pay for infrastructure (compute hours) | Pay per API call (tokens) |
+| **Setup Complexity** | Higher - manage endpoints, scaling, monitoring | Lower - just API calls |
+| **MLOps Features** | Full suite - versioning, monitoring, pipelines | Minimal - mostly usage tracking |
+| **Best For** | • Custom models<br>• Fine-tuned models<br>• Specialized embeddings<br>• Full ML pipelines | • General language tasks<br>• Quick prototypes<br>• Standard AI capabilities |
+| **Latency** | Predictable (always-on) or variable (serverless) | Generally low, consistent |
+| **Scaling** | You manage (auto-scaling available) | Fully managed by AWS |
+
+### Real-World Example Decisions
+
+**Use SageMaker when:**
+- You need a specific embedding model (like our all-MiniLM-L6-v2)
+- You've fine-tuned a model on your company's data
+- You need full control over model versioning and deployment
+- You want to implement custom preprocessing or postprocessing
+- You need to monitor for model drift
+- Compliance requires on-premises or VPC deployment
+
+**Use Bedrock when:**
+- You need general-purpose language understanding (like our Part 6 agents)
+- You want to prototype quickly without infrastructure
+- The task fits well with prompt engineering
+- You need access to cutting-edge foundation models
+- You want to minimize operational overhead
+- Token-based pricing fits your usage pattern
+
+### Advanced SageMaker Capabilities
+
+Beyond what we've deployed, SageMaker offers:
+
+- **SageMaker Studio**: IDE for ML development
+- **Multi-Model Endpoints**: Host multiple models on one endpoint
+- **Model Compilation (Neo)**: Optimize models for specific hardware
+- **Edge Deployment**: Deploy models to IoT devices
+- **Distributed Training**: Train large models across multiple GPUs
+- **Hyperparameter Tuning**: Automated optimization of model parameters
+- **Batch Transform**: Process large datasets offline
+- **Data Wrangler**: Visual data preparation tool
+
+### Try This: Check Model Metrics
+
+While your endpoint is running, check its CloudWatch metrics:
 
 ```bash
-cd terraform
+# View invocation metrics
+aws cloudwatch get-metric-statistics \
+  --namespace "AWS/SageMaker" \
+  --metric-name "Invocations" \
+  --dimensions Name=EndpointName,Value=alex-embedding-endpoint \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Sum \
+  --region $(aws configure get region)
+```
+
+This shows how SageMaker automatically tracks model usage - essential for MLOps!
+
+## Clean Up (Optional)
+
+If you need to tear down just the SageMaker infrastructure:
+
+```bash
+cd terraform/2_sagemaker
 terraform destroy
 ```
 
-⚠️ Only do this if you want to remove everything!
+⚠️ This will only remove the SageMaker resources from this guide, not other parts!
 
 ## Next Steps
 

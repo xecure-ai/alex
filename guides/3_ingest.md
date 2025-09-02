@@ -51,56 +51,74 @@ This creates `lambda_function.zip` containing your function and all dependencies
    Size: ~15 MB
 ```
 
-## Step 3: Deploy the Infrastructure
+## Step 3: Configure and Deploy the Infrastructure
 
-First, ensure your AWS account ID environment variable is set:
-
-### Mac/Linux:
-```bash
-export TF_VAR_aws_account_id=$(aws sts get-caller-identity --query Account --output text)
-echo $TF_VAR_aws_account_id
-```
-
-### Windows PowerShell:
-```powershell
-$env:TF_VAR_aws_account_id = aws sts get-caller-identity --query Account --output text
-echo $env:TF_VAR_aws_account_id
-```
-
-Navigate to the Terraform directory:
-```bash
-cd ../../terraform
-```
-
-Deploy the infrastructure:
+First, set up the Terraform variables:
 
 ```bash
-# Apply the changes (Terraform was already initialized in Guide 2)
+# Navigate to the ingestion terraform directory
+cd ../../terraform/3_ingestion
+
+# Copy the example variables file
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` and set your values:
+```hcl
+aws_region = "us-east-1"  # Use your DEFAULT_AWS_REGION from .env
+sagemaker_endpoint_name = "alex-embedding-endpoint"  # From Part 2
+```
+
+Now deploy the infrastructure:
+
+```bash
+# Initialize Terraform (creates local state file)
+terraform init
+
+# Review what will be created
+terraform plan
+
+# Deploy the infrastructure
 terraform apply
 ```
 
 Type `yes` when prompted. The deployment takes 2-3 minutes.
 
-## Step 4: Update Environment Variables
+Note: The Lambda function expects the deployment package to exist at `../../backend/ingest/lambda_function.zip` (which you created in Step 2).
 
-After deployment, update your `.env` file with the required values:
+## Step 4: Save Your Configuration
 
+After deployment, Terraform will display important outputs. You need to save these values to your `.env` file.
+
+### Get Your API Key
+
+First, get your API key using the command shown in Terraform output:
 ```bash
-# Navigate back to project root
+# Replace the ID with the one from your Terraform output
+aws apigateway get-api-key --api-key YOUR_API_KEY_ID --include-value --query 'value' --output text
+```
+
+### Update Your .env File
+
+Navigate back to project root and update your `.env`:
+```bash
 cd ../..
 
-# Add the S3 Vector bucket name
-echo "VECTOR_BUCKET=alex-vectors-${TF_VAR_aws_account_id}" >> .env
+nano .env  # or use your preferred editor
+```
 
-# Add the API endpoint (from terraform directory)
-cd terraform
-echo "ALEX_API_ENDPOINT=$(terraform output -raw api_endpoint)" >> ../.env
+Add or update these lines in your `.env` file:
+```
+# From Part 3 - get these values from Terraform output
+VECTOR_BUCKET=alex-vectors-YOUR_ACCOUNT_ID
+ALEX_API_ENDPOINT=https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/prod/ingest
+ALEX_API_KEY=your-api-key-here
+```
 
-# Add the API key
-echo "ALEX_API_KEY=$(terraform output -raw api_key_value)" >> ../.env
-
-# Return to project root
-cd ..
+💡 **Tip**: You can view Terraform outputs anytime:
+```bash
+cd terraform/3_ingestion
+terraform output
 ```
 
 ## Step 5: Test the Setup

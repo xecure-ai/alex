@@ -57,47 +57,64 @@ The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You ne
 9. Wait for approval (usually instant for these models)
 
 **Important Notes:**
-- These models are ONLY available in **us-west-2** region
-- Your App Runner service can be in any region and will connect to us-west-2
+- ⚠️ These models are ONLY available in **us-west-2** region
+- ✅ Your App Runner service can be in any region (e.g., us-east-1) and will connect cross-region to us-west-2
 - The OSS models are open-weight models from OpenAI, not the commercial GPT models
-- No API key is required - AWS IAM handles authentication
+- No API key is required for Bedrock - AWS IAM handles authentication
+- The researcher uses your OpenAI API key for web browsing capabilities
 
 ## Step 1: Deploy the Infrastructure
 
-First, we need to ensure the App Runner infrastructure is deployed. If you've run the previous guides, this may already exist.
+First, ensure you have your OpenAI API key and the values from Part 3 in your `.env` file:
 
-**Mac/Linux:**
 ```bash
-cd terraform
-source ../.env
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-terraform apply \
-  -var="aws_account_id=$AWS_ACCOUNT_ID" \
-  -var="openai_api_key=$OPENAI_API_KEY"
+# Check your .env file has these values:
+cat ../../.env | grep -E "OPENAI_API_KEY|ALEX_API"
 ```
 
-**Windows PowerShell:**
-```powershell
-cd terraform
-$env:AWS_ACCOUNT_ID = (aws sts get-caller-identity --query Account --output text)
-Get-Content ..\.env | ForEach-Object {
-    if ($_ -match '^OPENAI_API_KEY=(.+)$') {
-        $env:OPENAI_API_KEY = $matches[1]
-    }
-}
-terraform apply `
-  -var="aws_account_id=$env:AWS_ACCOUNT_ID" `
-  -var="openai_api_key=$env:OPENAI_API_KEY"
+If you haven't added your OpenAI API key yet, edit the `.env` file and add:
+```
+OPENAI_API_KEY=sk-...  # Your actual OpenAI API key
 ```
 
-Type `yes` when prompted. 
+Now set up and deploy the App Runner infrastructure:
 
-**Note:** If you see an error like "Service with the provided name already exists: alex-researcher", that's fine! It means the service was already created. You can safely continue to Step 2. Terraform will show "Apply complete! Resources: 0 added" in this case.
+```bash
+# Navigate to the researcher terraform directory
+cd terraform/4_researcher
 
-This step ensures you have:
-- ECR repository for your Docker images
+# Copy the example variables file
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars` and update with your values from the `.env` file:
+```hcl
+aws_region = "us-east-1"  # Your AWS region
+openai_api_key = "sk-..."  # Your OpenAI API key
+alex_api_endpoint = "https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/prod/ingest"  # From Part 3
+alex_api_key = "your-api-key-here"  # From Part 3
+scheduler_enabled = false  # Keep false for now
+```
+
+Deploy the infrastructure:
+
+```bash
+# Initialize Terraform (creates local state file)
+terraform init
+
+# Review what will be created
+terraform plan
+
+# Deploy the infrastructure
+terraform apply
+```
+
+Type `yes` when prompted.
+
+This creates:
 - App Runner service configuration
 - IAM roles with proper permissions
+- Optional EventBridge scheduler (disabled by default)
 
 ## Step 2: Build and Deploy the Researcher
 
@@ -239,23 +256,27 @@ You should see:
 3. **Build Your Knowledge Base:**
    Try different investment topics and build a comprehensive knowledge base for portfolio management.
 
-## Step 5: Enable Automated Research
+## Step 5: Enable Automated Research (Optional)
 
 Now let's enable automated research that runs every 2 hours to continuously gather the latest financial insights and build your knowledge base.
 
 ### Enable the Scheduler
 
-The scheduler is disabled by default. Turn it on with:
+The scheduler is disabled by default. To enable it:
 
-**Mac/Linux:**
 ```bash
-cd ../../terraform
-source ../.env
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-terraform apply \
-  -var="aws_account_id=$AWS_ACCOUNT_ID" \
-  -var="openai_api_key=$OPENAI_API_KEY" \
-  -var="scheduler_enabled=true"
+# Stay in terraform/4_researcher directory
+# Edit your terraform.tfvars file
+```
+
+Change the `scheduler_enabled` value in `terraform.tfvars`:
+```hcl
+scheduler_enabled = true  # Changed from false
+```
+
+Then apply the change:
+```bash
+terraform apply
 ```
 
 **Windows PowerShell:**
@@ -378,14 +399,41 @@ This will remove all AWS resources created in this guide.
 
 You've successfully deployed an agentic AI system that can research, analyze, and manage investment knowledge. The system uses modern cloud-native architecture with automatic scaling, vector search, and AI agents working together to provide intelligent financial insights.
 
+## Save Your Configuration
+
+Before moving to the next guide, ensure your `.env` file is up to date:
+
+```bash
+cd ../..  # Return to project root
+nano .env  # or use your preferred editor
+```
+
+Verify you have all values from Parts 1-4:
+```
+# Part 1
+AWS_ACCOUNT_ID=123456789012
+DEFAULT_AWS_REGION=us-east-1
+
+# Part 2
+SAGEMAKER_ENDPOINT=alex-embedding-endpoint
+
+# Part 3
+VECTOR_BUCKET=alex-vectors-123456789012
+ALEX_API_ENDPOINT=https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/prod/ingest
+ALEX_API_KEY=your-api-key-here
+
+# Part 4
+OPENAI_API_KEY=sk-...
+```
+
 ## What's Next?
 
 Congratulations! You now have a complete AI research pipeline:
-1. **Researcher Agent** (App Runner) - Generates investment analysis
+1. **Researcher Agent** (App Runner) - Generates investment analysis using Bedrock OSS models in us-west-2
 2. **Ingest Pipeline** (Lambda) - Processes and stores documents
 3. **Vector Database** (S3 Vectors) - Cost-effective semantic search
 4. **Embedding Model** (SageMaker) - Creates semantic representations
-5. **Automated Scheduler** (EventBridge + Lambda) - Runs research every 2 hours
+5. **Automated Scheduler** (EventBridge + Lambda) - Optional, runs research every 2 hours
 
 Your system can now:
 - Generate professional investment research on demand
@@ -393,3 +441,5 @@ Your system can now:
 - Perform semantic search across your knowledge base
 - Scale automatically with demand
 - Continuously build knowledge with scheduled research
+
+Continue to: [5_database.md](5_database.md) where we'll set up Aurora Serverless v2 PostgreSQL to manage user portfolios and financial data!
