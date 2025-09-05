@@ -17,7 +17,7 @@ def _ingest(document: Dict[str, Any]) -> Dict[str, Any]:
     """Internal function to make the actual API call."""
     with httpx.Client() as client:
         response = client.post(
-            f"{ALEX_API_ENDPOINT}/ingest",
+            ALEX_API_ENDPOINT,
             json=document,
             headers={"x-api-key": ALEX_API_KEY},
             timeout=30.0

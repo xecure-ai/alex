@@ -120,16 +120,17 @@ terraform output
 
 ## Step 5: Test the Setup
 
-Test document ingestion:
+Test document ingestion directly via S3 Vectors:
 
 ```bash
 cd backend/ingest
-uv run test_api.py
+uv run test_ingest_s3vectors.py
 ```
 
 You should see:
 ```
-✅ Document ingested successfully!
+✓ Success! Document ID: [uuid]
+Testing complete!
 ```
 
 ## Step 6: Test Search
@@ -141,6 +142,23 @@ uv run test_search_s3vectors.py
 ```
 
 You should see the three documents (Tesla, Amazon, NVIDIA) that were just ingested, and example semantic searches showing how S3 Vectors finds related content.
+
+### Optional: Test via API Gateway
+
+You can also test the API Gateway endpoint directly:
+
+```bash
+# Get your API key from .env or Terraform output
+curl -X POST $ALEX_API_ENDPOINT \
+  -H "x-api-key: $ALEX_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Test document via API", "metadata": {"source": "api_test"}}'
+```
+
+You should see:
+```json
+{"message": "Document indexed successfully", "document_id": "..."}
+```
 
 ## Architecture Overview
 
@@ -176,6 +194,12 @@ graph LR
 ### S3 Vectors Command Not Found
 - Ensure you have the latest AWS CLI version
 - The `s3vectors` commands use a separate namespace from regular S3
+
+### Lambda Handler Errors (500 Internal Server Error)
+- Check CloudWatch logs: `aws logs tail /aws/lambda/alex-ingest`
+- Verify environment variables are set correctly (SAGEMAKER_ENDPOINT, VECTOR_BUCKET)
+- Ensure Lambda IAM role has `s3vectors:PutVectors` permission
+- Lambda handler must be `ingest_s3vectors.lambda_handler`
 
 ## What's Next?
 

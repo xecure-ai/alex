@@ -122,6 +122,16 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "sagemaker:InvokeEndpoint"
         ]
         Resource = "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:endpoint/${var.sagemaker_endpoint_name}"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:PutVectors",
+          "s3vectors:QueryVectors",
+          "s3vectors:GetVectors",
+          "s3vectors:DeleteVectors"
+        ]
+        Resource = "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${aws_s3_bucket.vectors.id}/index/*"
       }
     ]
   })
@@ -136,15 +146,15 @@ resource "aws_lambda_function" "ingest" {
   filename         = "${path.module}/../../backend/ingest/lambda_function.zip"
   source_code_hash = fileexists("${path.module}/../../backend/ingest/lambda_function.zip") ? filebase64sha256("${path.module}/../../backend/ingest/lambda_function.zip") : null
   
-  handler = "lambda_function.lambda_handler"
+  handler = "ingest_s3vectors.lambda_handler"
   runtime = "python3.12"
   timeout = 60
   memory_size = 512
   
   environment {
     variables = {
-      VECTOR_BUCKET           = aws_s3_bucket.vectors.id
-      SAGEMAKER_ENDPOINT_NAME = var.sagemaker_endpoint_name
+      VECTOR_BUCKET      = aws_s3_bucket.vectors.id
+      SAGEMAKER_ENDPOINT = var.sagemaker_endpoint_name
     }
   }
   

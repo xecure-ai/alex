@@ -9,37 +9,7 @@ This document outlines the complete plan for building the Alex Financial Planner
 - Parts 1-5: complete, tested and guides written in guides directory
 - Part 6: completed; currently being tested and checked; then Guide 6 will be written.
 - We recently updated Parts 1-6 to use a new approach for Terraform: storing state locally instead of on S3, and having a separate directory for each guide for its terraform
-- Unfortunately we're now struggling with an issue with Part 2. It's not possible to run `terraform apply`. We receive this error every time:
-
-```
-aws_iam_role.sagemaker_role: Creating...
-aws_iam_role.sagemaker_role: Creation complete after 1s [id=alex-sagemaker-role]
-aws_iam_role_policy_attachment.sagemaker_full_access: Creating...
-aws_iam_role_policy_attachment.sagemaker_full_access: Creation complete after 0s [id=alex-sagemaker-role-20250905125811754300000001]
-aws_sagemaker_model.embedding_model: Creating...
-aws_sagemaker_model.embedding_model: Creation complete after 1s [id=alex-embedding-model]
-aws_sagemaker_endpoint_configuration.serverless_config: Creating...
-aws_sagemaker_endpoint_configuration.serverless_config: Creation complete after 1s [id=alex-embedding-serverless-config]
-aws_sagemaker_endpoint.embedding_endpoint: Creating...
-╷
-│ Error: waiting for SageMaker AI Endpoint (alex-embedding-endpoint) create: unexpected state 'Failed', wanted target 'InService'. last error: The execution role ARN "arn:aws:iam::392340646348:role/alex-sagemaker-role" is invalid. Please ensure that the role exists and that its trust relationship policy allows the action "sts:AssumeRole" for the service principal "sagemaker.amazonaws.com".
-│ 
-│   with aws_sagemaker_endpoint.embedding_endpoint,
-│   on main.tf line 76, in resource "aws_sagemaker_endpoint" "embedding_endpoint":
-│   76: resource "aws_sagemaker_endpoint" "embedding_endpoint" {
-```
-
-## Current activity
-
-Trying to diagnose and fix this issue with the Part 2 terraform apply for Sagemaker Embedding Endpoint.
-
-## IMPORTANT - Mandatory rules - please pay attention to this. You MUST:
-
-1. Be SIMPLE. Keep code simple, readable and clean. Short methods. Clean up temporary test files. Docstrings, but be sparing with inline comments. Exception handlers only when needed.  
-2. Work INCREMENTALLY with CARE. Check your work. Do your own code reviews as you go.  
-3. Use OpenAI Agents SDK (Bedrock + LiteLLM) always for LLM calls, using the idiomatic code in this gameplan  
-4. You MUST use modern, current versions of APIs. It is August 2025 - be up to date! Don't guess package names; if in doubt, research and check.  
-5. Everything must be cross-platform. Favor python scripts over shell scripts. Everything is in uv projects according to the instructions below, so always do `uv run xxx` never `python xxx`. When packaging for Lambda, you must use docker to ensure AWS architecture compatibility; see implementation in backend/tagger/package_docker.py as an example.
+- We are currently testing Part 3
 
 ## IMPORTANT - Methodical debugging with the root cause in mind
 
