@@ -183,9 +183,6 @@ Deploy the database:
 # Initialize Terraform (creates local state file)
 terraform init
 
-# Review what will be created
-terraform plan
-
 # Deploy the database infrastructure
 terraform apply
 ```
@@ -393,15 +390,13 @@ Status should be "available"
 
 2. **Check Data API is enabled**:
 ```bash
-aws rds describe-db-clusters --db-cluster-identifier alex-cluster \
-  --query 'DBClusters[0].EnableHttpEndpoint'
+aws rds describe-db-clusters --db-cluster-identifier alex-cluster --query 'DBClusters[0].EnableHttpEndpoint'
 ```
 Should return `true`
 
 3. **Verify secrets**:
 ```bash
-aws secretsmanager get-secret-value --secret-id alex-aurora-secret \
-  --query SecretString --output text | jq .
+aws secretsmanager get-secret-value --secret-id alex-aurora-secret --query SecretString --output text | jq .
 ```
 Should show username and password
 

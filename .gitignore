@@ -137,6 +137,9 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+.env.backup
+.env.*
+!.env.example
 
 # Terraform variables (contain secrets)
 *.tfvars
@@ -221,12 +224,6 @@ terraform.tfstate.d/
 
 # Lambda deployment packages
 lambda_function.zip
-backend/ingest/lambda_function.zip
-backend/tagger/tagger_lambda.zip
-backend/planner/planner_lambda.zip
-backend/reporter/reporter_lambda.zip
-backend/charter/charter_lambda.zip
-backend/retirement/retirement_lambda.zip
-backend/api/api_lambda.zip
-# Or more simply, ignore all Lambda zips:
+
+# ignore all Lambda zips:
 backend/**/*_lambda.zip

@@ -272,11 +272,7 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 #### Testing
 - [x] Can query database via AWS CLI:
   ```bash
-  aws rds-data execute-statement \
-    --resource-arn $AURORA_CLUSTER_ARN \
-    --secret-arn $AURORA_SECRET_ARN \
-    --database alex \
-    --sql "SELECT COUNT(*) FROM instruments"
+  aws rds-data execute-statement --resource-arn $AURORA_CLUSTER_ARN --secret-arn $AURORA_SECRET_ARN --database alex --sql "SELECT COUNT(*) FROM instruments"
   ```
 - [x] Python package can perform CRUD operations
 - [x] Reset script completes without errors (`uv run reset_db.py --with-test-data`)
@@ -769,11 +765,7 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 **Guide 5 - Database**
 ```bash
 # Test Aurora Data API connection
-aws rds-data execute-statement \
-  --resource-arn $AURORA_CLUSTER_ARN \
-  --secret-arn $AURORA_SECRET_ARN \
-  --database alex \
-  --sql "SELECT 1"
+aws rds-data execute-statement --resource-arn $AURORA_CLUSTER_ARN --secret-arn $AURORA_SECRET_ARN --database alex --sql "SELECT 1"
 
 # Reset database to clean state (drops, migrates, seeds)
 cd backend/database
@@ -845,13 +837,7 @@ uv run tests/test_langfuse.py
 # Check LangFuse UI for detailed traces
 
 # Test CloudWatch metrics
-aws cloudwatch get-metric-statistics \
-  --namespace "Alex/Agents" \
-  --metric-name "InvocationCount" \
-  --start-time 2024-01-01T00:00:00Z \
-  --end-time 2024-01-02T00:00:00Z \
-  --period 3600 \
-  --statistics Sum
+aws cloudwatch get-metric-statistics --namespace "Alex/Agents" --metric-name "InvocationCount" --start-time 2024-01-01T00:00:00Z --end-time 2024-01-02T00:00:00Z --period 3600 --statistics Sum
 
 # Security scan
 docker run -t owasp/zap2docker-stable zap-baseline.py \

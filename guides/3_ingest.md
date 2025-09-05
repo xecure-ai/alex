@@ -75,9 +75,6 @@ Now deploy the infrastructure:
 # Initialize Terraform (creates local state file)
 terraform init
 
-# Review what will be created
-terraform plan
-
 # Deploy the infrastructure
 terraform apply
 ```

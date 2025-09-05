@@ -102,9 +102,6 @@ Deploy the infrastructure:
 # Initialize Terraform (creates local state file)
 terraform init
 
-# Review what will be created
-terraform plan
-
 # Deploy the infrastructure
 terraform apply
 ```
@@ -288,10 +285,7 @@ Get-Content ..\.env | ForEach-Object {
         $env:OPENAI_API_KEY = $matches[1]
     }
 }
-terraform apply `
-  -var="aws_account_id=$env:AWS_ACCOUNT_ID" `
-  -var="openai_api_key=$env:OPENAI_API_KEY" `
-  -var="scheduler_enabled=true"
+terraform apply -var="aws_account_id=$env:AWS_ACCOUNT_ID" -var="openai_api_key=$env:OPENAI_API_KEY" -var="scheduler_enabled=true"
 ```
 
 Type `yes` when prompted. You'll see:
@@ -335,19 +329,13 @@ When you want to stop the automated research (to save on API costs):
 **Mac/Linux:**
 ```bash
 cd ../../terraform
-terraform apply \
-  -var="aws_account_id=$AWS_ACCOUNT_ID" \
-  -var="openai_api_key=$OPENAI_API_KEY" \
-  -var="scheduler_enabled=false"
+terraform apply -var="aws_account_id=$AWS_ACCOUNT_ID" -var="openai_api_key=$OPENAI_API_KEY" -var="scheduler_enabled=false"
 ```
 
 **Windows PowerShell:**
 ```powershell
 cd ..\..\terraform
-terraform apply `
-  -var="aws_account_id=$env:AWS_ACCOUNT_ID" `
-  -var="openai_api_key=$env:OPENAI_API_KEY" `
-  -var="scheduler_enabled=false"
+terraform apply -var="aws_account_id=$env:AWS_ACCOUNT_ID" -var="openai_api_key=$env:OPENAI_API_KEY" -var="scheduler_enabled=false"
 ```
 
 This will remove the scheduler but keep all your other services running.

@@ -49,9 +49,6 @@ Now let's deploy the SageMaker infrastructure. With the HuggingFace approach, th
 # Initialize Terraform (creates local state file)
 terraform init
 
-# Review what will be created
-terraform plan
-
 # Deploy the SageMaker infrastructure
 terraform apply
 ```
@@ -101,12 +98,7 @@ Let's verify the endpoint works with a simple test:
 cd ../backend
 
 # Invoke the endpoint and output directly to console
-aws sagemaker-runtime invoke-endpoint \
-  --endpoint-name alex-embedding-endpoint \
-  --content-type application/json \
-  --body fileb://vectorize_me.json \
-  --output json \
-  /dev/stdout
+aws sagemaker-runtime invoke-endpoint --endpoint-name alex-embedding-endpoint --content-type application/json --body fileb://vectorize_me.json --output json /dev/stdout
 ```
 
 You'll see a JSON array with 384 floating-point numbers - that's the text "vectorize me" converted into a vector embedding!
@@ -262,15 +254,7 @@ While your endpoint is running, check its CloudWatch metrics:
 
 ```bash
 # View invocation metrics
-aws cloudwatch get-metric-statistics \
-  --namespace "AWS/SageMaker" \
-  --metric-name "Invocations" \
-  --dimensions Name=EndpointName,Value=alex-embedding-endpoint \
-  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
-  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
-  --period 300 \
-  --statistics Sum \
-  --region $(aws configure get region)
+aws cloudwatch get-metric-statistics --namespace "AWS/SageMaker" --metric-name "Invocations" --dimensions Name=EndpointName,Value=alex-embedding-endpoint --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) --end-time $(date -u +%Y-%m-%dT%H:%M:%S) --period 300 --statistics Sum --region $(aws configure get region)
 ```
 
 This shows how SageMaker automatically tracks model usage - essential for MLOps!
