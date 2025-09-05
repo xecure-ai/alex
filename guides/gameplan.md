@@ -8,7 +8,30 @@ This document outlines the complete plan for building the Alex Financial Planner
 
 - Parts 1-5: complete, tested and guides written in guides directory
 - Part 6: completed; currently being tested and checked; then Guide 6 will be written.
-- Before completing Part 6, we will do a review and tidy up of parts 1-5.
+- We recently updated Parts 1-6 to use a new approach for Terraform: storing state locally instead of on S3, and having a separate directory for each guide for its terraform
+- Unfortunately we're now struggling with an issue with Part 2. It's not possible to run `terraform apply`. We receive this error every time:
+
+```
+aws_iam_role.sagemaker_role: Creating...
+aws_iam_role.sagemaker_role: Creation complete after 1s [id=alex-sagemaker-role]
+aws_iam_role_policy_attachment.sagemaker_full_access: Creating...
+aws_iam_role_policy_attachment.sagemaker_full_access: Creation complete after 0s [id=alex-sagemaker-role-20250905125811754300000001]
+aws_sagemaker_model.embedding_model: Creating...
+aws_sagemaker_model.embedding_model: Creation complete after 1s [id=alex-embedding-model]
+aws_sagemaker_endpoint_configuration.serverless_config: Creating...
+aws_sagemaker_endpoint_configuration.serverless_config: Creation complete after 1s [id=alex-embedding-serverless-config]
+aws_sagemaker_endpoint.embedding_endpoint: Creating...
+╷
+│ Error: waiting for SageMaker AI Endpoint (alex-embedding-endpoint) create: unexpected state 'Failed', wanted target 'InService'. last error: The execution role ARN "arn:aws:iam::392340646348:role/alex-sagemaker-role" is invalid. Please ensure that the role exists and that its trust relationship policy allows the action "sts:AssumeRole" for the service principal "sagemaker.amazonaws.com".
+│ 
+│   with aws_sagemaker_endpoint.embedding_endpoint,
+│   on main.tf line 76, in resource "aws_sagemaker_endpoint" "embedding_endpoint":
+│   76: resource "aws_sagemaker_endpoint" "embedding_endpoint" {
+```
+
+## Current activity
+
+Trying to diagnose and fix this issue with the Part 2 terraform apply for Sagemaker Embedding Endpoint.
 
 ## IMPORTANT - Mandatory rules - please pay attention to this. You MUST:
 

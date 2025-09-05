@@ -15,14 +15,6 @@ output "setup_instructions" {
     
     ✅ SageMaker endpoint deployed successfully!
     
-    Add the following to your .env file:
-    SAGEMAKER_ENDPOINT=${aws_sagemaker_endpoint.embedding_endpoint.name}
-    
-    Test the endpoint:
-    aws sagemaker-runtime invoke-endpoint \
-      --endpoint-name ${aws_sagemaker_endpoint.embedding_endpoint.name} \
-      --content-type application/json \
-      --body '{"inputs": "Hello world"}' \
-      response.json
+    Follow the instructions in the guide to update your .env file and test the endpoint.
   EOT
 }

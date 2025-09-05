@@ -73,12 +73,8 @@ After deployment, Terraform will display important outputs including setup instr
 **Important**: Update your `.env` file with the endpoint name:
 
 1. Note the endpoint name from Terraform output (should be `alex-embedding-endpoint`)
-2. Go back to your project root and edit `.env`:
-   ```bash
-   cd ../..
-   nano .env  # or use your preferred editor
-   ```
-3. Add or update this line:
+2. Edit `.env` in Cursor
+3. Update this line:
    ```
    # Part 2 - SageMaker
    SAGEMAKER_ENDPOINT=alex-embedding-endpoint
@@ -95,7 +91,7 @@ Let's verify the endpoint works with a simple test:
 
 ```bash
 # Navigate to backend directory where test payload is located
-cd ../backend
+cd ../../backend
 
 # Invoke the endpoint and output directly to console
 aws sagemaker-runtime invoke-endpoint --endpoint-name alex-embedding-endpoint --content-type application/json --body fileb://vectorize_me.json --output json /dev/stdout
@@ -258,6 +254,40 @@ aws cloudwatch get-metric-statistics --namespace "AWS/SageMaker" --metric-name "
 ```
 
 This shows how SageMaker automatically tracks model usage - essential for MLOps!
+
+## Troubleshooting
+
+### Endpoint Already Exists Error
+
+If you see "Cannot create already existing endpoint" error during `terraform apply`, this means the endpoint was created but Terraform lost track of it (usually because the apply was interrupted). To fix:
+
+**Option 1: Import the existing endpoint** (recommended)
+```bash
+terraform import aws_sagemaker_endpoint.embedding_endpoint alex-embedding-endpoint
+terraform apply
+```
+
+**Option 2: Delete and recreate**
+```bash
+aws sagemaker delete-endpoint --endpoint-name alex-embedding-endpoint
+# Wait for deletion to complete (check with describe-endpoint)
+terraform apply
+```
+
+### Terraform Apply Takes Forever
+
+SageMaker serverless endpoints can take 3-5 minutes to create. Be patient and don't interrupt the process! If you do interrupt it, see "Endpoint Already Exists Error" above.
+
+### Endpoint Creation Fails with IAM Role Error
+
+If you see an error about the IAM role being invalid during `terraform apply`, this is due to a known issue with IAM propagation delays. The Terraform configuration includes a workaround that adds a 15-second delay before creating the endpoint to allow the IAM role to fully propagate.
+
+If you still encounter issues:
+1. Run `terraform destroy` to clean up
+2. Wait a minute for IAM to fully propagate
+3. Run `terraform apply` again
+
+The error message may be misleading - it often indicates quota limits or propagation delays rather than actual IAM issues.
 
 ## Clean Up (Optional)
 
