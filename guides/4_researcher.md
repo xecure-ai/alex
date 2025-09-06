@@ -13,7 +13,9 @@ Before starting, ensure you have:
 ## What You'll Deploy
 
 The Researcher service is an AWS App Runner application that:
+- Uses the OpenAI Agents SDK for agent orchestration and tracing
 - Uses AWS Bedrock with OpenAI's OSS 120B model for AI capabilities
+- Employs a Playwright MCP (Model Context Protocol) server for web browsing and data retrieval
 - Automatically calls your ingest pipeline to store research in S3 Vectors
 - Provides a REST API for generating financial analysis on demand
 
@@ -61,23 +63,23 @@ The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You ne
 - ✅ Your App Runner service can be in any region (e.g., us-east-1) and will connect cross-region to us-west-2
 - The OSS models are open-weight models from OpenAI, not the commercial GPT models
 - No API key is required for Bedrock - AWS IAM handles authentication
-- The researcher uses your OpenAI API key for web browsing capabilities
+- The researcher requires an OpenAI API key for the OpenAI Agents SDK's tracing functionality (to monitor and debug agent execution)
 
 ## Step 1: Deploy the Infrastructure
 
-First, ensure you have your OpenAI API key and the values from Part 3 in your `.env` file:
+First, ensure you have your OpenAI API key and the values from Part 3 in your `.env` file.
 
-```bash
-# Check your .env file has these values:
-cat ../../.env | grep -E "OPENAI_API_KEY|ALEX_API"
+Open the `.env` file in your project root using Cursor's file explorer and verify you have these values:
+- `OPENAI_API_KEY` - Your OpenAI API key (required for agent tracing)
+- `ALEX_API_ENDPOINT` - From Part 3
+- `ALEX_API_KEY` - From Part 3
+
+If you haven't added your OpenAI API key yet, add this line to the `.env` file:
+```
+OPENAI_API_KEY=sk-...  # Your actual OpenAI API key (required for agent tracing)
 ```
 
-If you haven't added your OpenAI API key yet, edit the `.env` file and add:
-```
-OPENAI_API_KEY=sk-...  # Your actual OpenAI API key
-```
-
-Now set up and deploy the App Runner infrastructure:
+Now set up the initial infrastructure:
 
 ```bash
 # Navigate to the researcher terraform directory
@@ -96,29 +98,29 @@ alex_api_key = "your-api-key-here"  # From Part 3
 scheduler_enabled = false  # Keep false for now
 ```
 
-Deploy the infrastructure:
+Deploy the ECR repository and IAM roles first:
 
 ```bash
 # Initialize Terraform (creates local state file)
 terraform init
 
-# Deploy the infrastructure
-terraform apply
+# Deploy only the ECR repository and IAM roles (not App Runner yet)
+terraform apply -target=aws_ecr_repository.researcher -target=aws_iam_role.app_runner_role
 ```
 
-Type `yes` when prompted.
+Type `yes` when prompted. This creates:
+- ECR repository for your Docker images
+- IAM roles with proper permissions for App Runner
 
-This creates:
-- App Runner service configuration
-- IAM roles with proper permissions
-- Optional EventBridge scheduler (disabled by default)
+Save the ECR repository URL shown in the output - you'll need it in Step 2.
 
 ## Step 2: Build and Deploy the Researcher
 
 Now we'll build the Docker container and deploy it to App Runner.
 
 ```bash
-cd ../backend/researcher
+# Navigate to the researcher directory
+cd ~/projects/alex/backend/researcher
 uv run deploy.py
 ```
 
@@ -132,38 +134,53 @@ This script will:
 **Important Note for Apple Silicon Mac Users:**
 The deployment script automatically builds for `linux/amd64` architecture to ensure compatibility with AWS App Runner. This is why you'll see "Building Docker image for linux/amd64..." in the output.
 
-When the deployment completes, you'll see:
+When the Docker image push completes, you'll see:
 ```
-✅ Deployment complete! Service is running.
-
-🚀 Your service is available at:
-   https://YOUR_SERVICE_URL.us-east-1.awsapprunner.com
-
-Test it with:
-   curl https://YOUR_SERVICE_URL.us-east-1.awsapprunner.com/health
+✅ Docker image pushed successfully!
 ```
 
-## Step 3: Test the Complete System
+## Step 3: Create the App Runner Service
+
+Now that your Docker image is in ECR, create the App Runner service:
+
+```bash
+# Navigate back to the terraform directory
+cd ~/projects/alex/terraform/4_researcher
+
+# Deploy the complete infrastructure including App Runner
+terraform apply
+```
+
+Type `yes` when prompted. This will:
+- Create the App Runner service using your Docker image
+- Configure environment variables for the service
+- Set up the optional EventBridge scheduler (if enabled)
+
+The App Runner service creation takes 3-5 minutes. When complete, you'll see the service URL in the output.
+
+## Step 4: Test the Complete System
 
 Now let's test the full pipeline: Research → Ingest → Search.
 
-### 3.1: First, Clean the Database
+### 4.1: First, Clean the Database
 
 Clear any existing test data:
 
 ```bash
-cd ../ingest
+# Navigate to the ingest directory
+cd ~/projects/alex/backend/ingest
 uv run cleanup_s3vectors.py
 ```
 
 You should see: "✅ All documents deleted successfully"
 
-### 3.2: Generate Research
+### 4.2: Generate Research
 
 Now let's generate some investment research:
 
 ```bash
-cd ../researcher
+# Navigate to the researcher directory
+cd ~/projects/alex/backend/researcher
 uv run test_research.py
 ```
 
@@ -182,12 +199,13 @@ uv run test_research.py "Microsoft cloud revenue growth"
 
 The research takes 20-30 seconds as the agent browses financial websites and generates investment insights.
 
-### 3.3: Verify Data Storage
+### 4.3: Verify Data Storage
 
 Check that the research was stored:
 
 ```bash
-cd ../ingest
+# Navigate to the ingest directory
+cd ~/projects/alex/backend/ingest
 uv run test_search_s3vectors.py
 ```
 
@@ -196,7 +214,7 @@ You should see your research in the database with:
 - Embeddings generated by SageMaker
 - Metadata including timestamp and topic
 
-### 3.4: Test Semantic Search
+### 4.4: Test Semantic Search
 
 Now test that semantic search works:
 
@@ -206,7 +224,7 @@ uv run test_search_s3vectors.py "electric vehicle market"
 
 Even if you search for something different than what was stored, semantic search will find related content.
 
-## Step 4: Test the Researcher
+## Step 5: Test the Researcher
 
 Now that your service is deployed and tested, let's explore its capabilities.
 
@@ -245,7 +263,8 @@ You should see:
 
 2. **Search Across Topics:**
    ```bash
-   cd ../ingest
+   # Navigate to the ingest directory
+   cd ~/projects/alex/backend/ingest
    uv run test_search_s3vectors.py "artificial intelligence"
    uv run test_search_s3vectors.py "inflation protection"
    ```
@@ -253,7 +272,7 @@ You should see:
 3. **Build Your Knowledge Base:**
    Try different investment topics and build a comprehensive knowledge base for portfolio management.
 
-## Step 5: Enable Automated Research (Optional)
+## Step 6: Enable Automated Research (Optional)
 
 Now let's enable automated research that runs every 2 hours to continuously gather the latest financial insights and build your knowledge base.
 
@@ -278,14 +297,11 @@ terraform apply
 
 **Windows PowerShell:**
 ```powershell
-cd ..\..\terraform
-$env:AWS_ACCOUNT_ID = (aws sts get-caller-identity --query Account --output text)
-Get-Content ..\.env | ForEach-Object {
-    if ($_ -match '^OPENAI_API_KEY=(.+)$') {
-        $env:OPENAI_API_KEY = $matches[1]
-    }
-}
-terraform apply -var="aws_account_id=$env:AWS_ACCOUNT_ID" -var="openai_api_key=$env:OPENAI_API_KEY" -var="scheduler_enabled=true"
+# Navigate to the terraform directory for Part 4
+cd ~/projects/alex/terraform/4_researcher
+# Edit terraform.tfvars to set scheduler_enabled = true
+# Then apply the change
+terraform apply
 ```
 
 Type `yes` when prompted. You'll see:
@@ -318,7 +334,8 @@ aws logs tail /aws/apprunner/alex-researcher/*/application --follow --region us-
 
 3. Search your S3 Vectors database to see the accumulated research:
 ```bash
-cd ../backend/ingest
+# Navigate to the ingest directory
+cd ~/projects/alex/backend/ingest
 uv run test_search_s3vectors.py
 ```
 
@@ -328,14 +345,16 @@ When you want to stop the automated research (to save on API costs):
 
 **Mac/Linux:**
 ```bash
-cd ../../terraform
-terraform apply -var="aws_account_id=$AWS_ACCOUNT_ID" -var="openai_api_key=$OPENAI_API_KEY" -var="scheduler_enabled=false"
+# Navigate to the terraform directory for Part 4
+cd ~/projects/alex/terraform/4_researcher
+terraform apply -var="scheduler_enabled=false"
 ```
 
 **Windows PowerShell:**
 ```powershell
-cd ..\..\terraform
-terraform apply -var="aws_account_id=$env:AWS_ACCOUNT_ID" -var="openai_api_key=$env:OPENAI_API_KEY" -var="scheduler_enabled=false"
+# Navigate to the terraform directory for Part 4
+cd ~/projects/alex/terraform/4_researcher
+terraform apply -var="scheduler_enabled=false"
 ```
 
 This will remove the scheduler but keep all your other services running.
@@ -377,7 +396,8 @@ This will remove the scheduler but keep all your other services running.
 If you want to stop ALL services to avoid charges:
 
 ```bash
-cd ../../terraform
+# Navigate to the terraform directory for Part 4
+cd ~/projects/alex/terraform/4_researcher
 terraform destroy
 ```
 
@@ -392,7 +412,8 @@ You've successfully deployed an agentic AI system that can research, analyze, an
 Before moving to the next guide, ensure your `.env` file is up to date:
 
 ```bash
-cd ../..  # Return to project root
+# Navigate to project root and edit .env
+cd ~/projects/alex
 nano .env  # or use your preferred editor
 ```
 

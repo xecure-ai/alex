@@ -1,11 +1,16 @@
+output "ecr_repository_url" {
+  description = "URL of the ECR repository"
+  value       = aws_ecr_repository.researcher.repository_url
+}
+
 output "app_runner_service_url" {
   description = "URL of the App Runner service"
-  value       = "https://${aws_apprunner_service.researcher.service_url}"
+  value       = try("https://${aws_apprunner_service.researcher.service_url}", "Not created yet - run 'terraform apply' after deploying Docker image")
 }
 
 output "app_runner_service_id" {
   description = "ID of the App Runner service"
-  value       = aws_apprunner_service.researcher.id
+  value       = try(aws_apprunner_service.researcher.id, "Not created yet")
 }
 
 output "scheduler_status" {

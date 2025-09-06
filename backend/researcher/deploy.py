@@ -54,7 +54,7 @@ def main():
     
     # Get ECR repository URL from Terraform
     print("\nGetting ECR repository URL...")
-    terraform_dir = Path(__file__).parent.parent.parent / "terraform"
+    terraform_dir = Path(__file__).parent.parent.parent / "terraform" / "4_researcher"
     original_dir = os.getcwd()
     
     try:
@@ -107,7 +107,7 @@ def main():
         "docker", "build",
         "--platform", "linux/amd64",
         "-t", f"{ecr_repository}:{image_tag}",
-        "--no-cache",  # Force rebuild
+        # Removed --no-cache to use Docker layer caching for faster builds
         "."
     ])
     
@@ -130,6 +130,7 @@ def main():
     run_command(["docker", "push", f"{ecr_url}:latest"])
     
     print("\n✅ Docker image pushed successfully!")
+    print("\nNext step: Run 'terraform apply' in terraform/4_researcher to create the App Runner service.")
     
     # Get App Runner service ARN
     print("\nGetting App Runner service details...")
@@ -185,9 +186,9 @@ def main():
                 print("✅ Service updated with new image!")
                 
                 # Wait for deployment to complete
-                print("\nWaiting for deployment to complete (this may take 3-5 minutes)...")
+                print("\nWaiting for deployment to complete (this may take 5-10 minutes)...")
                 import time
-                max_attempts = 60  # 5 minutes with 5-second intervals
+                max_attempts = 120  # 10 minutes with 5-second intervals
                 attempts = 0
                 
                 while attempts < max_attempts:
@@ -240,6 +241,10 @@ def main():
                             break
                         else:
                             print(".", end="", flush=True)
+                            # Show progress every 30 seconds
+                            if attempts > 0 and attempts % 6 == 0:
+                                elapsed_minutes = (attempts * 5) / 60
+                                print(f" ({elapsed_minutes:.1f} minutes elapsed)", end="", flush=True)
                             time.sleep(5)
                             attempts += 1
                     else:

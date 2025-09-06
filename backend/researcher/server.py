@@ -41,15 +41,18 @@ async def run_research_agent(topic: str = None) -> str:
     else:
         query = DEFAULT_RESEARCH_PROMPT
 
-    # Configure Bedrock model with us-west-2 region
-    # Using OpenAI's new OSS 120B model available on Bedrock
-    # Set ALL region environment variables to ensure us-west-2 is used
-    os.environ["AWS_REGION_NAME"] = "us-west-2"  # LiteLLM's preferred variable
-    os.environ["AWS_REGION"] = "us-west-2"       # Boto3 standard
-    os.environ["AWS_DEFAULT_REGION"] = "us-west-2"  # Fallback
+    # Configure Bedrock model with us-east-1 region
+    # Set ALL region environment variables to ensure us-east-1 is used
+    os.environ["AWS_REGION_NAME"] = "us-east-1"  # LiteLLM's preferred variable
+    os.environ["AWS_REGION"] = "us-east-1"       # Boto3 standard
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # Fallback
 
-    # Use converse route - required for OpenAI OSS models
-    model = LitellmModel(model="bedrock/converse/openai.gpt-oss-120b-1:0")
+    # Using Amazon Nova Pro which supports tools and MCP servers
+    model = LitellmModel(model="bedrock/amazon.nova-pro-v1:0")
+    
+    # Previous models (kept for reference):
+    # model = LitellmModel(model="bedrock/openai.gpt-oss-120b-1:0")  # Had tools parameter issues in us-west-2
+    # model = LitellmModel(model="bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0")  # Rate limited
 
     # Create and run the agent with MCP server
     async with create_playwright_mcp_server(timeout_seconds=60) as playwright_mcp:
@@ -139,7 +142,7 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "debug_container": container_indicators,
         "aws_region": os.environ.get("AWS_DEFAULT_REGION", "not set"),
-        "bedrock_model": "bedrock/converse/openai.gpt-oss-120b-1:0"
+        "bedrock_model": "bedrock/amazon.nova-pro-v1:0"
     }
 
 
@@ -150,9 +153,9 @@ async def test_bedrock():
         import boto3
         
         # Set ALL region environment variables
-        os.environ["AWS_REGION_NAME"] = "us-west-2"
-        os.environ["AWS_REGION"] = "us-west-2"
-        os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
+        os.environ["AWS_REGION_NAME"] = "us-east-1"
+        os.environ["AWS_REGION"] = "us-east-1"
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
         
         # Debug: Check what region boto3 is actually using
         session = boto3.Session()
@@ -169,8 +172,8 @@ async def test_bedrock():
         except Exception as list_error:
             openai_models = f"Error listing: {str(list_error)}"
         
-        # Try basic model invocation with converse route
-        model = LitellmModel(model="bedrock/converse/openai.gpt-oss-120b-1:0")
+        # Try basic model invocation with Nova Pro
+        model = LitellmModel(model="bedrock/amazon.nova-pro-v1:0")
         
         agent = Agent(
             name="Test Agent",
@@ -182,8 +185,8 @@ async def test_bedrock():
         
         return {
             "status": "success",
-            "model": "bedrock/converse/openai.gpt-oss-120b-1:0",
-            "region": "us-west-2",
+            "model": str(model.model),  # Use actual model from LitellmModel
+            "region": actual_region,
             "response": result.final_output,
             "debug": {
                 "boto3_session_region": actual_region,

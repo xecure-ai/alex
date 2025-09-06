@@ -9,7 +9,7 @@ This document outlines the complete plan for building the Alex Financial Planner
 - Parts 1-5: complete, tested and guides written in guides directory
 - Part 6: completed; currently being tested and checked; then Guide 6 will be written.
 - We recently updated Parts 1-6 to use a new approach for Terraform: storing state locally instead of on S3, and having a separate directory for each guide for its terraform
-- We are currently testing Part 3
+- We are currently finalizing part 4, and I need some minor tweaks to the guide at guides/4_researcher.md
 
 ## IMPORTANT - Methodical debugging with the root cause in mind
 
