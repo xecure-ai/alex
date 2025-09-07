@@ -22,6 +22,10 @@ The agent fails with errors, making our orchestrator pattern unusable in its cur
 - **Clean test files** - Simple test scenarios that demonstrate functionality
 - **Educational value** - The system should clearly demonstrate multi-agent collaboration
 
+Keep comments concise and minimal.
+If you need to retry (say to avoid rate limiting) use the tenacity package.
+Keep tests clean and simple.
+
 ## Architecture Decision
 
 **All agents will use tools only - no structured outputs**
@@ -47,29 +51,29 @@ The orchestrator (Planner) will:
 
 ## Implementation Checklist
 
-### Phase 1: Database Schema Update (Improved Design)
-- [ ] Update jobs table schema to have separate JSONB fields:
+### Phase 1: Database Schema Update (Improved Design) ✅ COMPLETE
+- [x] Update jobs table schema to have separate JSONB fields:
   - Keep `request_payload` (for initial request data)
   - Remove or deprecate `result_payload` (was too generic)
   - Add `report_payload` (Reporter agent's markdown analysis)
   - Add `charts_payload` (Charter agent's visualization data)
   - Add `retirement_payload` (Retirement agent's projections)
   - Add `summary_payload` (Planner's final summary/metadata)
-- [ ] Update Jobs model with new field methods
-- [ ] Update migration scripts with new schema
-- [ ] Test that each agent can write to its own field independently
-- [ ] No merging needed - each agent writes to its dedicated field
+- [x] Update Jobs model with new field methods
+- [x] Update migration scripts with new schema
+- [x] Test that each agent can write to its own field independently
+- [x] No merging needed - each agent writes to its dedicated field
 
 ### Phase 2: Fix Individual Agents (Tagger, Reporter, Charter, Retirement)
 
-#### 2.0 InstrumentTagger Agent (Pre-processing, Not Autonomous)
-- [ ] Verify current implementation uses structured outputs correctly
-- [ ] Confirm it's NOT using tools (structured outputs only is fine here)
-- [ ] Test that `handle_missing_instruments()` in planner works correctly
-- [ ] Verify database updates happen properly
-- [ ] Create test_tagger_standalone.py to test classification
-- [ ] Test with missing instruments: `uv run test_tagger_standalone.py`
-- [ ] Note: This agent is special - it's called directly, not via agent tools
+#### 2.0 InstrumentTagger Agent (Pre-processing, Not Autonomous) ✅ COMPLETE
+- [x] Verify current implementation uses structured outputs correctly
+- [x] Confirm it's NOT using tools (structured outputs only is fine here)
+- [x] Test that `handle_missing_instruments()` in planner works correctly
+- [x] Verify database updates happen properly
+- [x] Create test_tagger_standalone.py to test classification
+- [x] Test with missing instruments: `uv run test_tagger_standalone.py`
+- [x] Note: This agent is special - it's called directly, not via agent tools
 
 #### 2.1 Reporter Agent
 - [ ] Remove PortfolioReport structured output model

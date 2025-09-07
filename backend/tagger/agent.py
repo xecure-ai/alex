@@ -10,19 +10,20 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 from agents import Agent, Runner, trace
 from agents.extensions.models.litellm_model import LitellmModel
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.schemas import InstrumentCreate
 from templates import TAGGER_INSTRUCTIONS, CLASSIFICATION_PROMPT
 
-# Load environment variables
+# Load environment variables (dotenv automatically searches up the tree)
 load_dotenv(override=True)
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # Get configuration
-BEDROCK_MODEL_ID = os.getenv('BEDROCK_MODEL_ID', 'us.anthropic.claude-3-5-sonnet-20241022-v2:0')
-BEDROCK_MODEL_REGION = os.getenv('BEDROCK_MODEL_REGION', os.getenv('AWS_REGION', 'us-east-1'))
+BEDROCK_MODEL_ID = os.getenv('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
+BEDROCK_MODEL_REGION = os.getenv('BEDROCK_MODEL_REGION', 'us-west-2')
 
 class AllocationBreakdown(BaseModel):
     """Allocation percentages that must sum to 100"""
@@ -129,14 +130,11 @@ async def classify_instrument(
     Returns:
         Complete classification with allocations
     """
-    # Set region for Bedrock if specified
-    if BEDROCK_MODEL_REGION != os.getenv('AWS_REGION', 'us-east-1'):
-        os.environ["AWS_REGION_NAME"] = BEDROCK_MODEL_REGION
-        os.environ["AWS_REGION"] = BEDROCK_MODEL_REGION
-        os.environ["AWS_DEFAULT_REGION"] = BEDROCK_MODEL_REGION
-    
-    # Initialize the model
-    model = LitellmModel(model=f"bedrock/{BEDROCK_MODEL_ID}")
+    # Initialize the model - use us. prefix for cross-region inference profile
+    model_id = BEDROCK_MODEL_ID
+    if not model_id.startswith('us.'):
+        model_id = f"us.{model_id}"
+    model = LitellmModel(model=f"bedrock/{model_id}")
     
     # Create the classification task
     task = CLASSIFICATION_PROMPT.format(
@@ -166,7 +164,7 @@ async def classify_instrument(
 
 async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassification]:
     """
-    Tag multiple instruments concurrently with bounded parallelism.
+    Tag multiple instruments with simple retry logic.
     
     Args:
         instruments: List of dicts with symbol, name, and optionally instrument_type
@@ -176,11 +174,23 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
     """
     import asyncio
     
-    # Process instruments sequentially (simple and reliable)
+    # Add retry decorator to classify_instrument calls
+    @retry(
+        stop=stop_after_attempt(2),  # Just 2 attempts total
+        wait=wait_exponential(multiplier=1, min=2, max=4)  # Wait 2-4 seconds
+    )
+    async def classify_with_retry(symbol, name, instrument_type):
+        return await classify_instrument(symbol, name, instrument_type)
+    
+    # Process instruments sequentially with small delay
     results = []
-    for instrument in instruments:
+    for i, instrument in enumerate(instruments):
+        # Small delay between requests to avoid rate limits
+        if i > 0:
+            await asyncio.sleep(0.5)
+            
         try:
-            classification = await classify_instrument(
+            classification = await classify_with_retry(
                 symbol=instrument['symbol'],
                 name=instrument.get('name', ''),
                 instrument_type=instrument.get('instrument_type', 'etf')
@@ -188,13 +198,11 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
             logger.info(f"Successfully classified {instrument['symbol']}")
             results.append(classification)
         except Exception as e:
-            logger.error(f"Error classifying {instrument['symbol']}: {e}")
+            logger.error(f"Failed to classify {instrument['symbol']}: {e}")
             results.append(None)
     
-    # Filter out None values (failed classifications)
-    classifications = [r for r in results if r is not None]
-    
-    return classifications
+    # Filter out None values
+    return [r for r in results if r is not None]
 
 def classification_to_db_format(classification: InstrumentClassification) -> InstrumentCreate:
     """
