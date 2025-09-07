@@ -163,6 +163,12 @@ class InstrumentCreate(BaseModel):
     instrument_type: InstrumentType = Field(
         description="The type of financial instrument"
     )
+    current_price: Optional[Decimal] = Field(
+        None,
+        description="Current price of the instrument for portfolio calculations",
+        ge=0,
+        le=999999
+    )
     allocation_regions: Dict[RegionType, float] = Field(
         description="Geographic allocation percentages. Must sum to 100.",
         example={"north_america": 100}

@@ -30,6 +30,7 @@ INSTRUMENTS = [
         "symbol": "SPY",
         "name": "SPDR S&P 500 ETF Trust",
         "instrument_type": "etf",
+        "current_price": 450.25,  # Approximate prices as of 2024
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "technology": 28, "healthcare": 13, "financials": 13,
@@ -43,6 +44,7 @@ INSTRUMENTS = [
         "symbol": "QQQ",
         "name": "Invesco QQQ Trust",
         "instrument_type": "etf",
+        "current_price": 385.50,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "technology": 50, "communication": 17, "consumer_discretionary": 15,
@@ -54,6 +56,7 @@ INSTRUMENTS = [
         "symbol": "IWM",
         "name": "iShares Russell 2000 ETF",
         "instrument_type": "etf",
+        "current_price": 205.75,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "healthcare": 18, "financials": 17, "industrials": 16,
@@ -69,6 +72,7 @@ INSTRUMENTS = [
         "symbol": "VEA",
         "name": "Vanguard FTSE Developed Markets ETF",
         "instrument_type": "etf",
+        "current_price": 48.30,
         "allocation_regions": {"europe": 60, "asia": 35, "oceania": 5},
         "allocation_sectors": {
             "financials": 18, "industrials": 14, "healthcare": 12,
@@ -82,6 +86,7 @@ INSTRUMENTS = [
         "symbol": "VWO",
         "name": "Vanguard FTSE Emerging Markets ETF",
         "instrument_type": "etf",
+        "current_price": 42.15,
         "allocation_regions": {"asia": 75, "latin_america": 10, "africa": 8, "europe": 7},
         "allocation_sectors": {
             "technology": 22, "financials": 20, "consumer_discretionary": 15,
@@ -95,6 +100,7 @@ INSTRUMENTS = [
         "symbol": "EFA",
         "name": "iShares MSCI EAFE ETF",
         "instrument_type": "etf",
+        "current_price": 75.80,
         "allocation_regions": {"europe": 65, "asia": 35},
         "allocation_sectors": {
             "financials": 17, "industrials": 15, "healthcare": 13,
@@ -110,6 +116,7 @@ INSTRUMENTS = [
         "symbol": "AGG",
         "name": "iShares Core U.S. Aggregate Bond ETF",
         "instrument_type": "bond_fund",
+        "current_price": 98.20,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "treasury": 40, "corporate": 25, "mortgage": 28,
@@ -121,6 +128,7 @@ INSTRUMENTS = [
         "symbol": "BND",
         "name": "Vanguard Total Bond Market ETF",
         "instrument_type": "bond_fund",
+        "current_price": 72.50,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "treasury": 42, "corporate": 24, "mortgage": 27,
@@ -132,6 +140,7 @@ INSTRUMENTS = [
         "symbol": "TLT",
         "name": "iShares 20+ Year Treasury Bond ETF",
         "instrument_type": "bond_fund",
+        "current_price": 92.30,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {"treasury": 100},
         "allocation_asset_class": {"fixed_income": 100}
@@ -140,6 +149,7 @@ INSTRUMENTS = [
         "symbol": "HYG",
         "name": "iShares iBoxx High Yield Corporate Bond ETF",
         "instrument_type": "bond_fund",
+        "current_price": 76.85,
         "allocation_regions": {"north_america": 95, "international": 5},
         "allocation_sectors": {"corporate": 100},
         "allocation_asset_class": {"fixed_income": 100}
@@ -150,6 +160,7 @@ INSTRUMENTS = [
         "symbol": "XLK",
         "name": "Technology Select Sector SPDR Fund",
         "instrument_type": "etf",
+        "current_price": 175.40,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {"technology": 100},
         "allocation_asset_class": {"equity": 100}
@@ -158,6 +169,7 @@ INSTRUMENTS = [
         "symbol": "XLV",
         "name": "Health Care Select Sector SPDR Fund",
         "instrument_type": "etf",
+        "current_price": 135.60,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {"healthcare": 100},
         "allocation_asset_class": {"equity": 100}
@@ -166,6 +178,7 @@ INSTRUMENTS = [
         "symbol": "XLF",
         "name": "Financial Select Sector SPDR Fund",
         "instrument_type": "etf",
+        "current_price": 38.25,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {"financials": 100},
         "allocation_asset_class": {"equity": 100}
@@ -174,6 +187,7 @@ INSTRUMENTS = [
         "symbol": "XLE",
         "name": "Energy Select Sector SPDR Fund",
         "instrument_type": "etf",
+        "current_price": 85.90,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {"energy": 100},
         "allocation_asset_class": {"equity": 100}
@@ -184,6 +198,7 @@ INSTRUMENTS = [
         "symbol": "VNQ",
         "name": "Vanguard Real Estate ETF",
         "instrument_type": "etf",
+        "current_price": 82.45,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {"real_estate": 100},
         "allocation_asset_class": {"real_estate": 100}
@@ -194,6 +209,7 @@ INSTRUMENTS = [
         "symbol": "GLD",
         "name": "SPDR Gold Shares",
         "instrument_type": "etf",
+        "current_price": 195.70,
         "allocation_regions": {"global": 100},
         "allocation_sectors": {"commodities": 100},
         "allocation_asset_class": {"commodities": 100}
@@ -202,6 +218,7 @@ INSTRUMENTS = [
         "symbol": "SLV",
         "name": "iShares Silver Trust",
         "instrument_type": "etf",
+        "current_price": 22.40,
         "allocation_regions": {"global": 100},
         "allocation_sectors": {"commodities": 100},
         "allocation_asset_class": {"commodities": 100}
@@ -212,6 +229,7 @@ INSTRUMENTS = [
         "symbol": "AOR",
         "name": "iShares Core Growth Allocation ETF",
         "instrument_type": "etf",
+        "current_price": 48.90,
         "allocation_regions": {"north_america": 60, "international": 40},
         "allocation_sectors": {"diversified": 100},
         "allocation_asset_class": {"equity": 60, "fixed_income": 40}
@@ -220,6 +238,7 @@ INSTRUMENTS = [
         "symbol": "AOA",
         "name": "iShares Core Aggressive Allocation ETF",
         "instrument_type": "etf",
+        "current_price": 65.15,
         "allocation_regions": {"north_america": 55, "international": 45},
         "allocation_sectors": {"diversified": 100},
         "allocation_asset_class": {"equity": 80, "fixed_income": 20}
@@ -230,6 +249,7 @@ INSTRUMENTS = [
         "symbol": "VUG",
         "name": "Vanguard Growth ETF",
         "instrument_type": "etf",
+        "current_price": 312.80,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "technology": 45, "consumer_discretionary": 18,
@@ -244,6 +264,7 @@ INSTRUMENTS = [
         "symbol": "VTV",
         "name": "Vanguard Value ETF",
         "instrument_type": "etf",
+        "current_price": 152.60,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "financials": 20, "healthcare": 18, "industrials": 12,
@@ -258,6 +279,7 @@ INSTRUMENTS = [
         "symbol": "VIG",
         "name": "Vanguard Dividend Appreciation ETF",
         "instrument_type": "etf",
+        "current_price": 168.90,
         "allocation_regions": {"north_america": 100},
         "allocation_sectors": {
             "technology": 22, "healthcare": 16, "financials": 14,
@@ -283,15 +305,16 @@ def insert_instrument(instrument_data):
     
     sql = """
         INSERT INTO instruments (
-            symbol, name, instrument_type,
+            symbol, name, instrument_type, current_price,
             allocation_regions, allocation_sectors, allocation_asset_class
         ) VALUES (
-            :symbol, :name, :instrument_type,
+            :symbol, :name, :instrument_type, :current_price::numeric,
             :allocation_regions::jsonb, :allocation_sectors::jsonb, :allocation_asset_class::jsonb
         )
         ON CONFLICT (symbol) DO UPDATE SET
             name = EXCLUDED.name,
             instrument_type = EXCLUDED.instrument_type,
+            current_price = EXCLUDED.current_price,
             allocation_regions = EXCLUDED.allocation_regions,
             allocation_sectors = EXCLUDED.allocation_sectors,
             allocation_asset_class = EXCLUDED.allocation_asset_class,
@@ -308,6 +331,7 @@ def insert_instrument(instrument_data):
                 {'name': 'symbol', 'value': {'stringValue': validated['symbol']}},
                 {'name': 'name', 'value': {'stringValue': validated['name']}},
                 {'name': 'instrument_type', 'value': {'stringValue': validated['instrument_type']}},
+                {'name': 'current_price', 'value': {'stringValue': str(validated.get('current_price', 0))}},
                 {'name': 'allocation_regions', 'value': {'stringValue': json.dumps(validated['allocation_regions'])}},
                 {'name': 'allocation_sectors', 'value': {'stringValue': json.dumps(validated['allocation_sectors'])}},
                 {'name': 'allocation_asset_class', 'value': {'stringValue': json.dumps(validated['allocation_asset_class'])}}

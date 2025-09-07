@@ -2,6 +2,33 @@
 
 Welcome to Part 5! We're now entering the second phase of building Alex - transforming it from a research tool into a complete financial planning SaaS platform. In this guide, we'll set up Aurora Serverless v2 PostgreSQL with the Data API and create a reusable database library that all our AI agents will use.
 
+## Why Aurora Serverless v2 with Data API?
+
+AWS offers several database options, each with different strengths:
+
+### Common AWS Database Services
+
+| Service | Type | Best For | Why We Didn't Choose It |
+|---------|------|----------|-------------------------|
+| **DynamoDB** | NoSQL | Simple key-value lookups, high-scale apps | No SQL joins, complex for relational data like portfolios |
+| **RDS (Regular)** | Traditional SQL | Predictable workloads, always-on apps | Requires VPC/networking setup, always running = higher cost |
+| **DocumentDB** | Document NoSQL | MongoDB-compatible apps | Overkill for structured financial data |
+| **Neptune** | Graph | Social networks, recommendation engines | Wrong fit - we don't need graph relationships |
+| **Timestream** | Time-series | IoT, metrics, logs | Too specialized for general portfolio data |
+
+### Why Aurora Serverless v2 PostgreSQL?
+
+We chose **Aurora Serverless v2 with Data API** because it offers:
+
+1. **No VPC Complexity** - The Data API provides HTTP access, eliminating networking setup
+2. **Scales to Zero** - Can pause after inactivity, reducing costs to ~$1.44/day minimum
+3. **PostgreSQL** - Full SQL support with JSONB for flexible data (allocation percentages)
+4. **Serverless** - Automatically scales with demand, perfect for learning projects
+5. **Data API** - Direct HTTP access from Lambda without connection pools or VPC
+6. **Pay-per-use** - Only pay for what you use, ideal for development
+
+For students learning AWS, this removes the complexity of VPCs, security groups, and connection management while providing a production-grade database that works seamlessly with Lambda functions.
+
 ## What We're Building
 
 In this guide, you'll deploy:
@@ -68,8 +95,10 @@ Since Guide 4, we need additional AWS permissions for Aurora and related service
                 "rds:DescribeDBClusters",
                 "rds:DescribeDBInstances",
                 "rds:DescribeDBSubnetGroups",
+                "rds:DescribeGlobalClusters",
                 "rds:ModifyDBCluster",
                 "rds:ModifyDBInstance",
+                "rds:ModifyDBSubnetGroup",
                 "rds:AddTagsToResource",
                 "rds:ListTagsForResource",
                 "rds:RemoveTagsFromResource",
@@ -86,13 +115,18 @@ Since Guide 4, we need additional AWS permissions for Aurora and related service
             "Effect": "Allow",
             "Action": [
                 "ec2:DescribeVpcs",
+                "ec2:DescribeVpcAttribute",
                 "ec2:DescribeSubnets",
                 "ec2:DescribeAvailabilityZones",
                 "ec2:DescribeSecurityGroups",
                 "ec2:CreateSecurityGroup",
                 "ec2:DeleteSecurityGroup",
                 "ec2:AuthorizeSecurityGroupIngress",
-                "ec2:RevokeSecurityGroupIngress"
+                "ec2:AuthorizeSecurityGroupEgress",
+                "ec2:RevokeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:CreateTags",
+                "ec2:DescribeTags"
             ],
             "Resource": "*"
         },
@@ -152,8 +186,10 @@ Sign out and sign back in with your IAM user, then verify:
 # Should return empty list or existing clusters
 aws rds describe-db-clusters
 
-# Should return success (even with empty result)
+# Should show the command exists and list required parameters
 aws rds-data execute-statement --help
+# You should see: "the following arguments are required: --resource-arn, --secret-arn, --sql"
+# This confirms the Data API commands are available
 ```
 
 ## Step 1: Deploy Aurora Serverless v2
@@ -163,7 +199,7 @@ Now let's deploy the database infrastructure with Terraform.
 ### Configure and Deploy the Database
 
 ```bash
-# Navigate to the database terraform directory
+# Starting from the project root (alex directory)
 cd terraform/5_database
 
 # Copy the example variables file
@@ -204,11 +240,9 @@ Deployment takes about 10-15 minutes. After deployment, Terraform will display i
    terraform output
    ```
 
-2. Go back to project root and edit `.env`:
-   ```bash
-   cd ../..
-   nano .env  # or use your preferred editor
-   ```
+2. Edit the `.env` file in your project root:
+   - In Cursor's file explorer, click on the `.env` file in the alex directory
+   - If you don't see it, make sure hidden files are visible (Cmd+Shift+. on Mac, Ctrl+H on Linux/Windows)
 
 3. Add these lines with values from Terraform output:
    ```
@@ -224,7 +258,8 @@ Deployment takes about 10-15 minutes. After deployment, Terraform will display i
 Now let's test the connection and create our schema.
 
 ```bash
-cd ../../backend/database
+# Starting from the project root (alex directory)
+cd backend/database
 
 # Test the Data API connection
 uv run test_data_api.py
@@ -241,13 +276,13 @@ Database version: PostgreSQL 15.x
 Create the database schema:
 
 ```bash
-# Run the migration to create all tables
-uv run migrate.py
+# From backend/database directory
+uv run run_migrations.py
 ```
 
 You should see:
 ```
-Starting migration: 001_initial_schema.sql
+Starting migration: 001_schema.sql
 ✅ Migration completed successfully
 All migrations completed!
 ```
@@ -257,7 +292,7 @@ All migrations completed!
 Now let's populate the instruments table with 22 popular ETFs:
 
 ```bash
-# Load the default ETF data
+# From backend/database directory
 uv run seed_data.py
 ```
 
@@ -276,7 +311,7 @@ Seeding 22 instruments...
 For development, let's create a test user with a sample portfolio:
 
 ```bash
-# Reset database and load test data
+# From backend/database directory
 uv run reset_db.py --with-test-data
 ```
 
@@ -289,9 +324,10 @@ Creating test user with portfolio...
 ✅ Database reset complete with test data!
 
 Test user created:
-- User ID: user_test_123
+- User ID: test_user_001
 - Display Name: Test User
-- 3 accounts with various positions
+- 3 accounts (401k, Roth IRA, Taxable)
+- 5 positions in 401k account
 ```
 
 ## Step 6: Verify the Setup
@@ -299,7 +335,7 @@ Test user created:
 Let's verify everything is working:
 
 ```bash
-# Run the verification script
+# From backend/database directory
 uv run verify_database.py
 ```
 
@@ -308,7 +344,7 @@ You should see:
 Database Status:
 ✅ Aurora cluster is running
 ✅ Data API is accessible
-✅ All 7 tables exist
+✅ All 5 tables exist
 ✅ 22 instruments loaded
 ✅ Test user exists (if created)
 ✅ Pydantic validation working
@@ -321,7 +357,7 @@ Database ready for use!
 The database package can now be used by other services:
 
 ```bash
-# Run the comprehensive test
+# From backend/database directory
 uv run test_db.py
 ```
 
@@ -333,17 +369,71 @@ This test verifies that:
 
 ## Understanding the Database Schema
 
-Our schema includes:
+Our schema includes five tables with clear separation between user-specific and shared reference data:
+
+```mermaid
+erDiagram
+    users ||--o{ accounts : "owns"
+    users ||--o{ jobs : "requests"
+    accounts ||--o{ positions : "contains"
+    positions }o--|| instruments : "references"
+    
+    users {
+        varchar clerk_user_id PK
+        varchar display_name
+        integer years_until_retirement
+        decimal target_retirement_income
+        jsonb asset_class_targets
+        jsonb region_targets
+    }
+    
+    accounts {
+        uuid id PK
+        varchar clerk_user_id FK
+        varchar account_name
+        text account_purpose
+        decimal cash_balance
+        decimal cash_interest
+    }
+    
+    positions {
+        uuid id PK
+        uuid account_id FK
+        varchar symbol FK
+        decimal quantity
+        date as_of_date
+    }
+    
+    instruments {
+        varchar symbol PK
+        varchar name
+        varchar instrument_type
+        decimal current_price
+        jsonb allocation_regions
+        jsonb allocation_sectors
+        jsonb allocation_asset_class
+    }
+    
+    jobs {
+        uuid id PK
+        varchar clerk_user_id FK
+        varchar job_type
+        varchar status
+        jsonb request_payload
+        jsonb result_payload
+        text error_message
+    }
+```
+
+### Table Descriptions
 
 - **users**: Minimal user data (Clerk handles auth)
-- **instruments**: ETFs, stocks, and funds with allocation data
+- **instruments**: ETFs, stocks, and funds with current prices and allocation data (shared reference data)
 - **accounts**: User's investment accounts (401k, IRA, etc.)
 - **positions**: Holdings in each account
-- **reports**: AI-generated portfolio analysis
-- **retirement**: Retirement income projections
-- **analysis_jobs**: Async job tracking
+- **jobs**: Async job tracking for analysis requests (stores all analysis results in JSONB)
 
-All data is validated through Pydantic schemas before database insertion, ensuring data integrity.
+All data is validated through Pydantic schemas before database insertion, ensuring data integrity. Analysis results (reports, retirement projections, charts) are stored in the `jobs` table's `result_payload` field. Agent execution tracking is handled by LangFuse and CloudWatch Logs, not in the database.
 
 ## Cost Management
 
@@ -356,23 +446,15 @@ Aurora Serverless v2 costs approximately:
 To minimize costs when not actively developing:
 
 ```bash
-cd terraform
+# To completely destroy the database and stop all charges:
+cd terraform/5_database
+terraform destroy
 
-# Check current status
-uv run aurora_cost_management.py status
-
-# Pause when not working (still $1.44/day)
-uv run aurora_cost_management.py pause
-
-# Resume for development
-uv run aurora_cost_management.py resume
-
-# COMPLETELY STOP charges (deletes database!)
-uv run aurora_cost_management.py destroy
-
-# Recreate after destroy
-uv run aurora_cost_management.py recreate
+# To recreate the database later:
+terraform apply
 ```
+
+⚠️ **Warning**: `terraform destroy` will delete your database and all data. Only do this when you're done with development or taking a break.
 
 **Recommendation**: Complete Parts 5-8 within 3-5 days, then destroy to avoid ongoing charges.
 
@@ -384,19 +466,23 @@ If you can't connect to the Data API:
 
 1. **Check cluster status**:
 ```bash
-aws rds describe-db-clusters --db-cluster-identifier alex-cluster
+aws rds describe-db-clusters --db-cluster-identifier alex-aurora-cluster
 ```
 Status should be "available"
 
 2. **Check Data API is enabled**:
 ```bash
-aws rds describe-db-clusters --db-cluster-identifier alex-cluster --query 'DBClusters[0].EnableHttpEndpoint'
+aws rds describe-db-clusters --db-cluster-identifier alex-aurora-cluster --query 'DBClusters[0].EnableHttpEndpoint'
 ```
 Should return `true`
 
-3. **Verify secrets**:
+3. **Verify secrets** (the secret name includes a random suffix):
 ```bash
-aws secretsmanager get-secret-value --secret-id alex-aurora-secret --query SecretString --output text | jq .
+# List all secrets to find the correct name
+aws secretsmanager list-secrets --query "SecretList[?contains(Name, 'alex-aurora-credentials')].Name"
+
+# Then get the secret value (replace with actual name from above)
+aws secretsmanager get-secret-value --secret-id alex-aurora-credentials-xxxxx --query SecretString --output text | jq .
 ```
 Should show username and password
 
@@ -406,14 +492,16 @@ If migrations fail:
 
 1. **Check SQL syntax**:
 ```bash
-# Migrations are in backend/database/migrations/
-cat migrations/001_initial_schema.sql
+# From the backend/database directory
+# Migrations are in the migrations subdirectory
+cat migrations/001_schema.sql
 ```
 
 2. **Reset and retry**:
 ```bash
-uv run reset_db.py --drop-all
-uv run migrate.py
+# From the backend/database directory
+uv run reset_db.py
+# This will drop all tables, run migrations, and reload seed data
 ```
 
 ### Pydantic Validation Errors
@@ -428,6 +516,7 @@ Only use allowed values for regions, sectors, and asset classes
 
 3. **Review schema definitions**:
 ```bash
+# From the backend/database directory
 cat src/schemas.py
 ```
 

@@ -81,11 +81,7 @@ def main():
         UNION ALL
         SELECT 'positions', COUNT(*) FROM positions
         UNION ALL
-        SELECT 'price_history', COUNT(*) FROM price_history
-        UNION ALL
         SELECT 'jobs', COUNT(*) FROM jobs
-        UNION ALL
-        SELECT 'agent_logs', COUNT(*) FROM agent_logs
         ORDER BY table_name
         """,
         "📈 RECORD COUNTS PER TABLE"

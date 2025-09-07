@@ -72,14 +72,12 @@ uv add --editable ../database  # Add shared database package (for services that 
 
 ## Database Architecture Summary
 
-### Core Tables (7 total)
+### Core Tables (5 total)
 1. **users** - Minimal table linking to Clerk auth (display_name, retirement goals, allocation targets)
-2. **instruments** - Reference data for ETFs/stocks (symbol, name, type, allocation breakdowns)
+2. **instruments** - Reference data for ETFs/stocks (symbol, name, type, current price, allocation breakdowns)
 3. **accounts** - User investment accounts (401k, IRA, etc.) with cash balances
 4. **positions** - Holdings in each account (symbol, quantity, supports fractional shares)
-5. **price_history** - Historical price data for instruments
-6. **jobs** - Async job tracking for analysis requests (status, results, errors)
-7. **agent_logs** - Agent execution tracking with LangFuse trace IDs
+5. **jobs** - Async job tracking for analysis requests (status, results, errors)
 
 ### Key Design Decisions
 - **Aurora Serverless v2 PostgreSQL with Data API** - No VPC needed, HTTP-based access
@@ -235,7 +233,7 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 - [x] No VPC or networking configuration required
 
 #### Database Schema
-- [x] All tables created successfully (users, instruments, accounts, positions, price_history, jobs, agent_logs)
+- [x] All tables created successfully (users, instruments, accounts, positions, jobs)
 - [x] Foreign key constraints working properly
 - [x] JSONB columns functioning for flexible data
 

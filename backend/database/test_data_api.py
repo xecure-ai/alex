@@ -6,16 +6,60 @@ This script verifies that Aurora Serverless v2 is properly configured with Data 
 
 import boto3
 import json
+import os
 import sys
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(override=True)
 
 def get_current_region():
     """Get the current AWS region from the session"""
     session = boto3.Session()
-    return session.region_name or 'us-east-1'
+    return session.region_name or os.getenv('DEFAULT_AWS_REGION', 'us-east-1')
 
 def get_cluster_details(region):
-    """Get Aurora cluster ARN and secret ARN"""
+    """Get Aurora cluster ARN and secret ARN from environment variables or verify they exist"""
+    
+    # First try to get from environment variables
+    cluster_arn = os.getenv('AURORA_CLUSTER_ARN')
+    secret_arn = os.getenv('AURORA_SECRET_ARN')
+    
+    if cluster_arn and secret_arn:
+        print(f"📋 Using configuration from .env file")
+        
+        # Verify the cluster exists and Data API is enabled
+        rds_client = boto3.client('rds', region_name=region)
+        try:
+            cluster_id = cluster_arn.split(':')[-1]
+            response = rds_client.describe_db_clusters(
+                DBClusterIdentifier=cluster_id
+            )
+            
+            if response['DBClusters']:
+                cluster = response['DBClusters'][0]
+                if not cluster.get('HttpEndpointEnabled', False):
+                    print("❌ Data API is not enabled on the Aurora cluster")
+                    print("💡 Run: aws rds modify-db-cluster --db-cluster-identifier alex-aurora-cluster --enable-http-endpoint --apply-immediately")
+                    return None, None
+            else:
+                print(f"❌ Aurora cluster '{cluster_id}' not found")
+                return None, None
+                
+        except ClientError as e:
+            print(f"⚠️  Could not verify cluster status: {e}")
+            # Continue anyway - the cluster might exist but we can't describe it
+        
+        return cluster_arn, secret_arn
+    
+    # Fallback to auto-discovery if not in .env
+    print("⚠️  AURORA_CLUSTER_ARN or AURORA_SECRET_ARN not found in .env file")
+    print("💡 After running 'terraform apply', add these to your .env file:")
+    print("   AURORA_CLUSTER_ARN=<your-cluster-arn>")
+    print("   AURORA_SECRET_ARN=<your-secret-arn>")
+    print("\nAttempting to auto-discover Aurora resources...")
+    
     rds_client = boto3.client('rds', region_name=region)
     secrets_client = boto3.client('secretsmanager', region_name=region)
     
@@ -38,26 +82,26 @@ def get_cluster_details(region):
             print("💡 Run: aws rds modify-db-cluster --db-cluster-identifier alex-aurora-cluster --enable-http-endpoint --apply-immediately")
             return None, None
         
-        # Find the secret ARN - prefer data-api specific secret
+        # Find the most recently created aurora secret for alex
         secrets = secrets_client.list_secrets()
-        secret_arn = None
+        aurora_secrets = []
         
         for secret in secrets['SecretList']:
-            if 'data-api' in secret['Name'].lower() and 'alex' in secret['Name'].lower():
-                secret_arn = secret['ARN']
-                break
+            if 'aurora' in secret['Name'].lower() and 'alex' in secret['Name'].lower():
+                aurora_secrets.append(secret)
         
-        # Fallback to any aurora secret
-        if not secret_arn:
-            for secret in secrets['SecretList']:
-                if 'aurora' in secret['Name'].lower() and 'alex' in secret['Name'].lower():
-                    secret_arn = secret['ARN']
-                    break
-        
-        if not secret_arn:
+        if not aurora_secrets:
             print("❌ Could not find Aurora credentials in Secrets Manager")
             print("💡 Look for a secret containing 'aurora' in the name")
             return None, None
+        
+        # Sort by creation date and pick the most recent
+        aurora_secrets.sort(key=lambda x: x.get('CreatedDate', ''), reverse=True)
+        secret_arn = aurora_secrets[0]['ARN']
+        
+        print(f"\n📝 Found Aurora resources. Add these to your .env file:")
+        print(f"AURORA_CLUSTER_ARN={cluster_arn}")
+        print(f"AURORA_SECRET_ARN={secret_arn}")
         
         return cluster_arn, secret_arn
         

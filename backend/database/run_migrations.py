@@ -39,6 +39,7 @@ statements = [
         symbol VARCHAR(20) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         instrument_type VARCHAR(50),
+        current_price DECIMAL(12,4),
         allocation_regions JSONB DEFAULT '{}',
         allocation_sectors JSONB DEFAULT '{}',
         allocation_asset_class JSONB DEFAULT '{}',
@@ -68,15 +69,6 @@ statements = [
         UNIQUE(account_id, symbol)
     )""",
     
-    """CREATE TABLE IF NOT EXISTS price_history (
-        symbol VARCHAR(20) REFERENCES instruments(symbol),
-        date DATE NOT NULL,
-        close_price DECIMAL(12,4) NOT NULL,
-        volume BIGINT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        PRIMARY KEY (symbol, date)
-    )""",
-    
     """CREATE TABLE IF NOT EXISTS jobs (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         clerk_user_id VARCHAR(255) REFERENCES users(clerk_user_id) ON DELETE CASCADE,
@@ -90,25 +82,12 @@ statements = [
         completed_at TIMESTAMP
     )""",
     
-    """CREATE TABLE IF NOT EXISTS agent_logs (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
-        agent_name VARCHAR(100) NOT NULL,
-        langfuse_trace_id VARCHAR(255),
-        input_tokens INTEGER,
-        output_tokens INTEGER,
-        execution_time_ms INTEGER,
-        created_at TIMESTAMP DEFAULT NOW()
-    )""",
-    
     # Indexes
     'CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(clerk_user_id)',
     'CREATE INDEX IF NOT EXISTS idx_positions_account ON positions(account_id)',
     'CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol)',
-    'CREATE INDEX IF NOT EXISTS idx_price_history_symbol_date ON price_history(symbol, date DESC)',
     'CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(clerk_user_id)',
     'CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)',
-    'CREATE INDEX IF NOT EXISTS idx_agent_logs_job ON agent_logs(job_id)',
     
     # Function for timestamps
     """CREATE OR REPLACE FUNCTION update_updated_at_column()

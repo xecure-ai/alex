@@ -12,6 +12,13 @@ from decimal import Decimal
 from botocore.exceptions import ClientError
 import logging
 
+# Try to load .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass  # dotenv not installed, continue without it
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +39,7 @@ class DataAPIClient:
         self.cluster_arn = cluster_arn or os.environ.get('AURORA_CLUSTER_ARN')
         self.secret_arn = secret_arn or os.environ.get('AURORA_SECRET_ARN')
         self.database = database or os.environ.get('AURORA_DATABASE', 'alex')
-        self.region = region or os.environ.get('AWS_REGION', 'us-east-1')
+        self.region = region or os.environ.get('AWS_REGION') or os.environ.get('DEFAULT_AWS_REGION', 'us-east-1')
         
         if not self.cluster_arn or not self.secret_arn:
             # Try to load from config file

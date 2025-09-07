@@ -15,16 +15,19 @@ import logging
 from pydantic import BaseModel, Field, ConfigDict
 from agents import Agent, Runner, trace, function_tool
 from agents.extensions.models.litellm_model import LitellmModel
-from dotenv import load_dotenv
+
+# Try to load .env file if available (for local testing)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass  # dotenv not available in Lambda, use environment variables
 
 # Import database package
 from src.models import Database
 from src.schemas import JobUpdate
 
 from templates import ORCHESTRATOR_INSTRUCTIONS, ANALYSIS_REQUEST_TEMPLATE
-
-# Load environment variables
-load_dotenv(override=True)
 
 # Configure logging
 logger = logging.getLogger()

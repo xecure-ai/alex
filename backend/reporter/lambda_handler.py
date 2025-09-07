@@ -14,12 +14,15 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from agents import Agent, Runner, trace
 from agents.extensions.models.litellm_model import LitellmModel
-from dotenv import load_dotenv
+# Try to load .env file if available (for local testing)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass  # dotenv not available in Lambda, use environment variables
 
 from templates import REPORTER_INSTRUCTIONS, ANALYSIS_TASK_TEMPLATE
 
-# Load environment variables
-load_dotenv(override=True)
 
 # Configure logging
 logger = logging.getLogger()

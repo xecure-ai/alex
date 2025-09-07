@@ -164,31 +164,28 @@ class Positions(BaseModel):
         params = [{'name': 'account_id', 'value': {'stringValue': account_id}}]
         return self.db.query(sql, params)
     
-    def get_portfolio_value(self, account_id: str, as_of_date: date = None) -> Dict:
-        """Calculate total portfolio value for an account"""
-        if not as_of_date:
-            as_of_date = date.today()
-        
+    def get_portfolio_value(self, account_id: str) -> Dict:
+        """Calculate total portfolio value using current prices from instruments table"""
         sql = """
             SELECT 
-                SUM(p.quantity * ph.close_price) as total_value,
-                COUNT(DISTINCT p.symbol) as num_positions
+                COUNT(DISTINCT p.symbol) as num_positions,
+                SUM(p.quantity * i.current_price) as total_value,
+                SUM(p.quantity) as total_shares
             FROM positions p
-            LEFT JOIN LATERAL (
-                SELECT close_price 
-                FROM price_history 
-                WHERE symbol = p.symbol 
-                AND date <= :as_of_date::date
-                ORDER BY date DESC
-                LIMIT 1
-            ) ph ON true
+            JOIN instruments i ON p.symbol = i.symbol
             WHERE p.account_id = :account_id::uuid
         """
         params = [
-            {'name': 'account_id', 'value': {'stringValue': account_id}},
-            {'name': 'as_of_date', 'value': {'stringValue': as_of_date.isoformat()}}
+            {'name': 'account_id', 'value': {'stringValue': account_id}}
         ]
-        return self.db.query_one(sql, params)
+        result = self.db.query_one(sql, params)
+        if result:
+            return {
+                'num_positions': result.get('num_positions', 0),
+                'total_value': float(result.get('total_value', 0)) if result.get('total_value') else 0,
+                'total_shares': float(result.get('total_shares', 0)) if result.get('total_shares') else 0
+            }
+        return {'num_positions': 0, 'total_value': 0, 'total_shares': 0}
     
     def add_position(self, account_id: str, symbol: str, quantity: Decimal) -> str:
         """Add or update a position"""

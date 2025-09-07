@@ -11,14 +11,12 @@ Part 5 is fully complete with all acceptance criteria met. The database infrastr
 - ✅ IAM-based authentication
 - ✅ Cost management scripts (~$1.44-$2.88/day)
 
-### Database Schema (7 tables)
+### Database Schema (5 tables)
 - ✅ users - Minimal user data (Clerk handles auth)
-- ✅ instruments - 22 ETFs with validated allocations
+- ✅ instruments - 22 ETFs with current prices and validated allocations
 - ✅ accounts - User investment accounts
 - ✅ positions - Holdings in each account
-- ✅ price_history - Historical prices
-- ✅ jobs - Async job tracking
-- ✅ agent_logs - Agent execution logs
+- ✅ jobs - Async job tracking (includes all analysis results)
 
 ### Pydantic Integration
 - ✅ All data validated before database insertion

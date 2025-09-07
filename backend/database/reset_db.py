@@ -19,11 +19,9 @@ def drop_all_tables(db: DataAPIClient):
     
     # Order matters due to foreign key constraints
     tables_to_drop = [
-        'agent_logs',
         'positions',
         'accounts',
         'jobs',
-        'price_history',
         'instruments',
         'users'
     ]
@@ -141,32 +139,6 @@ def create_test_data(db_models: Database):
                     validated['quantity']
                 )
                 print(f"   ✅ Added position: {quantity} shares of {symbol}")
-    
-    # Add some sample price history
-    print("\n📈 Adding sample price history...")
-    price_data = [
-        ('SPY', '2024-01-15', 450.25),
-        ('SPY', '2024-01-16', 452.10),
-        ('QQQ', '2024-01-15', 400.50),
-        ('QQQ', '2024-01-16', 402.75),
-        ('BND', '2024-01-15', 80.10),
-        ('BND', '2024-01-16', 80.05),
-    ]
-    
-    for symbol, date, price in price_data:
-        sql = """
-            INSERT INTO price_history (symbol, date, close_price, volume)
-            VALUES (:symbol, :date::date, :price::numeric, :volume)
-            ON CONFLICT (symbol, date) DO NOTHING
-        """
-        params = [
-            {'name': 'symbol', 'value': {'stringValue': symbol}},
-            {'name': 'date', 'value': {'stringValue': date}},
-            {'name': 'price', 'value': {'stringValue': str(price)}},
-            {'name': 'volume', 'value': {'longValue': 1000000}}
-        ]
-        db_models.client.execute(sql, params)
-    print("   ✅ Added sample price history")
 
 
 def main():
@@ -240,7 +212,6 @@ def main():
         print("   • User ID: test_user_001")
         print("   • 3 accounts (401k, Roth IRA, Taxable)")
         print("   • 5 positions in 401k account")
-        print("   • Sample price history added")
 
 
 if __name__ == "__main__":
