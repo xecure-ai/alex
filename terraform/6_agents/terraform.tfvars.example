@@ -21,3 +21,7 @@ bedrock_model_id = "anthropic.claude-4-sonnet-20250805-v1:0"
 # Bedrock region (us-west-2 has the most models available)
 # Note: This can be different from your Lambda region - cross-region calls work fine
 bedrock_region = "us-west-2"
+
+# SageMaker endpoint name from Part 2
+# Default: alex-embedding-endpoint
+sagemaker_endpoint = "alex-embedding-endpoint"

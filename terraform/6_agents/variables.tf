@@ -27,3 +27,9 @@ variable "bedrock_region" {
   description = "AWS region for Bedrock"
   type        = string
 }
+
+variable "sagemaker_endpoint" {
+  description = "SageMaker endpoint name from Part 2"
+  type        = string
+  default     = "alex-embedding-endpoint"
+}

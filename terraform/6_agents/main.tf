@@ -254,6 +254,7 @@ resource "aws_lambda_function" "reporter" {
       AURORA_SECRET_ARN  = var.aurora_secret_arn
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
+      SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
     }
   }
   

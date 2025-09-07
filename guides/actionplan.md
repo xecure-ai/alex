@@ -75,17 +75,18 @@ The orchestrator (Planner) will:
 - [x] Test with missing instruments: `uv run test_tagger_standalone.py`
 - [x] Note: This agent is special - it's called directly, not via agent tools
 
-#### 2.1 Reporter Agent
-- [ ] Remove PortfolioReport structured output model
-- [ ] Add `update_job_report` tool to write to report_payload field
-- [ ] Add `analyze_portfolio` tool for calculations if needed
-- [ ] Modify lambda_handler to:
+#### 2.1 Reporter Agent ✅ COMPLETE
+- [x] Remove PortfolioReport structured output model
+- [x] Add `update_job_report` tool to write to report_payload field
+- [x] Add `get_market_insights` tool to retrieve S3 Vectors knowledge
+- [x] Modify lambda_handler to:
   - Accept job_id in event
   - Load portfolio from database using job_id
   - Run agent with tools to generate and store report
   - Return simple success response
-- [ ] Create test_reporter.py with minimal test case
-- [ ] Test locally with: `uv run test_reporter.py`
+- [x] Create test_reporter.py with minimal test case
+- [x] Test locally with: `uv run test_reporter.py`
+- [x] Fixed SAGEMAKER_ENDPOINT environment variable in Terraform config
 
 #### 2.2 Charter Agent  
 - [ ] Remove PortfolioCharts structured output model
