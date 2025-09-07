@@ -511,10 +511,100 @@ Build a pure client-side React app with Clerk authentication, deployed as a stat
 5. **Build UI Components**
    - Portfolio input forms
    - Position management
-   - Chart components (Recharts)
+   - Chart components (Recharts) - **See Chart Data Format below**
    - Markdown viewer for reports
    - Loading states and error handling
    - ✅ **Test**: All features work in dev mode
+   
+   **IMPORTANT - Chart Data Format (Part 6 Update):**
+   - Charts are stored in `jobs.charts_payload` as a flexible JSON object
+   - The Charter agent creates 4-6 charts with agent-chosen keys
+   - Chart keys are meaningful names like: `asset_allocation`, `geographic_exposure`, `sector_breakdown`, `top_holdings`, etc.
+   - Each chart object has this structure:
+   ```json
+   {
+     "title": "Asset Class Distribution",
+     "description": "Brief description of the chart",
+     "type": "pie|bar|donut|horizontalBar",
+     "data": [
+       {
+         "name": "Stocks",
+         "value": 65900,
+         "percentage": 70.2,
+         "color": "#3B82F6"
+       }
+     ]
+   }
+   ```
+   - Frontend must iterate over all keys in `charts_payload` (not assume fixed keys)
+   - Frontend should render charts dynamically based on the `type` field
+   - All percentages in a chart's data array sum to 100%
+   
+   **Example of Complete charts_payload:**
+   ```json
+   {
+     "asset_allocation": {
+       "title": "Asset Class Distribution",
+       "description": "Portfolio allocation across major asset classes",
+       "type": "pie",
+       "data": [
+         {"name": "Equities", "value": 65900, "percentage": 70.2, "color": "#3B82F6"},
+         {"name": "Bonds", "value": 14100, "percentage": 15.0, "color": "#10B981"},
+         {"name": "Real Estate", "value": 9400, "percentage": 10.0, "color": "#F59E0B"},
+         {"name": "Cash", "value": 4600, "percentage": 4.8, "color": "#EF4444"}
+       ]
+     },
+     "geographic_exposure": {
+       "title": "Geographic Distribution",
+       "description": "Investment allocation by region",
+       "type": "bar",
+       "data": [
+         {"name": "North America", "value": 56340, "percentage": 60.0, "color": "#6366F1"},
+         {"name": "Europe", "value": 18780, "percentage": 20.0, "color": "#14B8A6"},
+         {"name": "Asia Pacific", "value": 14100, "percentage": 15.0, "color": "#F97316"},
+         {"name": "Emerging Markets", "value": 4700, "percentage": 5.0, "color": "#EC4899"}
+       ]
+     },
+     "tax_efficiency": {
+       "title": "Tax-Advantaged vs Taxable",
+       "description": "Distribution between tax-advantaged and taxable accounts",
+       "type": "donut",
+       "data": [
+         {"name": "401(k)", "value": 45000, "percentage": 47.9, "color": "#10B981"},
+         {"name": "IRA", "value": 28000, "percentage": 29.8, "color": "#3B82F6"},
+         {"name": "Taxable", "value": 20900, "percentage": 22.3, "color": "#F59E0B"}
+       ]
+     },
+     "top_holdings": {
+       "title": "Top 5 Holdings",
+       "description": "Largest positions in the portfolio",
+       "type": "horizontalBar",
+       "data": [
+         {"name": "SPY", "value": 23500, "percentage": 25.0, "color": "#3B82F6"},
+         {"name": "QQQ", "value": 14100, "percentage": 15.0, "color": "#60A5FA"},
+         {"name": "BND", "value": 9400, "percentage": 10.0, "color": "#93C5FD"},
+         {"name": "VTI", "value": 7050, "percentage": 7.5, "color": "#BFDBFE"},
+         {"name": "VXUS", "value": 4700, "percentage": 5.0, "color": "#DBEAFE"}
+       ]
+     }
+   }
+   ```
+   
+   **Frontend Implementation Notes:**
+   ```javascript
+   // Example React component approach
+   const ChartsDisplay = ({ chartsPayload }) => {
+     return Object.entries(chartsPayload).map(([key, chart]) => (
+       <ChartComponent
+         key={key}
+         title={chart.title}
+         description={chart.description}
+         type={chart.type}
+         data={chart.data}
+       />
+     ));
+   };
+   ```
 
 6. **Deploy Static Site to S3/CloudFront**
    - Build production bundle with Vite
@@ -575,6 +665,9 @@ Build a pure client-side React app with Clerk authentication, deployed as a stat
 - [ ] API calls include Authorization header automatically
 - [ ] Loading states shown during API calls
 - [ ] Error states handle API failures gracefully
+- [ ] Charts render dynamically based on `charts_payload` keys (variable number)
+- [ ] Reports display markdown from `report_payload`
+- [ ] Retirement projections shown from `retirement_payload`
 
 #### Portfolio Management
 - [ ] Create new portfolio positions

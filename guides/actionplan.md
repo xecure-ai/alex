@@ -88,17 +88,18 @@ The orchestrator (Planner) will:
 - [x] Test locally with: `uv run test_reporter.py`
 - [x] Fixed SAGEMAKER_ENDPOINT environment variable in Terraform config
 
-#### 2.2 Charter Agent  
-- [ ] Remove PortfolioCharts structured output model
-- [ ] Add `update_job_charts` tool to write to charts_payload field
-- [ ] Add `calculate_allocations` tool for data processing
-- [ ] Modify lambda_handler to:
+#### 2.2 Charter Agent ✅ COMPLETE
+- [x] Remove PortfolioCharts structured output model
+- [x] Add `update_job_charts` tool to write to charts_payload field (simplified to single `create_chart` tool)
+- [x] Add `calculate_allocations` tool for data processing (provided in context instead)
+- [x] Modify lambda_handler to:
   - Accept job_id in event
-  - Load portfolio from database
+  - Accept portfolio_data in event (not loading from database)
   - Run agent with tools to generate and store charts
   - Return simple success response
-- [ ] Create test_charter.py with minimal test case
-- [ ] Test locally with: `uv run test_charter.py`
+- [x] Create test_charter.py with minimal test case
+- [x] Test locally with: `uv run test_charter.py`
+- [x] **Bonus improvements**: Simplified to single tool, portfolio analysis provided in context
 
 #### 2.3 Retirement Agent
 - [ ] Remove RetirementAnalysis structured output model
