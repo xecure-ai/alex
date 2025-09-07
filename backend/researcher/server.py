@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from agents import Agent, Runner
+from agents import Agent, Runner, trace
 from agents.extensions.models.litellm_model import LitellmModel
 
 # Suppress LiteLLM warnings about optional dependencies
@@ -44,27 +44,28 @@ async def run_research_agent(topic: str = None) -> str:
     # Configure Bedrock model with us-east-1 region
     # Set ALL region environment variables to ensure us-east-1 is used
     os.environ["AWS_REGION_NAME"] = "us-east-1"  # LiteLLM's preferred variable
-    os.environ["AWS_REGION"] = "us-east-1"       # Boto3 standard
+    os.environ["AWS_REGION"] = "us-east-1"  # Boto3 standard
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # Fallback
 
     # Using Amazon Nova Pro which supports tools and MCP servers
     model = LitellmModel(model="bedrock/amazon.nova-pro-v1:0")
-    
+
     # Previous models (kept for reference):
     # model = LitellmModel(model="bedrock/openai.gpt-oss-120b-1:0")  # Had tools parameter issues in us-west-2
     # model = LitellmModel(model="bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0")  # Rate limited
 
     # Create and run the agent with MCP server
-    async with create_playwright_mcp_server(timeout_seconds=60) as playwright_mcp:
-        agent = Agent(
-            name="Alex Investment Researcher",
-            instructions=get_agent_instructions(),
-            model=model,
-            tools=[ingest_financial_document],
-            mcp_servers=[playwright_mcp],
-        )
+    with trace("Researcher"):
+        async with create_playwright_mcp_server(timeout_seconds=60) as playwright_mcp:
+            agent = Agent(
+                name="Alex Investment Researcher",
+                instructions=get_agent_instructions(),
+                model=model,
+                tools=[ingest_financial_document],
+                mcp_servers=[playwright_mcp],
+            )
 
-        result = await Runner.run(agent, input=query, max_turns=10)
+            result = await Runner.run(agent, input=query, max_turns=15)
 
     return result.final_output
 
@@ -142,7 +143,7 @@ async def health():
         "timestamp": datetime.now(UTC).isoformat(),
         "debug_container": container_indicators,
         "aws_region": os.environ.get("AWS_DEFAULT_REGION", "not set"),
-        "bedrock_model": "bedrock/amazon.nova-pro-v1:0"
+        "bedrock_model": "bedrock/amazon.nova-pro-v1:0",
     }
 
 
@@ -151,38 +152,40 @@ async def test_bedrock():
     """Test Bedrock connection directly."""
     try:
         import boto3
-        
+
         # Set ALL region environment variables
         os.environ["AWS_REGION_NAME"] = "us-east-1"
         os.environ["AWS_REGION"] = "us-east-1"
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-        
+
         # Debug: Check what region boto3 is actually using
         session = boto3.Session()
         actual_region = session.region_name
-        
+
         # Try to create Bedrock client explicitly in us-west-2
-        client = boto3.client('bedrock-runtime', region_name='us-west-2')
-        
+        client = boto3.client("bedrock-runtime", region_name="us-west-2")
+
         # Debug: Try to list models to verify connection
         try:
-            bedrock_client = boto3.client('bedrock', region_name='us-west-2')
+            bedrock_client = boto3.client("bedrock", region_name="us-west-2")
             models = bedrock_client.list_foundation_models()
-            openai_models = [m['modelId'] for m in models['modelSummaries'] if 'openai' in m['modelId'].lower()]
+            openai_models = [
+                m["modelId"] for m in models["modelSummaries"] if "openai" in m["modelId"].lower()
+            ]
         except Exception as list_error:
             openai_models = f"Error listing: {str(list_error)}"
-        
+
         # Try basic model invocation with Nova Pro
         model = LitellmModel(model="bedrock/amazon.nova-pro-v1:0")
-        
+
         agent = Agent(
             name="Test Agent",
             instructions="You are a helpful assistant. Be very brief.",
-            model=model
+            model=model,
         )
-        
+
         result = await Runner.run(agent, input="Say hello in 5 words or less", max_turns=1)
-        
+
         return {
             "status": "success",
             "model": str(model.model),  # Use actual model from LitellmModel
@@ -190,24 +193,25 @@ async def test_bedrock():
             "response": result.final_output,
             "debug": {
                 "boto3_session_region": actual_region,
-                "available_openai_models": openai_models
-            }
+                "available_openai_models": openai_models,
+            },
         }
     except Exception as e:
         import traceback
+
         return {
             "status": "error",
             "error": str(e),
             "type": type(e).__name__,
             "traceback": traceback.format_exc(),
             "debug": {
-                "boto3_session_region": session.region_name if 'session' in locals() else "unknown",
+                "boto3_session_region": session.region_name if "session" in locals() else "unknown",
                 "env_vars": {
                     "AWS_REGION_NAME": os.environ.get("AWS_REGION_NAME"),
                     "AWS_REGION": os.environ.get("AWS_REGION"),
-                    "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION")
-                }
-            }
+                    "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION"),
+                },
+            },
         }
 
 

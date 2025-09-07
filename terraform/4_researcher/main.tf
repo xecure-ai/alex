@@ -199,9 +199,9 @@ resource "aws_lambda_function" "scheduler_lambda" {
   filename         = "${path.module}/../../backend/scheduler/lambda_function.zip"
   source_code_hash = fileexists("${path.module}/../../backend/scheduler/lambda_function.zip") ? filebase64sha256("${path.module}/../../backend/scheduler/lambda_function.zip") : null
   
-  handler     = "lambda_function.lambda_handler"
+  handler     = "lambda_function.handler"
   runtime     = "python3.12"
-  timeout     = 60
+  timeout     = 180  # 3 minutes to handle App Runner response time
   memory_size = 256
   
   environment {

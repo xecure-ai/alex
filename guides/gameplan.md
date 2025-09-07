@@ -1,6 +1,6 @@
 # Alex Financial Planner SaaS - Development Gameplan
 
-**INTERNAL DOCUMENT - For Development Team Only**
+**INTERNAL DOCUMENT - For Development Team Only - Students will refer to the numbered guides in the guides folder**
 
 This document outlines the complete plan for building the Alex Financial Planner SaaS platform. This is the roadmap for Parts 5-8 of the course.
 
@@ -9,7 +9,7 @@ This document outlines the complete plan for building the Alex Financial Planner
 - Parts 1-5: complete, tested and guides written in guides directory
 - Part 6: completed; currently being tested and checked; then Guide 6 will be written.
 - We recently updated Parts 1-6 to use a new approach for Terraform: storing state locally instead of on S3, and having a separate directory for each guide for its terraform
-- We are currently finalizing part 4, and I need some minor tweaks to the guide at guides/4_researcher.md
+- We're about to retest Step 5 again with the new Terraform approach
 
 ## IMPORTANT - Methodical debugging with the root cause in mind
 
@@ -32,17 +32,6 @@ For this educational project, we use a unique approach designed to simplify the 
 - **No state bucket complexity** - eliminates setup and management overhead
 - **Progressive deployment** - students can't accidentally deploy later parts
 
-This approach differs from production setups where you might use:
-- Remote state in S3 with state locking
-- Modules with shared state
-- Terragrunt or similar orchestration tools
-
-However, for learning purposes, our approach provides:
-- **Isolation**: Mistakes in one part don't affect others
-- **Simplicity**: No state bucket setup required
-- **Clarity**: Each guide maps to exactly one Terraform directory
-- **Safety**: Can't accidentally destroy earlier work
-
 ## Package Management Strategy (uv)
 
 ### Project Structure
@@ -54,7 +43,7 @@ However, for learning purposes, our approach provides:
 ### Setup Process for Each Project
 ```bash
 cd backend/[service_name]
-uv init --bare              # Create minimal pyproject.toml
+uv init --bare              # Create minimal pyproject.toml without repo or main.py
 uv python pin 3.12          # Pin to Python 3.12 for consistency
 uv add --editable ../database  # Add shared database package (for services that need it)
 ```
@@ -967,46 +956,6 @@ uv run package_docker.py --deploy  # Create and deploy to Lambda
 
 This technique is essential for any Lambda deployment with compiled dependencies and should be used for all agent Lambda functions in this project.
 
-## Risk Mitigation
-
-### Technical Risks
-1. **Lambda cold starts** → Use provisioned concurrency for critical paths
-2. **Data API throttling** → Implement retry logic with backoff
-3. **Bedrock throttling** → Implement exponential backoff
-4. **Large portfolios** → Pagination and async processing
-
-### Cost Risks
-1. **Bedrock usage** → Set per-user limits
-2. **Aurora always running** → Use Aurora Serverless v2 min capacity 0.5 ACU
-3. **CloudFront transfer** → Use caching aggressively
-4. **LangFuse storage** → Rotate old traces
-
-### Security Risks
-1. **API abuse** → Rate limiting and WAF
-2. **Data leakage** → Row-level security in database (user_id from JWT)
-3. **Token theft** → Short JWT expiry (60s), automatic refresh
-4. **SQL injection** → Use parameterized queries only
-5. **CORS misconfiguration** → Restrict to specific domain only
-6. **Missing JWT validation** → Every Lambda must verify tokens
-
-## Timeline Estimate
-
-### Development Time
-- **Part 5**: 1-2 days (Database setup and library)
-- **Part 6**: 2-3 days (All agents and integration)
-- **Part 7**: 2-3 days (Frontend and deployment)
-- **Part 8**: 1-2 days (Observability and security)
-
-**Total**: 6-10 days of development
-
-### Student Time (per guide)
-- **Guide 5**: 2-3 hours
-- **Guide 6**: 3-4 hours
-- **Guide 7**: 3-4 hours
-- **Guide 8**: 2-3 hours
-
-**Total**: 10-14 hours for students
-
 ## Key Decisions Log
 
 1. **Aurora Serverless v2 with Data API** - No VPC complexity, HTTP-based access
@@ -1021,23 +970,6 @@ This technique is essential for any Lambda deployment with compiled dependencies
 
 ## Notes for Implementation
 
-### For Ed (Implementation)
-- Create database package first - all agents depend on it
-- Each backend folder is a separate uv project with its own pyproject.toml
-- Database package installed as local dependency: `uv add --editable ../database`
-- **Pydantic Integration**:
-  - All data validation through Pydantic schemas (not raw JSON)
-  - Literal types for constrained values (regions, sectors, asset classes)
-  - Natural language Field descriptions for LLM compatibility
-  - Automatic type casting in Data API client (JSONB, numeric, date, UUID)
-  - Schemas suitable for OpenAI/Anthropic function calling
-- Integration tests live in backend/planner/tests/ to avoid dependency issues
-- Test Lambda packaging carefully with local dependencies
-- Ensure Terraform modules are incremental
-- Add cost estimates to each guide
-- Include troubleshooting sections
-- Make Bedrock model configurable via environment variable in all agents
-- Default to Claude 4 Sonnet but allow easy switching
 
 ### LangFuse Implementation for Amazing Visualization
 

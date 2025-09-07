@@ -82,9 +82,7 @@ OPENAI_API_KEY=sk-...  # Your actual OpenAI API key (required for agent tracing)
 Now set up the initial infrastructure:
 
 ```bash
-# Navigate to the researcher terraform directory
-cd terraform/4_researcher
-
+# Navigate to the terraform/4_researcher directory
 # Copy the example variables file
 cp terraform.tfvars.example terraform.tfvars
 ```
@@ -119,8 +117,7 @@ Save the ECR repository URL shown in the output - you'll need it in Step 2.
 Now we'll build the Docker container and deploy it to App Runner.
 
 ```bash
-# Navigate to the researcher directory
-cd ~/projects/alex/backend/researcher
+# Navigate to the backend/researcher directory
 uv run deploy.py
 ```
 
@@ -144,9 +141,7 @@ When the Docker image push completes, you'll see:
 Now that your Docker image is in ECR, create the App Runner service:
 
 ```bash
-# Navigate back to the terraform directory
-cd ~/projects/alex/terraform/4_researcher
-
+# Navigate back to the terraform/4_researcher directory
 # Deploy the complete infrastructure including App Runner
 terraform apply
 ```
@@ -167,8 +162,7 @@ Now let's test the full pipeline: Research → Ingest → Search.
 Clear any existing test data:
 
 ```bash
-# Navigate to the ingest directory
-cd ~/projects/alex/backend/ingest
+# Navigate to the backend/ingest directory
 uv run cleanup_s3vectors.py
 ```
 
@@ -179,8 +173,7 @@ You should see: "✅ All documents deleted successfully"
 Now let's generate some investment research:
 
 ```bash
-# Navigate to the researcher directory
-cd ~/projects/alex/backend/researcher
+# Navigate to the backend/researcher directory
 uv run test_research.py
 ```
 
@@ -204,8 +197,7 @@ The research takes 20-30 seconds as the agent browses financial websites and gen
 Check that the research was stored:
 
 ```bash
-# Navigate to the ingest directory
-cd ~/projects/alex/backend/ingest
+# Navigate to the backend/ingest directory
 uv run test_search_s3vectors.py
 ```
 
@@ -263,8 +255,7 @@ You should see:
 
 2. **Search Across Topics:**
    ```bash
-   # Navigate to the ingest directory
-   cd ~/projects/alex/backend/ingest
+   # Navigate to the backend/ingest directory
    uv run test_search_s3vectors.py "artificial intelligence"
    uv run test_search_s3vectors.py "inflation protection"
    ```
@@ -281,7 +272,7 @@ Now let's enable automated research that runs every 2 hours to continuously gath
 The scheduler is disabled by default. To enable it:
 
 ```bash
-# Stay in terraform/4_researcher directory
+# Navigate to the terraform/4_researcher directory if not already there
 # Edit your terraform.tfvars file
 ```
 
@@ -297,8 +288,7 @@ terraform apply
 
 **Windows PowerShell:**
 ```powershell
-# Navigate to the terraform directory for Part 4
-cd ~/projects/alex/terraform/4_researcher
+# Navigate to the terraform/4_researcher directory
 # Edit terraform.tfvars to set scheduler_enabled = true
 # Then apply the change
 terraform apply
@@ -334,8 +324,7 @@ aws logs tail /aws/apprunner/alex-researcher/*/application --follow --region us-
 
 3. Search your S3 Vectors database to see the accumulated research:
 ```bash
-# Navigate to the ingest directory
-cd ~/projects/alex/backend/ingest
+# Navigate to the backend/ingest directory
 uv run test_search_s3vectors.py
 ```
 
@@ -345,15 +334,13 @@ When you want to stop the automated research (to save on API costs):
 
 **Mac/Linux:**
 ```bash
-# Navigate to the terraform directory for Part 4
-cd ~/projects/alex/terraform/4_researcher
+# Navigate to the terraform/4_researcher directory
 terraform apply -var="scheduler_enabled=false"
 ```
 
 **Windows PowerShell:**
 ```powershell
-# Navigate to the terraform directory for Part 4
-cd ~/projects/alex/terraform/4_researcher
+# Navigate to the terraform/4_researcher directory
 terraform apply -var="scheduler_enabled=false"
 ```
 
@@ -396,8 +383,7 @@ This will remove the scheduler but keep all your other services running.
 If you want to stop ALL services to avoid charges:
 
 ```bash
-# Navigate to the terraform directory for Part 4
-cd ~/projects/alex/terraform/4_researcher
+# Navigate to the terraform/4_researcher directory
 terraform destroy
 ```
 
@@ -412,9 +398,8 @@ You've successfully deployed an agentic AI system that can research, analyze, an
 Before moving to the next guide, ensure your `.env` file is up to date:
 
 ```bash
-# Navigate to project root and edit .env
-cd ~/projects/alex
-nano .env  # or use your preferred editor
+# Navigate to the project root and edit .env
+# Use your preferred text editor (nano, vim, or open in Cursor)
 ```
 
 Verify you have all values from Parts 1-4:
