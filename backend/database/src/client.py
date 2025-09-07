@@ -42,26 +42,10 @@ class DataAPIClient:
         self.region = region or os.environ.get('AWS_REGION') or os.environ.get('DEFAULT_AWS_REGION', 'us-east-1')
         
         if not self.cluster_arn or not self.secret_arn:
-            # Try to load from config file
-            self._load_from_config()
-        
-        if not self.cluster_arn or not self.secret_arn:
             raise ValueError("Missing required Aurora configuration. "
                            "Set AURORA_CLUSTER_ARN and AURORA_SECRET_ARN environment variables.")
         
         self.client = boto3.client('rds-data', region_name=self.region)
-    
-    def _load_from_config(self):
-        """Try to load configuration from aurora_config.json"""
-        try:
-            with open('aurora_config.json') as f:
-                config = json.load(f)
-                self.cluster_arn = self.cluster_arn or config.get('cluster_arn')
-                self.secret_arn = self.secret_arn or config.get('secret_arn')
-                self.database = self.database or config.get('database', 'alex')
-                self.region = self.region or config.get('region', 'us-east-1')
-        except FileNotFoundError:
-            pass
     
     def execute(self, sql: str, parameters: List[Dict] = None) -> Dict:
         """

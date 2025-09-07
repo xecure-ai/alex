@@ -71,12 +71,19 @@ CREATE TABLE IF NOT EXISTS jobs (
     job_type VARCHAR(50) NOT NULL,          -- 'portfolio_analysis', 'rebalance', 'projection'
     status VARCHAR(20) DEFAULT 'pending',    -- 'pending', 'running', 'completed', 'failed'
     request_payload JSONB,                   -- Input parameters
-    result_payload JSONB,                    -- Analysis results
+    
+    -- Separate fields for each agent's results (no merging needed)
+    report_payload JSONB,                    -- Reporter agent's markdown analysis
+    charts_payload JSONB,                    -- Charter agent's visualization data
+    retirement_payload JSONB,                -- Retirement agent's projections
+    summary_payload JSONB,                   -- Planner's final summary/metadata
+    
     error_message TEXT,
     
     created_at TIMESTAMP DEFAULT NOW(),
     started_at TIMESTAMP,
-    completed_at TIMESTAMP
+    completed_at TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Create indexes for common queries
@@ -106,4 +113,7 @@ CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON accounts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_positions_updated_at BEFORE UPDATE ON positions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

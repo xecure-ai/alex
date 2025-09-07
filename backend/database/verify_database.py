@@ -14,16 +14,27 @@ This script verifies:
 Note: JSONB values are stored as floats (100.0) not strings ('100')
 """
 
+import os
 import boto3
 import json
 from pathlib import Path
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
 
-# Load config
-with open('aurora_config.json') as f:
-    config = json.load(f)
+# Load environment variables
+load_dotenv(override=True)
 
-client = boto3.client('rds-data', region_name=config['region'])
+# Get config from environment
+cluster_arn = os.environ.get('AURORA_CLUSTER_ARN')
+secret_arn = os.environ.get('AURORA_SECRET_ARN')
+database = os.environ.get('AURORA_DATABASE', 'alex')
+region = os.environ.get('AWS_REGION', 'us-east-1')
+
+if not cluster_arn or not secret_arn:
+    print("❌ Missing AURORA_CLUSTER_ARN or AURORA_SECRET_ARN in .env file")
+    exit(1)
+
+client = boto3.client('rds-data', region_name=region)
 
 def execute_query(sql, description):
     """Execute a query and return results"""
@@ -32,9 +43,9 @@ def execute_query(sql, description):
     
     try:
         response = client.execute_statement(
-            resourceArn=config['cluster_arn'],
-            secretArn=config['secret_arn'],
-            database=config['database'],
+            resourceArn=cluster_arn,
+            secretArn=secret_arn,
+            database=database,
             sql=sql
         )
         return response

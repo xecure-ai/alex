@@ -247,16 +247,7 @@ def main():
         sys.exit(1)
     
     # Save connection details for other scripts
-    config = {
-        'cluster_arn': cluster_arn,
-        'secret_arn': secret_arn,
-        'database': 'alex',
-        'region': region
-    }
-    
-    with open('aurora_config.json', 'w') as f:
-        json.dump(config, f, indent=2)
-        print(f"\n💾 Saved connection config to aurora_config.json")
+    print(f"\n✅ Data API test successful!")
 
 if __name__ == "__main__":
     main()

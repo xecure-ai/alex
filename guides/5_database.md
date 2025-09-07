@@ -420,8 +420,13 @@ erDiagram
         varchar job_type
         varchar status
         jsonb request_payload
-        jsonb result_payload
+        jsonb report_payload
+        jsonb charts_payload
+        jsonb retirement_payload
+        jsonb summary_payload
         text error_message
+        timestamp started_at
+        timestamp completed_at
     }
 ```
 
@@ -431,9 +436,13 @@ erDiagram
 - **instruments**: ETFs, stocks, and funds with current prices and allocation data (shared reference data)
 - **accounts**: User's investment accounts (401k, IRA, etc.)
 - **positions**: Holdings in each account
-- **jobs**: Async job tracking for analysis requests (stores all analysis results in JSONB)
+- **jobs**: Async job tracking for analysis requests with separate fields for each agent's output:
+  - `report_payload`: Reporter agent's markdown analysis
+  - `charts_payload`: Charter agent's visualization data
+  - `retirement_payload`: Retirement agent's projections
+  - `summary_payload`: Planner's final summary and metadata
 
-All data is validated through Pydantic schemas before database insertion, ensuring data integrity. Analysis results (reports, retirement projections, charts) are stored in the `jobs` table's `result_payload` field. Agent execution tracking is handled by LangFuse and CloudWatch Logs, not in the database.
+All data is validated through Pydantic schemas before database insertion, ensuring data integrity. Each agent writes its results to its own dedicated JSONB field in the `jobs` table, eliminating the need for complex merging logic. Agent execution tracking is handled by LangFuse and CloudWatch Logs, not in the database.
 
 ## Cost Management
 

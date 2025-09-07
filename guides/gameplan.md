@@ -7,15 +7,34 @@ This document outlines the complete plan for building the Alex Financial Planner
 ## Current Status
 
 - Parts 1-5: complete, tested and guides written in guides directory
-- Part 6: completed; currently being tested and checked; then Guide 6 will be written.
 - We recently updated Parts 1-6 to use a new approach for Terraform: storing state locally instead of on S3, and having a separate directory for each guide for its terraform
-- We're about to retest Step 5 again with the new Terraform approach
+- Part 6: coded but there are issues that need to be fixed
+- We need to resolve the issues with Part 6
+
+## Explaining the issue with Part 6
+
+- The planner was repeatedly failing with strange errors
+- You (Claude Code) determined that it seems that tools + structured outputs were not supported at the same time and result in a failure
+- We need to make a plan to rebuild Part 6 without using Structured Outputs
+- Right now, the planner directory is in a mess with partial code and test code
+- Our Action Plan for moving forwards is documented in guides/actionplan.md
+
+ADDITIONAL NOTE:
+
+The BEDROCK_MODEL_ID is in the .env as my preferred model: anthropic.claude-3-7-sonnet-20250219-v1:0
+Which I have approved for us-west-2
+And I have in .env
+BEDROCK_REGION=us-west-2
+The actual model name needed to be passed in to LiteLLM is:
+bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0
+in order to use the right inference profile.
+We experienced rate limiting errors with claude 4 - watch out for rate limit errors. If we hit them again, we may need to fall back to using Amazon Nova models (which do not use the us prefix.)
 
 ## IMPORTANT - Methodical debugging with the root cause in mind
 
-When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause. ALWAYS prove the root cause. As an example: at one point you used Structured Outputs in a call to an LLM. You used `response.final_output_as(PydanticModel)` to parse the output. This was returning a string. You wrongly came to an illogical conclusion - that an LLM might occasionally return a string instead of a json object. You started writing clumsy code to handle strings, and endless exception handlers. The true problem was that you failed to follow the documented API - you weren't passing in `output_type=PydanticModel` when creating the agent.
+When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause. ALWAYS prove the root cause.
 
-Lessons learned from prior issue:
+Approach:
 
 1. When hitting a bug, BE AWARE that you have a tendency to jump to conclusions. Don't!
 2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
@@ -186,7 +205,7 @@ The correct package to install is `openai-agents`
 `uv add openai-agents`  
 `uv add "openai-agents[litellm]"`  
 
-This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Structured Ouputs and Tools. This is the approach to be used. Only use Tools and Structured Outputs where they make sense. Structured Outputs need output_type specified when creating the Agent, and then final_output_as when receiving the object.
+This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Tools. This is the approach to be used. Only use Tools where they make sense. We will not use Structured Outputs due to Bedrock limitations.
 
 BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace(). Check the docs, be up to date.
 
@@ -207,9 +226,9 @@ async def run_agent():
     model = LitellmModel(model="bedrock/...")
     tools = [my_tool]
     with trace("Clear title of trace - use this thoughtfully - only this one argument"):
-        agent = Agent(name="My Agent", instructions="the instructions - import from a separate templates module", model=model, tools=tools, output_type=MyResultObject)
+        agent = Agent(name="My Agent", instructions="the instructions - import from a separate templates module", model=model, tools=tools)
         result = await Runner.run(agent, input="the task prompt - import from a separate templates module as appropriate", max_turns=20)
-    return result.final_output_as(MyResultObject)
+    return result.final_output
 ```
 
 ## Part 5: Database & Shared Infrastructure (DONE)
@@ -287,7 +306,6 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
    - Lambda function with SQS trigger
    - 15 minute timeout, 3GB memory
    - Configurable Bedrock model via `BEDROCK_MODEL_ID` env var
-   - Default: `anthropic.claude-4-sonnet-20250805-v1:0`
    - Automatically tags missing instruments via Python code (not agent tool)
    - Delegates to other agents via Lambda invocations
    - Has S3 Vectors access for market knowledge
@@ -340,7 +358,7 @@ User Request → API → SQS → Planner (Lambda)
                              Job marked complete
 ```
 
-**Simplification Note**: InstrumentTagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable.
+**Simplification Note**: InstrumentTagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable. This is the ONE task that is OK to use Structured Outputs, as it doesn't use any tools.
 
 ### Deliverables
 - Working orchestrator Lambda with SQS trigger

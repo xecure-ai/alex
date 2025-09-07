@@ -4,23 +4,28 @@ Seed data for Alex Financial Planner
 Loads 20+ popular ETF instruments with allocation data
 """
 
-import boto3
+import os
 import json
-from pathlib import Path
+import boto3
 from botocore.exceptions import ClientError
 from src.schemas import InstrumentCreate
 from pydantic import ValidationError
+from dotenv import load_dotenv
 
-# Load config
-config_file = Path('aurora_config.json')
-if not config_file.exists():
-    print("❌ aurora_config.json not found. Run 'uv run test_data_api.py' first")
+# Load environment variables
+load_dotenv(override=True)
+
+# Get config from environment
+cluster_arn = os.environ.get('AURORA_CLUSTER_ARN')
+secret_arn = os.environ.get('AURORA_SECRET_ARN')
+database = os.environ.get('AURORA_DATABASE', 'alex')
+region = os.environ.get('AWS_REGION', 'us-east-1')
+
+if not cluster_arn or not secret_arn:
+    print("❌ Missing AURORA_CLUSTER_ARN or AURORA_SECRET_ARN in .env file")
     exit(1)
 
-with open(config_file) as f:
-    config = json.load(f)
-
-client = boto3.client('rds-data', region_name=config['region'])
+client = boto3.client('rds-data', region_name=region)
 
 # Define popular ETF instruments with realistic allocation data
 # All percentages should sum to 100 for each allocation type
@@ -323,9 +328,9 @@ def insert_instrument(instrument_data):
     
     try:
         response = client.execute_statement(
-            resourceArn=config['cluster_arn'],
-            secretArn=config['secret_arn'],
-            database=config['database'],
+            resourceArn=cluster_arn,
+            secretArn=secret_arn,
+            database=database,
             sql=sql,
             parameters=[
                 {'name': 'symbol', 'value': {'stringValue': validated['symbol']}},
@@ -395,9 +400,9 @@ def main():
     print("\n🔍 Verifying data...")
     try:
         response = client.execute_statement(
-            resourceArn=config['cluster_arn'],
-            secretArn=config['secret_arn'],
-            database=config['database'],
+            resourceArn=cluster_arn,
+            secretArn=secret_arn,
+            database=database,
             sql="SELECT COUNT(*) as count FROM instruments"
         )
         count = response['records'][0][0]['longValue']
@@ -405,9 +410,9 @@ def main():
         
         # Show a sample
         response = client.execute_statement(
-            resourceArn=config['cluster_arn'],
-            secretArn=config['secret_arn'],
-            database=config['database'],
+            resourceArn=cluster_arn,
+            secretArn=secret_arn,
+            database=database,
             sql="SELECT symbol, name FROM instruments ORDER BY symbol LIMIT 5"
         )
         

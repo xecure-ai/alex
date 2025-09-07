@@ -3,16 +3,25 @@
 Simple migration runner that executes statements one by one
 """
 
+import os
 import boto3
-import json
 from pathlib import Path
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
 
-# Load config
-with open('aurora_config.json') as f:
-    config = json.load(f)
+# Load environment variables
+load_dotenv(override=True)
 
-client = boto3.client('rds-data', region_name=config['region'])
+# Get config from environment
+cluster_arn = os.environ.get('AURORA_CLUSTER_ARN')
+secret_arn = os.environ.get('AURORA_SECRET_ARN')
+database = os.environ.get('AURORA_DATABASE', 'alex')
+region = os.environ.get('AWS_REGION', 'us-east-1')
+
+if not cluster_arn or not secret_arn:
+    raise ValueError("Missing AURORA_CLUSTER_ARN or AURORA_SECRET_ARN in environment variables")
+
+client = boto3.client('rds-data', region_name=region)
 
 # Read migration file
 with open('migrations/001_schema.sql') as f:
@@ -75,11 +84,15 @@ statements = [
         job_type VARCHAR(50) NOT NULL,
         status VARCHAR(20) DEFAULT 'pending',
         request_payload JSONB,
-        result_payload JSONB,
+        report_payload JSONB,
+        charts_payload JSONB,
+        retirement_payload JSONB,
+        summary_payload JSONB,
         error_message TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         started_at TIMESTAMP,
-        completed_at TIMESTAMP
+        completed_at TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT NOW()
     )""",
     
     # Indexes
@@ -110,6 +123,9 @@ statements = [
     
     """CREATE TRIGGER update_positions_updated_at BEFORE UPDATE ON positions
         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
+    
+    """CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()""",
 ]
 
 print("🚀 Running database migrations...")
@@ -139,9 +155,9 @@ for i, stmt in enumerate(statements, 1):
     
     try:
         response = client.execute_statement(
-            resourceArn=config['cluster_arn'],
-            secretArn=config['secret_arn'],
-            database=config['database'],
+            resourceArn=cluster_arn,
+            secretArn=secret_arn,
+            database=database,
             sql=stmt
         )
         print(f"    ✅ Success")

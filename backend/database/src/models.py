@@ -227,8 +227,7 @@ class Jobs(BaseModel):
         }
         return self.db.insert(self.table_name, data, returning='id')
     
-    def update_status(self, job_id: str, status: str, 
-                     result_payload: Dict = None, error_message: str = None) -> int:
+    def update_status(self, job_id: str, status: str, error_message: str = None) -> int:
         """Update job status"""
         data = {'status': status}
         
@@ -237,11 +236,29 @@ class Jobs(BaseModel):
         elif status in ['completed', 'failed']:
             data['completed_at'] = datetime.utcnow()
         
-        if result_payload:
-            data['result_payload'] = result_payload
         if error_message:
             data['error_message'] = error_message
         
+        return self.db.update(self.table_name, data, "id = :id::uuid", {'id': job_id})
+    
+    def update_report(self, job_id: str, report_payload: Dict) -> int:
+        """Update job with Reporter agent's analysis"""
+        data = {'report_payload': report_payload}
+        return self.db.update(self.table_name, data, "id = :id::uuid", {'id': job_id})
+    
+    def update_charts(self, job_id: str, charts_payload: Dict) -> int:
+        """Update job with Charter agent's visualization data"""
+        data = {'charts_payload': charts_payload}
+        return self.db.update(self.table_name, data, "id = :id::uuid", {'id': job_id})
+    
+    def update_retirement(self, job_id: str, retirement_payload: Dict) -> int:
+        """Update job with Retirement agent's projections"""
+        data = {'retirement_payload': retirement_payload}
+        return self.db.update(self.table_name, data, "id = :id::uuid", {'id': job_id})
+    
+    def update_summary(self, job_id: str, summary_payload: Dict) -> int:
+        """Update job with Planner's final summary"""
+        data = {'summary_payload': summary_payload}
         return self.db.update(self.table_name, data, "id = :id::uuid", {'id': job_id})
     
     def find_by_user(self, clerk_user_id: str, status: str = None, 
