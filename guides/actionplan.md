@@ -30,6 +30,18 @@ Keep tests clean and simple.
 
 **All agents will use tools only - no structured outputs**
 
+### Important: AWS Region Handling for Multi-Region Services
+
+**Problem Discovered**: When using services in different AWS regions (e.g., Bedrock in us-west-2, Aurora in us-east-1), changing the `AWS_REGION` environment variable affects ALL AWS SDK calls, causing connection failures.
+
+**Solution**: The database client now extracts the region directly from the Aurora cluster ARN, ensuring it always connects to the correct region regardless of environment variable changes. This pattern should be followed for any service that needs a specific region.
+
+**Key Lessons**:
+1. Never assume changing `AWS_REGION` only affects one service
+2. Services should derive their region from their configuration (ARNs) when possible
+3. Avoid manipulating and restoring environment variables as a workaround
+4. Test multi-region scenarios thoroughly
+
 The InstrumentTagger (special case):
 - Called directly via Lambda invocation (not as an agent tool)
 - Runs as a pre-processing step before the main orchestration
@@ -101,17 +113,19 @@ The orchestrator (Planner) will:
 - [x] Test locally with: `uv run test_charter.py`
 - [x] **Bonus improvements**: Simplified to single tool, portfolio analysis provided in context
 
-#### 2.3 Retirement Agent
-- [ ] Remove RetirementAnalysis structured output model
-- [ ] Add `update_job_retirement` tool to write to retirement_payload field
-- [ ] Add `run_monte_carlo` tool for simulations
-- [ ] Modify lambda_handler to:
+#### 2.3 Retirement Agent ✅ COMPLETE
+- [x] Remove RetirementAnalysis structured output model
+- [x] Add `update_job_retirement` tool to write to retirement_payload field
+- [x] Simplified Monte Carlo - runs in background, provided as context (not as tool)
+- [x] Modify lambda_handler to:
   - Accept job_id in event
-  - Load portfolio from database
+  - Load portfolio from database if not provided
+  - Load user preferences from database (not passed separately)
   - Run agent with tools to generate and store projections
   - Return simple success response
-- [ ] Create test_retirement.py with minimal test case
-- [ ] Test locally with: `uv run test_retirement.py`
+- [x] Create test_retirement.py with minimal test case
+- [x] Test locally with: `uv run test_retirement.py`
+- [x] Fixed database region handling to extract from ARN
 
 ### Phase 3: Fix Orchestrator (Planner)
 

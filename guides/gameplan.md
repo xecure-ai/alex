@@ -69,7 +69,7 @@ uv add --editable ../database  # Add shared database package (for services that 
 
 ### Cross-Platform Approach
 - **Always use Python scripts** instead of shell/PowerShell scripts
-- Scripts are called with `uv run script_name.py` (works on Mac/Linux/Windows)
+- IMPORTANT: Scripts are called with `uv run script_name.py` (works on Mac/Linux/Windows) not `uv python run script_name.py`
 - Examples: `package_docker.py` for Lambda packaging using docker so that AWS architecture is supported, `deploy.py` for deployments, `migrate.py` for database migrations
 - This ensures consistent behavior across all operating systems
 

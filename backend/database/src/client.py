@@ -39,11 +39,23 @@ class DataAPIClient:
         self.cluster_arn = cluster_arn or os.environ.get('AURORA_CLUSTER_ARN')
         self.secret_arn = secret_arn or os.environ.get('AURORA_SECRET_ARN')
         self.database = database or os.environ.get('AURORA_DATABASE', 'alex')
-        self.region = region or os.environ.get('AWS_REGION') or os.environ.get('DEFAULT_AWS_REGION', 'us-east-1')
         
         if not self.cluster_arn or not self.secret_arn:
             raise ValueError("Missing required Aurora configuration. "
                            "Set AURORA_CLUSTER_ARN and AURORA_SECRET_ARN environment variables.")
+        
+        # Extract region from cluster ARN (format: arn:aws:rds:REGION:account:cluster:name)
+        # This ensures we always connect to the correct region for the database
+        try:
+            arn_parts = self.cluster_arn.split(':')
+            if len(arn_parts) >= 4:
+                self.region = arn_parts[3]
+            else:
+                # Fallback if ARN format is unexpected
+                self.region = region or os.environ.get('AWS_REGION', 'us-east-1')
+        except Exception:
+            # Fallback if parsing fails
+            self.region = region or os.environ.get('AWS_REGION', 'us-east-1')
         
         self.client = boto3.client('rds-data', region_name=self.region)
     
