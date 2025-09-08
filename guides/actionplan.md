@@ -127,43 +127,57 @@ The orchestrator (Planner) will:
 - [x] Test locally with: `uv run test_retirement.py`
 - [x] Fixed database region handling to extract from ARN
 
-### Phase 3: Fix Orchestrator (Planner)
+### Phase 3: Fix Orchestrator (Planner) ✅ COMPLETE
 
-#### 3.1 Remove Structured Output
-- [ ] Remove AnalysisResult model completely
-- [ ] Update templates.py with clearer autonomy instructions
-- [ ] Keep agent configuration to tools only
+#### 3.1 Remove Structured Output ✅ COMPLETE
+- [x] Remove AnalysisResult model completely
+- [x] Update templates.py with clearer autonomy instructions
+- [x] Keep agent configuration to tools only
 
-#### 3.2 Simplify Tool Functions
-- [ ] Update `invoke_reporter` to pass job_id only
-- [ ] Update `invoke_charter` to pass job_id only  
-- [ ] Update `invoke_retirement` to pass job_id only
-- [ ] Remove hardcoded return values
-- [ ] Add `finalize_job` tool for completion
+#### 3.2 Simplify Tool Functions ✅ COMPLETE
+- [x] Update `invoke_reporter` to pass job_id only
+- [x] Update `invoke_charter` to pass job_id and portfolio_data
+- [x] Update `invoke_retirement` to pass job_id only
+- [x] Remove hardcoded return values
+- [x] Add `finalize_job` tool for completion
 
-#### 3.3 Add Local Testing Support
-- [ ] Add MOCK_LAMBDAS environment variable check
-- [ ] Implement local agent calling when MOCK_LAMBDAS=true
-- [ ] Create test_planner_local.py for isolated testing
+#### 3.3 Add Local Testing Support ✅ COMPLETE
+- [x] Add MOCK_LAMBDAS environment variable check
+- [x] Implement local agent calling when MOCK_LAMBDAS=true
+- [x] Create test_local.py for isolated testing with mocked agents
+- [x] Clean up outdated test files (removed duplicates)
+- [x] Fix AWS region handling with environment variables for LiteLLM
+
+#### 3.4 Add Rate Limit Handling ✅ COMPLETE
+- [x] Add tenacity dependency for exponential backoff
+- [x] Wrap Runner.run with @retry decorator
+- [x] Configure retry for RateLimitError with 5 attempts
+- [x] Add logging for retry attempts
 
 ### Phase 4: Integration Testing
 
 #### 4.1 Local Integration Test
-- [ ] Create test_integration_local.py that:
-  - Creates a test job with sample portfolio
-  - Runs planner with MOCK_LAMBDAS=true
-  - Verifies all agents stored their results
-  - Checks job marked as completed
-- [ ] Run: `uv run test_integration_local.py`
+- [ ] Note: test_local.py already covers this with MOCK_LAMBDAS=true
+- [ ] Verify test_local.py:
+  - Creates test user, account, and positions
+  - Runs planner with mocked agent responses
+  - Verifies job marked as completed
+  - Shows orchestrator makes autonomous decisions
+- [ ] Run: `cd backend/planner && uv run test_local.py`
 
 #### 4.2 Lambda Deployment Test
-- [ ] Package all agents with docker: `uv run package_docker.py`
-- [ ] Deploy to Lambda functions
-- [ ] Create test_integration_lambda.py that:
-  - Sends job to SQS queue
-  - Monitors job status
-  - Retrieves and displays results
-- [ ] Run: `uv run test_integration_lambda.py`
+- [ ] Package each agent with Docker for Lambda:
+  - `cd backend/reporter && uv run package_docker.py`
+  - `cd backend/charter && uv run package_docker.py`
+  - `cd backend/retirement && uv run package_docker.py`
+  - `cd backend/planner && uv run package_docker.py`
+- [ ] Deploy packaged zips to Lambda functions
+- [ ] Use test_integration.py (already exists) that:
+  - Creates test job in database
+  - Sends job_id to SQS queue
+  - Monitors job status until completion
+  - Displays formatted results
+- [ ] Run: `cd backend/planner && uv run test_integration.py`
 
 ### Phase 5: Terraform & Infrastructure
 
@@ -172,10 +186,16 @@ The orchestrator (Planner) will:
 - [ ] Ensure all Lambda functions have correct:
   - Memory (1024MB for agents, 2048MB for planner)
   - Timeout (60s for agents, 300s for planner)
-  - Environment variables (BEDROCK_MODEL_ID, etc.)
+  - Environment variables:
+    - BEDROCK_MODEL_ID (without us. prefix)
+    - BEDROCK_REGION (e.g., us-west-2)
+    - DATABASE_CLUSTER_ARN
+    - DATABASE_SECRET_ARN
+    - DATABASE_NAME
   - IAM permissions (Bedrock, Database, Lambda invoke)
 - [ ] Add SQS queue with DLQ
 - [ ] Add EventBridge rule for SQS trigger
+- [ ] Note: tenacity package must be included in Lambda layers
 
 #### 5.2 Deploy Infrastructure
 - [ ] Run: `cd terraform/6_agents && terraform init`
@@ -186,12 +206,13 @@ The orchestrator (Planner) will:
 ### Phase 6: End-to-End Testing
 
 #### 6.1 Full System Test
-- [ ] Create run_full_test.py that:
-  - Creates realistic test portfolio
-  - Submits to SQS
-  - Polls for completion
-  - Displays formatted results
-- [ ] Run: `uv run run_full_test.py`
+- [ ] Note: test_integration.py already provides this functionality
+- [ ] Verify test_integration.py:
+  - Creates test job for 'test_user' 
+  - Submits to SQS queue
+  - Polls for completion (3 minute timeout)
+  - Displays formatted results with icons
+- [ ] Run: `cd backend/planner && uv run test_integration.py`
 - [ ] Verify:
   - Report generates correctly
   - Charts data is valid JSON
@@ -243,16 +264,19 @@ cd backend/charter && uv run test_charter.py
 cd backend/retirement && uv run test_retirement.py
 
 # Planner test (local with mocked agents)
-cd backend/planner && uv run test_planner_local.py
+cd backend/planner && uv run test_local.py
 
-# Integration test (local)
-cd backend/planner && uv run test_integration_local.py
+# Package Lambdas for deployment
+cd backend/reporter && uv run package_docker.py
+cd backend/charter && uv run package_docker.py
+cd backend/retirement && uv run package_docker.py
+cd backend/planner && uv run package_docker.py
 
-# Deploy all Lambdas
-cd backend && uv run deploy_all_lambdas.py
+# Integration test (with real Lambdas via SQS)
+cd backend/planner && uv run test_integration.py
 
-# Full system test (with real Lambdas)
-cd backend/planner && uv run run_full_test.py
+# Check job status
+cd backend/planner && uv run check_jobs.py
 
 # Terraform commands
 cd terraform/6_agents

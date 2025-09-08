@@ -1,204 +1,80 @@
 #!/usr/bin/env python3
 """
-Integration test for the complete agent orchestration.
-This script submits a test job to SQS and monitors its completion.
+Run a full end-to-end test of the Alex agent orchestration.
+This creates a test job and monitors it through completion.
 
 Usage:
     cd backend/planner
-    uv run test_integration.py
+    uv run run_full_test.py
 """
 
-import boto3
+import os
 import json
+import boto3
 import time
-import sys
-from pathlib import Path
+import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from dotenv import load_dotenv
 
-# Add parent directory to path for database imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Load environment
+load_dotenv(override=True)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Import database
 from src.models import Database
 
-def create_test_job(db: Database, user_id: str) -> str:
-    """
-    Create a test job in the database.
-    
-    Args:
-        db: Database connection
-        user_id: User ID for the job
-        
-    Returns:
-        Job ID
-    """
-    job = db.jobs.create_job(
-        clerk_user_id=user_id,
-        job_type="portfolio_analysis",
-        request_payload={
-            'analysis_type': 'full',
-            'include_retirement': True,
-            'test_job': True
-        }
-    )
-    return job
+db = Database()
+sqs = boto3.client('sqs')
+sts = boto3.client('sts')
 
-def submit_job_to_sqs(job_id: str, queue_url: str) -> bool:
-    """
-    Submit a job to the SQS queue.
-    
-    Args:
-        job_id: Job ID to process
-        queue_url: SQS queue URL
-        
-    Returns:
-        True if successful
-    """
-    sqs_client = boto3.client('sqs')
-    
-    try:
-        response = sqs_client.send_message(
-            QueueUrl=queue_url,
-            MessageBody=json.dumps({
-                'job_id': job_id,
-                'timestamp': datetime.now().isoformat()
-            })
-        )
-        print(f"✓ Message sent to SQS: {response['MessageId']}")
-        return True
-    except Exception as e:
-        print(f"✗ Failed to send message: {e}")
-        return False
+# Get configuration
+QUEUE_NAME = os.getenv('SQS_QUEUE_NAME', 'alex-analysis-jobs')
 
-def monitor_job_status(db: Database, job_id: str, timeout: int = 300) -> Dict[str, Any]:
-    """
-    Monitor job status until completion or timeout.
-    
-    Args:
-        db: Database connection
-        job_id: Job ID to monitor
-        timeout: Maximum seconds to wait
-        
-    Returns:
-        Final job status
-    """
-    start_time = time.time()
-    last_status = None
-    
-    print(f"⏳ Monitoring job {job_id}...")
-    print("   Status updates:")
-    
-    while time.time() - start_time < timeout:
-        job = db.jobs.find_by_id(job_id)
-        
-        if not job:
-            print(f"   ✗ Job {job_id} not found")
-            return None
-        
-        status = job['status']
-        
-        # Print status change
-        if status != last_status:
-            elapsed = int(time.time() - start_time)
-            print(f"   [{elapsed:3d}s] {last_status or 'pending'} → {status}")
-            last_status = status
-        
-        # Check if job is complete
-        if status in ['completed', 'failed']:
-            return job
-        
-        # Wait before next check
-        time.sleep(5)
-    
-    print(f"   ⏱️  Timeout after {timeout} seconds")
-    return job
 
-def display_job_results(job: Dict[str, Any]):
-    """Display job results in a formatted way."""
-    print()
-    print("=" * 60)
-    print("📊 Job Results")
-    print("=" * 60)
+def get_queue_url():
+    """Get the SQS queue URL."""
+    response = sqs.list_queues(QueueNamePrefix=QUEUE_NAME)
+    queues = response.get('QueueUrls', [])
     
-    print(f"Job ID: {job['id']}")
-    print(f"Status: {job['status']}")
-    print(f"Created: {job['created_at']}")
-    print(f"Updated: {job['updated_at']}")
+    for queue_url in queues:
+        if QUEUE_NAME in queue_url:
+            return queue_url
     
-    if job['status'] == 'completed':
-        print()
-        print("✅ Analysis completed successfully!")
-        
-        if job.get('result_payload'):
-            result = job['result_payload']
-            
-            if result.get('summary'):
-                print()
-                print("📝 Summary:")
-                print(f"   {result['summary']}")
-            
-            if result.get('key_findings'):
-                print()
-                print("🔍 Key Findings:")
-                for finding in result['key_findings']:
-                    print(f"   • {finding}")
-            
-            if result.get('recommendations'):
-                print()
-                print("💡 Recommendations:")
-                for rec in result['recommendations']:
-                    print(f"   • {rec}")
-    
-    elif job['status'] == 'failed':
-        print()
-        print("❌ Job failed!")
-        if job.get('error_message'):
-            print(f"Error: {job['error_message']}")
+    raise ValueError(f"Queue {QUEUE_NAME} not found")
+
 
 def main():
-    """Run the integration test."""
-    print("🧪 Alex Agent Orchestration Integration Test")
-    print("=" * 60)
+    """Run the full test."""
+    print("=" * 70)
+    print("🎯 Alex Agent Orchestration - Full Test")
+    print("=" * 70)
     
-    # Get AWS info
-    try:
-        sts_client = boto3.client('sts')
-        account_id = sts_client.get_caller_identity()['Account']
-        region = boto3.Session().region_name
-        print(f"AWS Account: {account_id}")
-        print(f"AWS Region: {region}")
-    except Exception as e:
-        print(f"❌ Failed to get AWS account info: {e}")
-        sys.exit(1)
-    
-    # Get SQS queue URL
-    queue_name = 'alex-analysis-jobs'
-    queue_url = f"https://sqs.{region}.amazonaws.com/{account_id}/{queue_name}"
-    print(f"SQS Queue: {queue_name}")
-    
-    # Initialize database
+    # Display AWS info
+    account_id = sts.get_caller_identity()['Account']
+    region = boto3.Session().region_name
+    print(f"AWS Account: {account_id}")
+    print(f"AWS Region: {region}")
+    print(f"Bedrock Region: {os.getenv('BEDROCK_REGION', 'us-west-2')}")
+    print(f"Bedrock Model: {os.getenv('BEDROCK_MODEL_ID', 'Not set')}")
     print()
-    print("🔌 Connecting to database...")
-    db = Database()
     
     # Check for test user
-    test_user_id = 'test_user_001'
+    print("📊 Checking test data...")
+    test_user_id = 'test_user'
     user = db.users.find_by_clerk_id(test_user_id)
     
     if not user:
-        print(f"❌ Test user '{test_user_id}' not found")
-        print("   Run: cd ../database && uv run reset_db.py --with-test-data")
-        sys.exit(1)
+        print("❌ Test user not found. Please run database setup first:")
+        print("   cd ../database && uv run reset_db.py --with-test-data")
+        return 1
     
-    print(f"✓ Found test user: {user.get('display_name', test_user_id)}")
+    print(f"✓ Test user: {user.get('display_name', test_user_id)}")
     
-    # Check user has portfolio data
+    # Check accounts and positions
     accounts = db.accounts.find_by_user(test_user_id)
-    if not accounts:
-        print("❌ Test user has no accounts")
-        print("   Run: cd ../database && uv run reset_db.py --with-test-data")
-        sys.exit(1)
-    
     total_positions = 0
     for account in accounts:
         positions = db.positions.find_by_account(account['id'])
@@ -207,56 +83,122 @@ def main():
     print(f"✓ Portfolio: {len(accounts)} accounts, {total_positions} positions")
     
     # Create test job
-    print()
-    print("📝 Creating test job...")
-    job_id = create_test_job(db, test_user_id)
+    print("\n🚀 Creating test job...")
+    job_data = {
+        'clerk_user_id': test_user_id,
+        'job_type': 'portfolio_analysis',
+        'status': 'pending',
+        'request_payload': {
+            'analysis_type': 'full',
+            'requested_at': datetime.utcnow().isoformat(),
+            'test_run': True
+        }
+    }
+    
+    job = db.jobs.create(job_data)
+    job_id = job['id']
     print(f"✓ Created job: {job_id}")
     
-    # Submit to SQS
-    print()
-    print("📤 Submitting job to SQS...")
-    if not submit_job_to_sqs(job_id, queue_url):
-        sys.exit(1)
+    # Send to SQS
+    print("\n📤 Sending job to SQS queue...")
+    try:
+        queue_url = get_queue_url()
+        response = sqs.send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps({'job_id': job_id})
+        )
+        print(f"✓ Message sent: {response['MessageId']}")
+    except Exception as e:
+        print(f"❌ Failed to send to SQS: {e}")
+        return 1
     
-    # Monitor job status
-    print()
-    final_job = monitor_job_status(db, job_id, timeout=300)
+    # Monitor job
+    print("\n⏳ Monitoring job progress (timeout: 3 minutes)...")
+    print("-" * 50)
     
-    if final_job:
-        display_job_results(final_job)
+    start_time = time.time()
+    timeout = 180  # 3 minutes
+    last_status = None
+    
+    while time.time() - start_time < timeout:
+        job = db.jobs.find_by_id(job_id)
+        status = job['status']
         
-        # Check agent logs
-        print()
-        print("📜 Agent Execution Logs:")
-        logs = db.agent_logs.find_by_job(job_id)
-        for log in logs:
-            print(f"   • {log['agent_name']}: {log['status']}")
-            if log.get('langfuse_trace_id'):
-                print(f"     LangFuse: {log['langfuse_trace_id']}")
+        if status != last_status:
+            elapsed = int(time.time() - start_time)
+            print(f"[{elapsed:3d}s] Status: {status}")
+            last_status = status
+        
+        if status == 'completed':
+            print("-" * 50)
+            print("✅ Job completed successfully!")
+            break
+        elif status == 'failed':
+            print("-" * 50)
+            print(f"❌ Job failed: {job.get('error_message', 'Unknown error')}")
+            return 1
+        
+        time.sleep(2)
     else:
-        print("❌ Job monitoring failed")
-        sys.exit(1)
+        print("-" * 50)
+        print("❌ Job timed out after 3 minutes")
+        return 1
     
-    # Summary
-    print()
-    print("=" * 60)
-    if final_job and final_job['status'] == 'completed':
-        print("✅ Integration test PASSED!")
-        print()
-        print("The agent orchestration is working correctly:")
-        print("  1. Job created in database ✓")
-        print("  2. SQS message sent ✓")
-        print("  3. Planner Lambda triggered ✓")
-        print("  4. Agents coordinated successfully ✓")
-        print("  5. Results stored in database ✓")
-    else:
-        print("❌ Integration test FAILED")
-        print()
-        print("Troubleshooting:")
-        print("  1. Check CloudWatch logs for alex-planner")
-        print("  2. Check SQS dead letter queue")
-        print("  3. Verify Lambda functions are deployed")
-        print("  4. Check IAM permissions")
+    # Display results
+    print("\n" + "=" * 70)
+    print("📋 ANALYSIS RESULTS")
+    print("=" * 70)
+    
+    # Orchestrator summary
+    if job.get('summary_payload'):
+        print("\n🎯 Orchestrator Summary:")
+        summary = job['summary_payload']
+        print(f"Summary: {summary.get('summary', 'N/A')}")
+        
+        if summary.get('key_findings'):
+            print("\nKey Findings:")
+            for finding in summary['key_findings']:
+                print(f"  • {finding}")
+        
+        if summary.get('recommendations'):
+            print("\nRecommendations:")
+            for rec in summary['recommendations']:
+                print(f"  • {rec}")
+    
+    # Report analysis
+    if job.get('report_payload'):
+        print("\n📝 Portfolio Report:")
+        report = job['report_payload']
+        analysis = report.get('analysis', '')
+        print(f"  Length: {len(analysis)} characters")
+        if analysis:
+            preview = analysis[:300]
+            if len(analysis) > 300:
+                preview += "..."
+            print(f"  Preview: {preview}")
+    
+    # Charts
+    if job.get('charts_payload'):
+        print(f"\n📊 Visualizations: {len(job['charts_payload'])} charts")
+        for chart_key, chart_data in job['charts_payload'].items():
+            print(f"  • {chart_key}: {chart_data.get('title', 'Untitled')}")
+            if chart_data.get('data'):
+                print(f"    Data points: {len(chart_data['data'])}")
+    
+    # Retirement projections
+    if job.get('retirement_payload'):
+        print("\n🎯 Retirement Analysis:")
+        ret = job['retirement_payload']
+        print(f"  Success Rate: {ret.get('success_rate', 'N/A')}%")
+        print(f"  Projected Value: ${ret.get('projected_value', 0):,.0f}")
+        print(f"  Years to Retirement: {ret.get('years_to_retirement', 'N/A')}")
+    
+    print("\n" + "=" * 70)
+    print("✅ Full test completed successfully!")
+    print("=" * 70)
+    
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    exit(main())
