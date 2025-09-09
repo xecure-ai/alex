@@ -1,5 +1,19 @@
 # Action Plan - Part 6 Agent Orchestra Fix
 
+## Current Status (Last Updated: 2025-09-08)
+
+**Phase 3**: ✅ COMPLETE - All orchestrator fixes done  
+**Phase 4**: 🔧 IN PROGRESS - Package scripts fixed, packaging blocked by network  
+**Phase 5**: ⏳ TODO - Terraform infrastructure deployment  
+**Phase 6**: ⏳ TODO - Integration testing  
+**Phase 7**: ⏳ TODO - Documentation & cleanup  
+
+### Next Steps When Network Available:
+1. Complete Phase 4.3: Run the 5 packaging commands to create Lambda deployment zips
+2. Complete Phase 5.1-5.2: Deploy Terraform infrastructure to create Lambda functions
+3. Complete Phase 5.3: Deploy Lambda function code using deploy_all_lambdas.py
+4. Complete Phase 6: Run integration tests to verify everything works
+
 ## Problem Statement
 
 The OpenAI Agents SDK (formerly Swarm) currently doesn't support using both tools AND structured outputs simultaneously in a single agent. When we configure an agent with both:
@@ -154,32 +168,42 @@ The orchestrator (Planner) will:
 - [x] Configure retry for RateLimitError with 5 attempts
 - [x] Add logging for retry attempts
 
-### Phase 4: Integration Testing
+### Phase 4: Lambda Packaging and Deployment
 
-#### 4.1 Local Integration Test
-- [ ] Note: test_local.py already covers this with MOCK_LAMBDAS=true
-- [ ] Verify test_local.py:
-  - Creates test user, account, and positions
-  - Runs planner with mocked agent responses
-  - Verifies job marked as completed
-  - Shows orchestrator makes autonomous decisions
-- [ ] Run: `cd backend/planner && uv run test_local.py`
+#### 4.1 Verify Local Testing ✅ COMPLETE
+- [x] test_local.py already implemented and tested
+- [x] Confirms orchestrator works with mocked agents
+- [x] Shows autonomous decision making
 
-#### 4.2 Lambda Deployment Test
-- [ ] Package each agent with Docker for Lambda:
+#### 4.2 Fix Package Scripts ✅ COMPLETE
+- [x] Fixed missing tenacity dependency in planner/package_docker.py
+- [x] Fixed missing agent.py file in reporter/package_docker.py  
+- [x] Fixed missing database package installation in charter/package_docker.py
+- [x] Fixed missing database package installation in retirement/package_docker.py
+- [x] All package_docker.py scripts now properly configured
+
+#### 4.3 Final review, cleanup and minor refactor for agent consistency
+- [ ] Read and review the contents of the backend subdirectories: planner, reporter, retirement, tagger, charter
+- [ ] Make minor refinements to make them consistent and simple:
+  - Ensure agent.py and lambda_handler.py are separate for all 5 agents
+  - Ensure consistent use of environment variables, separately for Bedrock model and database access
+  - Ensure everything will work locally (dotenv) and also when deployed remotely
+  - Ensure consistent logging in all - just the right amount for important events, with consistent identification of the Agent doing the logging
+  - Ensure tenacity is used consistently to retry rate limit errors with LLMs in a simple, reasonable way, with logging
+  - Ensure any redundant code is removed; ensure methods are clean and simple; manage exceptions but don't go overboard
+- [ ] Update package_docker.py scripts as needed to ensure all are consistent in style, simple, clear, package for Lambda boxes, use uv, and include all necessary files
+- [ ] Re-run local tests for each agent to ensure no regression. Carefully look at every log message and ensure everything runs error free
+
+#### 4.4 Package Lambda Functions
+- [ ] Package each agent with Docker (for correct architecture):
+  - `cd backend/tagger && uv run package_docker.py`
   - `cd backend/reporter && uv run package_docker.py`
   - `cd backend/charter && uv run package_docker.py`
   - `cd backend/retirement && uv run package_docker.py`
   - `cd backend/planner && uv run package_docker.py`
-- [ ] Deploy packaged zips to Lambda functions
-- [ ] Use test_integration.py (already exists) that:
-  - Creates test job in database
-  - Sends job_id to SQS queue
-  - Monitors job status until completion
-  - Displays formatted results
-- [ ] Run: `cd backend/planner && uv run test_integration.py`
+- [ ] Verify all zip files created (~50-100MB each)
 
-### Phase 5: Terraform & Infrastructure
+### Phase 5: Terraform Infrastructure
 
 #### 5.1 Update Terraform Configuration
 - [ ] Review terraform/6_agents/main.tf
@@ -203,23 +227,44 @@ The orchestrator (Planner) will:
 - [ ] Run: `terraform apply`
 - [ ] Verify all resources created successfully
 
-### Phase 6: End-to-End Testing
+#### 5.3 Deploy Lambda Functions
+- [ ] Review and update deploy_all_lambdas.py script:
+  - Check it references correct Lambda function names
+  - Verify it looks for correct zip file names
+  - Ensure it handles all 5 agents (tagger, reporter, charter, retirement, planner)
+  - Update any outdated boto3 calls or Python patterns
+- [ ] Deploy all Lambda functions:
+  - `cd backend && uv run deploy_all_lambdas.py`
+- [ ] This script will:
+  - Create S3 bucket if needed (alex-lambda-packages-{account_id})
+  - Upload all packages to S3
+  - Update Lambda function code from the zip files
+- [ ] Verify all 5 Lambda functions updated in AWS Console
+- [ ] Check CloudWatch logs for any deployment errors
 
-#### 6.1 Full System Test
-- [ ] Note: test_integration.py already provides this functionality
-- [ ] Verify test_integration.py:
-  - Creates test job for 'test_user' 
-  - Submits to SQS queue
-  - Polls for completion (3 minute timeout)
-  - Displays formatted results with icons
-- [ ] Run: `cd backend/planner && uv run test_integration.py`
+### Phase 6: Integration Testing
+
+#### 6.1 SQS Integration Test
+- [ ] Prerequisites: Terraform must be applied (Phase 5 complete)
+- [ ] Run test_integration.py:
+  - `cd backend/planner && uv run test_integration.py`
+- [ ] This will:
+  - Create test job for 'test_user' in database
+  - Send job_id to SQS queue (created by Terraform)
+  - Trigger Lambda via SQS event
+  - Poll for completion (3 minute timeout)
+  - Display formatted results
+- [ ] Verify all agents were invoked and results stored
 - [ ] Verify:
   - Report generates correctly
   - Charts data is valid JSON
   - Retirement projections calculate
   - Job completes successfully
 
-#### 6.2 Autonomy Test
+#### 6.2 Full End-to-End Tests
+- [ ] Run additional test scenarios to verify agent autonomy
+
+#### 6.3 Autonomy Test
 - [ ] Test with simple portfolio (1 position)
   - Verify planner skips charter
 - [ ] Test with complex portfolio (10+ positions)
@@ -227,7 +272,7 @@ The orchestrator (Planner) will:
 - [ ] Test with no retirement goals
   - Verify planner skips retirement agent
 
-#### 6.3 Tagger Workflow Test
+#### 6.4 Tagger Workflow Test
 - [ ] Test with portfolio containing unknown instruments (e.g., new ETF)
   - Verify tagger is called automatically
   - Verify allocations are populated in database

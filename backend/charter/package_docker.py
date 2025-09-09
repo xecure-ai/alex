@@ -51,10 +51,11 @@ python-dotenv
             "docker", "run", "--rm",
             "--platform", "linux/amd64",
             "-v", f"{temp_path}:/build",
+            "-v", f"{backend_dir}/database:/database",
             "--entrypoint", "/bin/bash",
             "public.ecr.aws/lambda/python:3.12",
             "-c",
-            """cd /build && pip install --target ./package --platform manylinux2014_x86_64 --only-binary=:all: -r requirements.txt"""
+            """cd /build && pip install --target ./package --platform manylinux2014_x86_64 --only-binary=:all: -r requirements.txt && pip install --target ./package --no-deps /database"""
         ]
         
         run_command(docker_cmd)
