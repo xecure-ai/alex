@@ -186,10 +186,7 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], db=None):
     """Create the charter agent with tools and context."""
 
     # Get model configuration
-    model_id = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-7-sonnet-20250219-v1:0")
-    # Add us. prefix for inference profile if not already present
-    if not model_id.startswith("us.") and "anthropic.claude" in model_id:
-        model_id = f"us.{model_id}"
+    model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
     # Set region for LiteLLM Bedrock calls
     bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
     os.environ["AWS_REGION_NAME"] = bedrock_region

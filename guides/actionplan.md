@@ -8,6 +8,12 @@ The OpenAI Agents SDK (formerly Swarm) currently doesn't support using both tool
 
 The agent fails with errors, making our orchestrator pattern unusable in its current form.
 
+## Crucial - repeated mistakes
+
+You frequently are in the wrong directory when you run commands. DO NOT cd to a relative path because you OFTEN get this wrong. You MUST use absolute paths as you work.
+You frequently do "python xxx" instead of "uv run xxx". ALWAYS use uv.
+The current date is September 2025.
+
 ## Objectives
 
 ### Core Requirements
@@ -60,7 +66,6 @@ sagemaker = boto3.client('sagemaker-runtime', region_name=default_region)
 - Never set `AWS_REGION` or `AWS_DEFAULT_REGION` as these affect ALL boto3 calls
 - Always use `AWS_REGION_NAME` for LiteLLM (it's specific to that library)
 - Always pass `region_name` explicitly to boto3 clients for non-Bedrock services
-- The database client smartly extracts region from the cluster ARN as a fallback - this is too complex, let's remove this and trust DEFAULT_AWS_REGION
 
 The InstrumentTagger (special case):
 - Called directly via Lambda invocation (not as an agent tool)
@@ -69,10 +74,10 @@ The InstrumentTagger (special case):
 - Updates the database with missing instrument allocations
 
 Each specialized agent (Reporter, Charter, Retirement) will:
-- Use **tools only** to generate and store their analysis
-- Have an `update_job_results` tool to write directly to the database
+- Use **tools not structured outputs**
+- Charter will also use a tool to write to the database; Reporter and Retirement will return markdown as final output to be saved
 - Generate analysis through natural language processing (no structured output models)
-- Return simple success confirmations to the orchestrator
+- The lambda function returns simple success confirmations to the orchestrator
 
 The orchestrator (Planner) will:
 - Pre-process with InstrumentTagger (non-autonomous, always runs if needed)
@@ -119,6 +124,13 @@ async def main():
     print(result.final_output)  
     # The user John is 47 years old.
     ```
+
+### Model decision
+
+We have decided to use this model, set as BEDROCK_MODEL_ID in the .env file:
+BEDROCK_MODEL_ID=openai.gpt-oss-120b-1:0
+BEDROCK_REGION=us-west-2
+I have access to this in us-west-2, and it reliably calls tools and has high rate limits.
 
 ### Database Package Architecture
 
@@ -269,7 +281,7 @@ Do NOT use:
 - [x] Fixed missing database package installation in retirement/package_docker.py
 - [x] All package_docker.py scripts now properly configured
 
-#### 4.3 Final review, cleanup and minor refactor for agent consistency
+#### 4.3 Final checks
 - [ ] Read and review the contents of the backend subdirectories: planner, reporter, retirement, tagger, charter
 - [ ] Check that they are consistent and simple:
   - Check that agent.py and lambda_handler.py are separate for all 5 agents
@@ -280,8 +292,8 @@ Do NOT use:
   - Check tenacity is used consistently to retry rate limit errors with LLMs in a simple, reasonable way, with logging
   - Check any redundant code is removed; ensure methods are clean and simple; manage exceptions but don't go overboard
   - Check that methods / functions are short, clean, with docstrings but not overly commented otherwise
-  - Check that the approach with RunContextWrapper is clean, correct, and used consistently for all agents (except tagger, which doesn't need it)
-  - Check that each agent directory has a test_simple.py for local testing, and a test_full.py for testing after lambda deployment
+  - Check that the approach with RunContextWrapper is clean, correct, and used consistently for all agents that need it (use tools that need job id)
+  - Check that each agent directory has a test_simple.py for local testing, and a test_full.py for testing after lambda deployment, and NO OTHER spurious testing
   - Check that the backend parent directory also has a test_simple.py for local testing and a test_full.py
 - [ ] Check package_docker.py scripts are consistent in style, simple, clear, package for Lambda boxes, use uv, and include all necessary files
 - [ ] Re-run test_simple tests for each agent individually to ensure no regression. Carefully look at every log message and ensure everything runs error free - do NOT assume that an error is "expected" - you've done this before and received a formal performance warning
