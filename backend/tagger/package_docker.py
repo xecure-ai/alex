@@ -1,164 +1,134 @@
 #!/usr/bin/env python3
 """
-Package the InstrumentTagger for Lambda deployment using Docker.
-This ensures binary compatibility with Lambda's Linux x86_64 runtime.
+Package the Tagger Lambda function using Docker for AWS compatibility.
 """
 
 import os
-import shutil
-import zipfile
-import subprocess
 import sys
+import shutil
+import tempfile
+import subprocess
+import argparse
 from pathlib import Path
 
-
-def main():
-    print("=" * 60)
-    print("InstrumentTagger Lambda Packaging (Docker)")
-    print("=" * 60)
-    
-    # Check if Docker is available
-    try:
-        subprocess.run(["docker", "--version"], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ Docker is not installed or not available")
-        print("   Please install Docker to use this packaging script")
+def run_command(cmd, cwd=None):
+    """Run a command and capture output."""
+    print(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Error: {result.stderr}")
         sys.exit(1)
-    
-    print("\n📦 Creating Lambda deployment package...")
+    return result.stdout
 
-    # Clean up
-    package_dir = Path("lambda-package")
-    zip_file = Path("tagger_lambda.zip")
+def package_lambda():
+    """Package the Lambda function with all dependencies."""
     
-    if package_dir.exists():
-        shutil.rmtree(package_dir)
-    if zip_file.exists():
-        os.remove(zip_file)
-
-    # Create package directory
-    package_dir.mkdir()
-
-    # Create requirements.txt for Docker pip install
-    print("\n📝 Creating requirements.txt...")
-    requirements = [
-        "boto3>=1.40.9",
-        "pydantic>=2.11.7", 
-        "python-dotenv>=1.1.1",
-        "openai-agents[litellm]>=0.2.6"
-    ]
+    # Get the directory containing this script
+    tagger_dir = Path(__file__).parent.absolute()
+    backend_dir = tagger_dir.parent
     
-    with open("requirements_docker.txt", "w") as f:
-        f.write("\n".join(requirements))
-
-    # Install dependencies using Docker with Lambda runtime image
-    print("\n🐳 Installing dependencies using Lambda runtime container...")
-    print("   Using: public.ecr.aws/lambda/python:3.12")
-    print("   Platform: linux/amd64 (x86_64)")
-    
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            f"{os.getcwd()}:/var/task",
-            "-v",
-            f"{os.path.abspath('../database')}:/var/database",
-            "--platform",
-            "linux/amd64",  # Force x86_64 architecture for Lambda
-            "--entrypoint",
-            "",  # Override the default entrypoint
+    # Create a temporary directory for packaging
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        package_dir = temp_path / "package"
+        package_dir.mkdir()
+        
+        print("Creating Lambda package using Docker...")
+        
+        # Create requirements file with all dependencies
+        requirements = """
+openai-agents[litellm]
+boto3
+pydantic
+python-dotenv
+tenacity
+"""
+        
+        req_file = temp_path / "requirements.txt"
+        req_file.write_text(requirements.strip())
+        
+        # Use Docker to install dependencies for Lambda's architecture
+        docker_cmd = [
+            "docker", "run", "--rm",
+            "--platform", "linux/amd64",
+            "-v", f"{temp_path}:/build",
+            "-v", f"{backend_dir}/database:/database",
+            "--entrypoint", "/bin/bash",
             "public.ecr.aws/lambda/python:3.12",
-            "/bin/sh",
             "-c",
-            # Install requirements and the database package
-            "pip install --target /var/task/lambda-package "
-            "-r /var/task/requirements_docker.txt "
-            "--only-binary=:all: --upgrade && "
-            "pip install --target /var/task/lambda-package /var/database"
-        ],
-        check=True,
-    )
+            """cd /build && pip install --target ./package --platform manylinux2014_x86_64 --only-binary=:all: -r requirements.txt && pip install --target ./package --no-deps /database"""
+        ]
+        
+        run_command(docker_cmd)
+        
+        # Copy Lambda handler, agent, and templates
+        shutil.copy(tagger_dir / "lambda_handler.py", package_dir)
+        shutil.copy(tagger_dir / "agent.py", package_dir)
+        shutil.copy(tagger_dir / "templates.py", package_dir)
+        
+        # Create the zip file
+        zip_path = tagger_dir / "tagger_lambda.zip"
+        
+        # Remove old zip if it exists
+        if zip_path.exists():
+            zip_path.unlink()
+        
+        # Create new zip
+        print(f"Creating zip file: {zip_path}")
+        run_command(
+            ["zip", "-r", str(zip_path), "."],
+            cwd=str(package_dir)
+        )
+        
+        # Get file size
+        size_mb = zip_path.stat().st_size / (1024 * 1024)
+        print(f"Package created: {zip_path} ({size_mb:.1f} MB)")
+        
+        return zip_path
 
-    # Copy application files
-    print("\n📄 Copying application files...")
-    app_files = [
-        "lambda_handler.py",
-        "agent.py", 
-        "templates.py"
-    ]
-    
-    for file in app_files:
-        if Path(file).exists():
-            shutil.copy2(file, package_dir)
-            print(f"   ✓ {file}")
-        else:
-            print(f"   ⚠ {file} not found")
-
-    # Create zip
-    print("\n🗜️  Creating zip file...")
-    with zipfile.ZipFile(zip_file, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(package_dir):
-            # Skip __pycache__ and other unnecessary directories
-            dirs[:] = [d for d in dirs if d not in ['__pycache__', '.pytest_cache', 'tests']]
-            
-            for file in files:
-                # Skip .pyc and other unnecessary files
-                if file.endswith(('.pyc', '.pyo', '.pyi')):
-                    continue
-                    
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, package_dir)
-                zipf.write(file_path, arcname)
-
-    # Show package size
-    size_mb = zip_file.stat().st_size / (1024 * 1024)
-    print(f"\n✅ Created {zip_file} ({size_mb:.2f} MB)")
-    
-    # Clean up temp files
-    os.remove("requirements_docker.txt")
-    shutil.rmtree(package_dir)
-    
-    # Deploy if requested
-    if "--deploy" in sys.argv:
-        print("\n🚀 Deploying to Lambda...")
-        deploy_to_lambda(str(zip_file))
-    else:
-        print("\n📝 Next steps:")
-        print(f"   1. Deploy: uv run package_docker.py --deploy")
-        print(f"   2. Test: uv run test_lambda.py")
-
-
-def deploy_to_lambda(zip_path):
-    """Deploy the package to Lambda."""
+def deploy_lambda(zip_path):
+    """Deploy the Lambda function to AWS."""
     import boto3
     
     lambda_client = boto3.client('lambda')
     function_name = 'alex-tagger'
     
+    print(f"Deploying to Lambda function: {function_name}")
+    
     try:
+        # Try to update existing function
         with open(zip_path, 'rb') as f:
             response = lambda_client.update_function_code(
                 FunctionName=function_name,
                 ZipFile=f.read()
             )
-        
-        print(f"   ✅ Function updated: {function_name}")
-        print(f"      Last modified: {response['LastModified']}")
-        print(f"      Code size: {response['CodeSize'] / (1024*1024):.2f} MB")
-        
-        # Wait for update to complete
-        print("\n   ⏳ Waiting for function to be ready...")
-        import time
-        time.sleep(10)
-        
-        print("\n   ✅ Deployment complete!")
-        print("      Test with: uv run test_lambda.py")
-        
+        print(f"Successfully updated Lambda function: {function_name}")
+        print(f"Function ARN: {response['FunctionArn']}")
+    except lambda_client.exceptions.ResourceNotFoundException:
+        print(f"Lambda function {function_name} not found. Please deploy via Terraform first.")
+        sys.exit(1)
     except Exception as e:
-        print(f"   ❌ Deployment failed: {e}")
+        print(f"Error deploying Lambda: {e}")
+        sys.exit(1)
 
+def main():
+    parser = argparse.ArgumentParser(description='Package Tagger Lambda for deployment')
+    parser.add_argument('--deploy', action='store_true', help='Deploy to AWS after packaging')
+    args = parser.parse_args()
+    
+    # Check if Docker is available
+    try:
+        run_command(["docker", "--version"])
+    except FileNotFoundError:
+        print("Error: Docker is not installed or not in PATH")
+        sys.exit(1)
+    
+    # Package the Lambda
+    zip_path = package_lambda()
+    
+    # Deploy if requested
+    if args.deploy:
+        deploy_lambda(zip_path)
 
 if __name__ == "__main__":
     main()

@@ -41,6 +41,7 @@ openai-agents[litellm]
 boto3
 pydantic
 python-dotenv
+tenacity
 """
         
         req_file = temp_path / "requirements.txt"
@@ -60,8 +61,9 @@ python-dotenv
         
         run_command(docker_cmd)
         
-        # Copy Lambda handler and templates
+        # Copy Lambda handler, agent, and templates
         shutil.copy(charter_dir / "lambda_handler.py", package_dir)
+        shutil.copy(charter_dir / "agent.py", package_dir)
         shutil.copy(charter_dir / "templates.py", package_dir)
         
         # Create the zip file

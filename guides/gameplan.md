@@ -7,28 +7,24 @@ This document outlines the complete plan for building the Alex Financial Planner
 ## Current Status
 
 - Parts 1-5: complete, tested and guides written in guides directory
-- We recently updated Parts 1-6 to use a new approach for Terraform: storing state locally instead of on S3, and having a separate directory for each guide for its terraform
+- New approach for Terraform implemented: storing state locally instead of on S3, and having a separate terraform subdirectory for each guide
 - Part 6: coded but there are issues that need to be fixed
 - We need to resolve the issues with Part 6
 
 ## Explaining the issue with Part 6
 
 - The planner was repeatedly failing with strange errors
-- You (Claude Code) determined that it seems that tools + structured outputs were not supported at the same time and result in a failure
-- We need to make a plan to rebuild Part 6 without using Structured Outputs
-- Right now, the planner directory is in a mess with partial code and test code
-- Our Action Plan for moving forwards is documented in guides/actionplan.md
+- Root cause: tools + structured outputs are not supported at the same time with Bedrock
+- We made a plan to rebuild Part 6 without using Structured Outputs, documented in guides/actionplan.md and in progress
 
 ADDITIONAL NOTE:
 
-The BEDROCK_MODEL_ID is in the .env as my preferred model: anthropic.claude-3-7-sonnet-20250219-v1:0
-Which I have approved for us-west-2
-And I have in .env
+The BEDROCK_MODEL_ID is in the .env as my preferred model:
+BEDROCK_MODEL_ID=openai.gpt-oss-120b-1:0
 BEDROCK_REGION=us-west-2
+I have access to this in us-west-2, and it reliably calls tools and has high rate limits.
 The actual model name needed to be passed in to LiteLLM is:
-bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0
-in order to use the right inference profile.
-We experienced rate limiting errors with claude 4 - watch out for rate limit errors. If we hit them again, we may need to fall back to using Amazon Nova models (which do not use the us prefix.)
+bedrock/openai.gpt-oss-120b-1:0
 
 ## IMPORTANT - Methodical debugging with the root cause in mind
 
@@ -38,7 +34,7 @@ Approach:
 
 1. When hitting a bug, BE AWARE that you have a tendency to jump to conclusions. Don't!
 2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
-3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix it properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
+3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
 4. Do not prematurely declare victory. Prove that the issue is fully fixed.
 
 ## Infrastructure Management Strategy (Terraform)
@@ -46,10 +42,8 @@ Approach:
 ### Why Separate Terraform Directories?
 For this educational project, we use a unique approach designed to simplify the learning experience:
 - **Each guide has its own Terraform directory** (e.g., `terraform/2_sagemaker`, `terraform/3_ingestion`)
-- **Local state files** instead of remote S3 state (automatically gitignored)
+- **Local state files** instead of remote S3 state
 - **Independent deployments** - each part can be deployed without affecting others
-- **No state bucket complexity** - eliminates setup and management overhead
-- **Progressive deployment** - students can't accidentally deploy later parts
 
 ## Package Management Strategy (uv)
 
@@ -57,7 +51,7 @@ For this educational project, we use a unique approach designed to simplify the 
 - Each folder within `backend/` is a separate uv project with its own `pyproject.toml`
 - This enables independent Lambda packaging and service-specific dependencies
 - The `backend/database/` package is shared across all services as an editable dependency
-- The top level `backend/` is also a uv project in order to have the utility `deploy_all_lambdas.py`
+- The top level `backend/` is also a uv project for utility scripts
 
 ### Setup Process for Each Project
 ```bash
@@ -77,7 +71,7 @@ uv add --editable ../database  # Add shared database package (for services that 
 - Clean dependency isolation per service
 - Simplified Lambda packaging (each service packages only its dependencies)
 - Consistent database models via shared package
-- Cross-platform compatibility without maintaining multiple script versions
+- Cross-platform compatibility
 
 ## Current State (Parts 1-5 Complete)
 
@@ -116,11 +110,8 @@ uv add --editable ../database  # Add shared database package (for services that 
 ## Technical Architecture
 
 ### AI Models
-- **Claude 4 Haiku** via AWS Bedrock for all agents (complex financial analysis)
-  - Configurable via environment variable `BEDROCK_MODEL_ID`
-  - Default: `anthropic.claude-4-sonnet-20250805-v1:0`
-  - Can be changed to other Bedrock models as needed
-- **Existing SageMaker** for embeddings (keep as-is)
+- **OpenAI OSS 120B** via AWS Bedrock for all agents
+- **Existing SageMaker** for embeddings
 - **OpenAI Agents SDK** with Bedrock using LiteLLM integration for agent orchestration
 
 ### Infrastructure Choices
@@ -199,7 +190,7 @@ alex/
 ## IMPORTANT - Read this - Agent design
 
 For Agents, we will be using OpenAI Agents SDK. This is the name of the production release of what used to be called Swarm.
-Each Agent should be its own directory under backend, with its own uv project and lambda function.
+Each Agent is in its own directory under backend, with its own uv project, lambda function, agent.py, templates.py.
 
 The correct package to install is `openai-agents`  
 `uv add openai-agents`  
@@ -207,7 +198,7 @@ The correct package to install is `openai-agents`
 
 This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Tools. This is the approach to be used. Only use Tools where they make sense. We will not use Structured Outputs due to Bedrock limitations.
 
-BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace(). Check the docs, be up to date.
+BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace().
 
 ```python
 from pydantic import BaseModel, Field
@@ -277,24 +268,6 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 - [x] Reset script completes without errors (`uv run reset_db.py --with-test-data`)
 - [x] All tests pass in database package (`uv run test_db.py`)
 
-### Part 5 Completion Summary ✅
-
-**What We Built:**
-- Aurora Serverless v2 PostgreSQL cluster with Data API (no VPC complexity)
-- Complete database schema with 7 tables
-- Shared database package with Pydantic validation
-- 22 validated ETF instruments with allocation data
-- Comprehensive test suite (3 focused test files)
-
-**Key Features:**
-- All data validated through Pydantic schemas before database insertion
-- Literal types for constrained values (regions, sectors, asset classes)
-- Automatic type casting for JSONB, numeric, date, and UUID fields
-- Natural language Field descriptions for LLM compatibility
-- Schemas ready for OpenAI/Anthropic function calling
-
----
-
 ## Part 6: Agent Orchestra - Core Services (BUILT AND BEING TESTED)
 
 ### Objective
@@ -328,7 +301,7 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
 
 4. **Build Chart Maker Agent** (Lambda)
    - Creates JSON data for charts
-   - Calculates allocations by asset class, region, sector
+   - Calculates allocations by asset class, region, sector, with autonomy to decide
    - Formats for Recharts
    - ✅ **Test**: Verify JSON structure matches Recharts schema
 
@@ -358,7 +331,7 @@ User Request → API → SQS → Planner (Lambda)
                              Job marked complete
 ```
 
-**Simplification Note**: InstrumentTagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable. This is the ONE task that is OK to use Structured Outputs, as it doesn't use any tools.
+**Simplification Note**: InstrumentTagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable. This is the ONLY task that is OK to use Structured Outputs, as it doesn't use any tools.
 
 ### Deliverables
 - Working orchestrator Lambda with SQS trigger
@@ -369,19 +342,13 @@ User Request → API → SQS → Planner (Lambda)
 
 ### Testing strategy for Part 6
 
-Prerequisites:
-
-  1. Make sure you're in the project root directory
-  2. Ensure your AWS credentials are configured
-  3. Have the .env file configured with your settings
-
 ### Running the Full Integration Test:
 
 Navigate to the planner directory  
 `cd backend/planner`
 
 Run the full test using   
-`uv run run_full_test.py`
+`uv run test_full.py`
 
 What the Test Does:
 
@@ -412,13 +379,9 @@ Test individual agents
 
 Monitoring:
 
-- CloudWatch Logs: Check /aws/lambda/alex-planner and other agent logs
-- SQS Console: Monitor the alex-analysis-jobs queue
+- CloudWatch Logs
+- SQS Console
 - Database: Use check_jobs.py to see job statuses
-
-Configuration:
-
-The test uses Claude 3.5 Haiku by default. To change models, update .env file: BEDROCK_MODEL_ID and BEDROCK_MODEL_REGION
 
 ### Acceptance Criteria for Part 6
 
@@ -438,7 +401,7 @@ The test uses Claude 3.5 Haiku by default. To change models, update .env file: B
 
 #### Tagger Agent
 - [ ] Identifies instruments missing allocation data
-- [ ] Successfully calls Bedrock Claude model
+- [ ] Successfully calls Bedrock OpenAI OSS model
 - [ ] Returns structured JSON with allocations
 - [ ] All percentages sum to 100
 - [ ] Updates database with new data
@@ -494,9 +457,8 @@ Build a pure client-side React app with Clerk authentication, deployed as a stat
    - ✅ **Test**: Clerk dashboard shows test sign-ups
 
 3. **Build Static React App**
-   - Create React app with Vite (faster than CRA)
+   - Create React app with NextJS typescript and Pages Router (compatible with Clerk) for static output
    - TypeScript for type safety
-   - React Router for client-side routing
    - Clerk React SDK for auth
    - No SSR/ISR - pure client-side
    - ✅ **Test**: Dev server runs, auth works locally
@@ -607,7 +569,7 @@ Build a pure client-side React app with Clerk authentication, deployed as a stat
    ```
 
 6. **Deploy Static Site to S3/CloudFront**
-   - Build production bundle with Vite
+   - Build production bundle with NextJS
    - Upload to S3 bucket (static website hosting)
    - Configure CloudFront distribution
    - Set index.html as default and error document (for SPA routing)
@@ -849,180 +811,6 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 - [ ] Cost breakdown documented
 - [ ] Security measures documented
 
-## Testing Strategy
-
-### Local Testing at Each Stage
-
-**Guide 5 - Database**
-```bash
-# Test Aurora Data API connection
-aws rds-data execute-statement --resource-arn $AURORA_CLUSTER_ARN --secret-arn $AURORA_SECRET_ARN --database alex --sql "SELECT 1"
-
-# Reset database to clean state (drops, migrates, seeds)
-cd backend/database
-uv run reset_db.py
-
-# Or with test data
-uv run reset_db.py --with-test-data
-
-# Or just reload data without dropping
-uv run reset_db.py --skip-drop
-
-# Test database package
-uv run pytest tests/
-
-# Verify data loaded correctly
-uv run scripts/verify_data.py
-```
-
-**Guide 6 - Agents**
-```bash
-# Test orchestrator locally
-cd backend/planner
-uv run test_local.py
-
-# Test InstrumentTagger with unknown symbols
-cd backend/tagger
-uv run test_local.py --symbol "VTI"
-uv run test_local.py --symbol "AAPL"
-
-# Test each Lambda locally
-cd backend/reporter
-uv run test_local.py
-
-# Integration test (from planner project)
-cd backend/planner
-uv run tests/test_full_analysis.py
-```
-
-**Guide 7 - Frontend**
-```bash
-# Test Clerk integration
-cd frontend
-npm run dev
-# Complete auth flow in browser
-
-# Test API directly from browser console
-fetch('https://api.alex.example.com/portfolio', {
-  headers: { 'Authorization': `Bearer ${await clerk.session.getToken()}` }
-})
-
-# Test production build
-npm run build
-npm run preview
-
-# Deploy to S3
-aws s3 sync dist/ s3://alex-frontend-bucket --delete
-
-# Test CloudFront deployment
-curl https://alex.cloudfront.net
-```
-
-**Guide 8 - Observability**
-```bash
-# Test LangFuse connection (from planner project)
-cd backend/planner
-uv run tests/test_langfuse.py
-
-# Verify traces
-# Check LangFuse UI for detailed traces
-
-# Test CloudWatch metrics
-aws cloudwatch get-metric-statistics --namespace "Alex/Agents" --metric-name "InvocationCount" --start-time 2024-01-01T00:00:00Z --end-time 2024-01-02T00:00:00Z --period 3600 --statistics Sum
-
-# Security scan
-docker run -t owasp/zap2docker-stable zap-baseline.py \
-  -t https://alex.cloudfront.net
-```
-
-## Success Criteria
-
-### Part 5 Success
-- [x] Aurora Data API accessible from Lambda (no VPC)
-- [x] All tables created with correct schema
-- [x] Database package installable in other services
-- [x] Test data loads successfully with Pydantic validation
-
-### Part 6 Success
-- [ ] Orchestrator delegates to all agents
-- [ ] InstrumentTagger populates missing instrument data
-- [ ] Each agent produces expected output
-- [ ] Full analysis stored in database
-- [ ] Charts render correctly in frontend
-
-### Part 7 Success
-- [ ] Users can sign up/in via Clerk (client-side)
-- [ ] API Gateway CORS configured correctly
-- [ ] Portfolio CRUD operations work from browser
-- [ ] Agent analysis can be triggered
-- [ ] Reports display correctly in React app
-
-### Part 8 Success
-- [ ] All agent calls traced in LangFuse
-- [ ] CloudWatch dashboards show metrics
-- [ ] Security scan passes
-- [ ] Costs tracked per user
-
-## CORS Configuration Details
-
-### Critical CORS Setup for API Gateway
-
-Since we're using a static frontend calling API Gateway directly, CORS must be configured perfectly:
-
-#### API Gateway CORS Configuration
-```python
-# In Terraform for API Gateway
-cors_configuration = {
-  allow_origins = ["https://your-cloudfront-domain.cloudfront.net"]  # NOT "*"
-  allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-  allow_headers = ["Authorization", "Content-Type"]
-  expose_headers = ["x-job-id"]  # For returning job IDs
-  max_age = 300
-}
-```
-
-#### Lambda Response Headers
-Every Lambda MUST return CORS headers:
-```python
-def lambda_handler(event, context):
-    # Your logic here
-    
-    return {
-        'statusCode': 200,
-        'headers': {
-            'Access-Control-Allow-Origin': 'https://your-domain.cloudfront.net',
-            'Access-Control-Allow-Headers': 'Authorization,Content-Type',
-            'Content-Type': 'application/json'
-        },
-        'body': json.dumps(response_data)
-    }
-```
-
-#### Testing CORS
-1. **Browser DevTools Network Tab**:
-   - Look for OPTIONS preflight requests
-   - Verify they return 200 with CORS headers
-   - Check no CORS errors in console
-
-2. **Command Line Test**:
-```bash
-# Test OPTIONS preflight
-curl -X OPTIONS https://api.gateway.url/portfolio \
-  -H "Origin: https://your-cloudfront-domain.cloudfront.net" \
-  -H "Access-Control-Request-Method: POST" \
-  -H "Access-Control-Request-Headers: Authorization,Content-Type" -v
-
-# Should see:
-# < Access-Control-Allow-Origin: https://your-cloudfront-domain.cloudfront.net
-# < Access-Control-Allow-Methods: GET,POST,PUT,DELETE,OPTIONS
-```
-
-3. **Common CORS Issues**:
-   - Missing OPTIONS integration in API Gateway
-   - Lambda not returning CORS headers
-   - Using * instead of specific domain
-   - Forgetting to handle preflight requests
-
 ## Lambda Deployment Technique for Binary Compatibility
 
 ### The Architecture Issue
@@ -1033,52 +821,7 @@ Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python depen
 ### Solution: Docker-Based Packaging
 Use Docker with the official AWS Lambda Python runtime image to compile dependencies for the correct architecture. This ensures all binary packages are compatible with Lambda's runtime environment.
 
-### Implementation Reference
-See `backend/tagger/package_docker.py` for the complete implementation. Key aspects:
-
-1. **Use Official Lambda Runtime Image**:
-   ```python
-   "public.ecr.aws/lambda/python:3.12"
-   ```
-
-2. **Force x86_64 Architecture**:
-   ```python
-   "--platform", "linux/amd64"
-   ```
-
-3. **Install with Binary Compatibility**:
-   ```python
-   "--platform manylinux2014_x86_64 --only-binary=:all:"
-   ```
-
-4. **Cross-Platform Script**:
-   - Python script works on Mac/Linux/Windows
-   - Called via `uv run package_docker.py`
-   - No shell scripts needed
-
-### Usage Pattern
-```bash
-cd backend/[service_name]
-uv run package_docker.py          # Create deployment package
-uv run package_docker.py --deploy  # Create and deploy to Lambda
-```
-
-This technique is essential for any Lambda deployment with compiled dependencies and should be used for all agent Lambda functions in this project.
-
-## Key Decisions Log
-
-1. **Aurora Serverless v2 with Data API** - No VPC complexity, HTTP-based access
-2. **PostgreSQL over DynamoDB** - Need relational queries for portfolio analysis
-3. **Clerk over Cognito** - Simpler for students, better DX
-4. **CloudFront over Amplify** - More control, standard pattern
-5. **LangFuse over CloudWatch** - Better agent-specific observability
-6. **Claude 4 Sonnet over OSS** - Superior financial analysis quality
-7. **Lambda for all services** - Consistent, simple, no containers
-8. **Shared database package** - DRY principle, consistent data access
-9. **InstrumentTagger agent** - Auto-populate reference data, reduce manual entry
-
 ## Notes for Implementation
-
 
 ### LangFuse Implementation for Amazing Visualization
 
@@ -1142,21 +885,6 @@ Key Features for Impressive LangFuse Display:
 6. **Parallel execution visible** - Shows agents running simultaneously
 7. **Cost tracking** - Token usage and dollar amounts per agent
 
-### For Students (Guides)
-- Each guide should be completable independently
-- Include architecture diagrams
-- Provide sample data for testing
-- Clear success criteria at each step
-- Troubleshooting section at the end
-
-## Decisions Made
-
-1. **Data API over direct connections**: No connection pooling complexity
-2. **LangFuse**: Cloud version (as long as pricing is reasonable - free tier should suffice)
-3. **Custom domain**: Optional but recommended with SSL for professional presentation
-4. **Instrument data**: Start with top 20 ETFs, UI allows adding new instruments
-   - Future enhancement: Orchestrator could look up tickers via MCP server
-5. **Caching layer**: Not for MVP - keep complexity down
 
 ## Async Execution Pattern for Long-Running Analysis
 
@@ -1180,12 +908,6 @@ Frontend → API Gateway → API Lambda → SQS → Orchestrator Lambda (15 min 
                                                  Updates job in DB
 ```
 
-This is our chosen approach because:
-- Lambda can run for 15 minutes (plenty for 2-3 min analysis)
-- Consistent Lambda-only architecture (no Docker/App Runner needed)
-- Native SQS integration
-- Cost-effective (~$0.10/month)
-- Simple for students to understand and deploy
 
 ### Job Tracking
 The `jobs` table (already in schema) tracks async operations with status updates and results.
@@ -1211,7 +933,3 @@ const pollJob = async (jobId: string) => {
   }
 };
 ```
-
----
-
-*This gameplan will evolve as we build. Each part should be validated before moving to the next.*

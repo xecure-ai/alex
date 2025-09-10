@@ -63,8 +63,9 @@ tenacity
         
         run_command(docker_cmd)
         
-        # Copy Lambda handler and templates
+        # Copy Lambda handler, agent, and templates
         shutil.copy(planner_dir / "lambda_handler.py", package_dir)
+        shutil.copy(planner_dir / "agent.py", package_dir)
         shutil.copy(planner_dir / "templates.py", package_dir)
         
         # Create the zip file

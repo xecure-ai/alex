@@ -1,19 +1,5 @@
 # Action Plan - Part 6 Agent Orchestra Fix
 
-## Current Status (Last Updated: 2025-09-08)
-
-**Phase 3**: ✅ COMPLETE - All orchestrator fixes done  
-**Phase 4**: 🔧 IN PROGRESS - Package scripts fixed, packaging blocked by network  
-**Phase 5**: ⏳ TODO - Terraform infrastructure deployment  
-**Phase 6**: ⏳ TODO - Integration testing  
-**Phase 7**: ⏳ TODO - Documentation & cleanup  
-
-### Next Steps When Network Available:
-1. Complete Phase 4.3: Run the 5 packaging commands to create Lambda deployment zips
-2. Complete Phase 5.1-5.2: Deploy Terraform infrastructure to create Lambda functions
-3. Complete Phase 5.3: Deploy Lambda function code using deploy_all_lambdas.py
-4. Complete Phase 6: Run integration tests to verify everything works
-
 ## Problem Statement
 
 The OpenAI Agents SDK (formerly Swarm) currently doesn't support using both tools AND structured outputs simultaneously in a single agent. When we configure an agent with both:
@@ -44,17 +30,37 @@ Keep tests clean and simple.
 
 **All agents will use tools only - no structured outputs**
 
-### Important: AWS Region Handling for Multi-Region Services
+### Important: AWS Region Handling
 
-**Problem Discovered**: When using services in different AWS regions (e.g., Bedrock in us-west-2, Aurora in us-east-1), changing the `AWS_REGION` environment variable affects ALL AWS SDK calls, causing connection failures.
+**Environment Variables for Regions**:
 
-**Solution**: The database client now extracts the region directly from the Aurora cluster ARN, ensuring it always connects to the correct region regardless of environment variable changes. This pattern should be followed for any service that needs a specific region.
+1. **`BEDROCK_REGION`** (e.g., `us-west-2`) - Used for Bedrock/Claude API calls
+   - LiteLLM expects the region in `AWS_REGION_NAME` environment variable
+   - In each agent, we set: `os.environ['AWS_REGION_NAME'] = os.getenv('BEDROCK_REGION', 'us-west-2')`
+   - This ONLY affects LiteLLM's Bedrock calls, not other AWS services
 
-**Key Lessons**:
-1. Never assume changing `AWS_REGION` only affects one service
-2. Services should derive their region from their configuration (ARNs) when possible
-3. Avoid manipulating and restoring environment variables as a workaround
-4. Test multi-region scenarios thoroughly
+2. **`DEFAULT_AWS_REGION`** (e.g., `us-east-1`) - Used for all other AWS services
+   - SageMaker endpoints
+   - S3 Vectors
+   - Aurora database (though it also extracts region from cluster ARN)
+   - Any other AWS service calls
+
+**Implementation Pattern**:
+```python
+# For Bedrock/LiteLLM calls:
+bedrock_region = os.getenv('BEDROCK_REGION', 'us-west-2')
+os.environ['AWS_REGION_NAME'] = bedrock_region
+
+# For other AWS services:
+default_region = os.getenv('DEFAULT_AWS_REGION', 'us-east-1')
+sagemaker = boto3.client('sagemaker-runtime', region_name=default_region)
+```
+
+**Key Points**:
+- Never set `AWS_REGION` or `AWS_DEFAULT_REGION` as these affect ALL boto3 calls
+- Always use `AWS_REGION_NAME` for LiteLLM (it's specific to that library)
+- Always pass `region_name` explicitly to boto3 clients for non-Bedrock services
+- The database client smartly extracts region from the cluster ARN as a fallback - this is too complex, let's remove this and trust DEFAULT_AWS_REGION
 
 The InstrumentTagger (special case):
 - Called directly via Lambda invocation (not as an agent tool)
@@ -74,6 +80,87 @@ The orchestrator (Planner) will:
 - Have autonomy to decide which agents to invoke (Reporter, Charter, Retirement)
 - Pass job_id to each agent for database access
 - Use a `finalize_job` tool to mark analysis complete
+
+### Important: new simple approach for tools
+
+Problem: several of the tools need access to variables like job_id
+Previous bad solution: created the tools as closures with job_id; complex and hard to read
+New, simple, idiomatic solution: use RunContextWrapper per this documentation from OpenAI Agents SDK:
+
+```python
+from dataclasses import dataclass
+
+from agents import Agent, RunContextWrapper, Runner, function_tool
+
+@dataclass
+class UserInfo:  
+    name: str
+    uid: int
+
+@function_tool
+async def fetch_user_age(wrapper: RunContextWrapper[UserInfo]) -> str:  
+    """Fetch the age of the user. Call this function to get user's age information."""
+    return f"The user {wrapper.context.name} is 47 years old"
+
+async def main():
+    user_info = UserInfo(name="John", uid=123)
+
+    agent = Agent[UserInfo](  
+        name="Assistant",
+        tools=[fetch_user_age],
+    )
+
+    result = await Runner.run(  
+        starting_agent=agent,
+        input="What is the age of the user?",
+        context=user_info,
+    )
+
+    print(result.final_output)  
+    # The user John is 47 years old.
+    ```
+
+### Database Package Architecture
+
+**How the database package is structured and imported:**
+
+The database package (`backend/database`) is a separate uv project with the following key characteristics:
+
+1. **Package Name**: `alex-database` (defined in `backend/database/pyproject.toml`)
+2. **Package Contents**: The `src` directory containing all database code
+3. **Installation Method**: Editable install via uv: `alex-database = { path = "../database", editable = true }`
+
+**Import Pattern (IMPORTANT):**
+
+The correct import pattern for ALL agents is:
+```python
+from src import Database
+from src.schemas import InstrumentCreate, JobCreate, etc.
+```
+
+Do NOT use:
+- `from database.src import Database` ❌
+- `from alex-database.src import Database` ❌
+
+**Why this works consistently:**
+
+1. **Local Development (with uv run)**:
+   - The editable install adds `/backend/database` to Python's sys.path
+   - The `src` directory becomes directly importable as a top-level module
+   - Running `uv run test_simple.py` automatically sets up the environment correctly
+
+2. **Lambda Deployment**:
+   - The `package_docker.py` script runs: `pip install --target ./package --no-deps /database`
+   - This installs the `src` directory directly into the Lambda package
+   - In Lambda, `src` is a top-level module in the package directory
+   - The same `from src import Database` import works
+
+3. **Docker Packaging Process**:
+   - Each agent's `package_docker.py` mounts the database directory: `-v {backend_dir}/database:/database`
+   - Installs it into the package: `pip install --target ./package --no-deps /database`
+   - This ensures binary compatibility with AWS Lambda's runtime environment
+
+**Key Design Decision**: By packaging only the `src` directory (not the entire database folder), we ensure consistent imports across all environments without needing conditional imports or try/except blocks.
 
 ## Implementation Checklist
 
@@ -184,15 +271,23 @@ The orchestrator (Planner) will:
 
 #### 4.3 Final review, cleanup and minor refactor for agent consistency
 - [ ] Read and review the contents of the backend subdirectories: planner, reporter, retirement, tagger, charter
-- [ ] Make minor refinements to make them consistent and simple:
-  - Ensure agent.py and lambda_handler.py are separate for all 5 agents
-  - Ensure consistent use of environment variables, separately for Bedrock model and database access
-  - Ensure everything will work locally (dotenv) and also when deployed remotely
-  - Ensure consistent logging in all - just the right amount for important events, with consistent identification of the Agent doing the logging
-  - Ensure tenacity is used consistently to retry rate limit errors with LLMs in a simple, reasonable way, with logging
-  - Ensure any redundant code is removed; ensure methods are clean and simple; manage exceptions but don't go overboard
-- [ ] Update package_docker.py scripts as needed to ensure all are consistent in style, simple, clear, package for Lambda boxes, use uv, and include all necessary files
-- [ ] Re-run local tests for each agent to ensure no regression. Carefully look at every log message and ensure everything runs error free
+- [ ] Check that they are consistent and simple:
+  - Check that agent.py and lambda_handler.py are separate for all 5 agents
+  - IMPORTANT: Check consistent and correct use of environment variables, correctly for Bedrock model and database access and Regions
+  - IMPORTANT: the database packages need to be imported properly by all agents so that tests work properly locally and on lambda
+  - Check everything will work locally (dotenv) and also when deployed remotely
+  - Check consistent logging in all - just the right amount for important events, with consistent identification of the Agent doing the logging
+  - Check tenacity is used consistently to retry rate limit errors with LLMs in a simple, reasonable way, with logging
+  - Check any redundant code is removed; ensure methods are clean and simple; manage exceptions but don't go overboard
+  - Check that methods / functions are short, clean, with docstrings but not overly commented otherwise
+  - Check that the approach with RunContextWrapper is clean, correct, and used consistently for all agents (except tagger, which doesn't need it)
+  - Check that each agent directory has a test_simple.py for local testing, and a test_full.py for testing after lambda deployment
+  - Check that the backend parent directory also has a test_simple.py for local testing and a test_full.py
+- [ ] Check package_docker.py scripts are consistent in style, simple, clear, package for Lambda boxes, use uv, and include all necessary files
+- [ ] Re-run test_simple tests for each agent individually to ensure no regression. Carefully look at every log message and ensure everything runs error free - do NOT assume that an error is "expected" - you've done this before and received a formal performance warning
+- [ ] Check the test_simple.py test in the backend folder for correctness, then run it
+
+IMPORTANT: you MUST remember to use "uv run my_module.py" not "python my_module.py", within the directory of each agent.
 
 #### 4.4 Package Lambda Functions
 - [ ] Package each agent with Docker (for correct architecture):
@@ -202,6 +297,8 @@ The orchestrator (Planner) will:
   - `cd backend/retirement && uv run package_docker.py`
   - `cd backend/planner && uv run package_docker.py`
 - [ ] Verify all zip files created (~50-100MB each)
+- [ ] Create a package_docker.py in the backend parent directory that runs each of these scripts
+- [ ] Test this package_docker.py
 
 ### Phase 5: Terraform Infrastructure
 

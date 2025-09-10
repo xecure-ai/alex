@@ -41,6 +41,7 @@ openai-agents[litellm]
 boto3
 pydantic
 python-dotenv
+tenacity
 """
         
         req_file = temp_path / "requirements.txt"

@@ -5,14 +5,23 @@ Report Writer Agent - generates portfolio analysis narratives.
 import os
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from decimal import Decimal
+from dataclasses import dataclass
 
-from agents import function_tool
+from agents import function_tool, RunContextWrapper
 from agents.extensions.models.litellm_model import LitellmModel
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class ReporterContext:
+    """Context for the Reporter agent"""
+    job_id: str
+    portfolio_data: Dict[str, Any]
+    user_data: Dict[str, Any]
+    db: Optional[Any] = None  # Database connection (optional for testing)
 
 def calculate_portfolio_metrics(portfolio_data: Dict[str, Any]) -> Dict[str, Any]:
     """Calculate basic portfolio metrics."""
@@ -93,56 +102,55 @@ def format_portfolio_for_analysis(portfolio_data: Dict[str, Any], user_data: Dic
     return '\n'.join(lines)
 
 @function_tool
-async def update_job_report(job_id: str, report_content: str) -> str:
+async def update_report(wrapper: RunContextWrapper[ReporterContext], report_content: str) -> str:
     """
     Store the generated portfolio analysis report in the database.
     
     Args:
-        job_id: The job ID to update
+        wrapper: Context wrapper with job_id and database
         report_content: The markdown-formatted analysis report
     
     Returns:
         Success confirmation message
     """
+    job_id = wrapper.context.job_id
+    db = wrapper.context.db
+    
+    if not job_id:
+        return "Error: No job ID available in context"
+    
     try:
-        import sys
-        import os
-        
-        # Add database package to path
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-        from database.src.db_client import DatabaseClient
-        from database.src.models import JobUpdate
-        
-        db = DatabaseClient()
-        
-        # Update job with report
-        update = JobUpdate(
-            report_payload={
+        if db:
+            # Update job with report
+            report_payload = {
                 'content': report_content,
                 'generated_at': datetime.utcnow().isoformat(),
                 'agent': 'reporter'
             }
-        )
-        
-        success = await db.update_job(job_id, update)
-        
-        if success:
-            logger.info(f"Stored report for job {job_id}")
-            return f"Successfully stored the analysis report for job {job_id}"
+            
+            success = db.jobs.update_report(job_id, report_payload)
+            
+            if success:
+                logger.info(f"Reporter: Stored report for job {job_id}")
+                return f"Successfully stored the analysis report for job {job_id}"
+            else:
+                logger.error(f"Reporter: Failed to update job {job_id}")
+                return f"Failed to store report for job {job_id}"
         else:
-            logger.error(f"Failed to update job {job_id}")
-            return f"Failed to store report for job {job_id}"
+            logger.info(f"Reporter: Generated report for job {job_id} (no database)")
+            return f"Report generated successfully (not saved - no database)"
             
     except Exception as e:
-        logger.error(f"Error updating job report: {e}")
+        logger.error(f"Reporter: Error updating job report: {e}")
         return f"Error storing report: {str(e)}"
 
 @function_tool
-async def get_market_insights(symbols: List[str]) -> str:
+async def get_market_insights(wrapper: RunContextWrapper[ReporterContext], symbols: List[str]) -> str:
     """
     Retrieve market insights from S3 Vectors knowledge base.
     
     Args:
+        wrapper: Context wrapper with job_id and database
         symbols: List of symbols to get insights for
     
     Returns:
@@ -157,7 +165,8 @@ async def get_market_insights(symbols: List[str]) -> str:
         bucket = f"alex-vectors-{account_id}"
         
         # Get embeddings
-        sagemaker = boto3.client('sagemaker-runtime')
+        sagemaker_region = os.getenv('DEFAULT_AWS_REGION', 'us-east-1')
+        sagemaker = boto3.client('sagemaker-runtime', region_name=sagemaker_region)
         endpoint_name = os.getenv('SAGEMAKER_ENDPOINT', 'alex-embedding-endpoint')
         query = f"market analysis {' '.join(symbols[:5])}" if symbols else "market outlook"
         
@@ -175,7 +184,7 @@ async def get_market_insights(symbols: List[str]) -> str:
             embedding = result
         
         # Search vectors
-        s3v = boto3.client('s3vectors')
+        s3v = boto3.client('s3vectors', region_name=sagemaker_region)
         response = s3v.query_vectors(
             vectorBucketName=bucket,
             indexName='financial-research',
@@ -200,36 +209,57 @@ async def get_market_insights(symbols: List[str]) -> str:
             return "Market insights unavailable - proceeding with standard analysis."
             
     except Exception as e:
-        logger.warning(f"Could not retrieve market insights: {e}")
+        logger.warning(f"Reporter: Could not retrieve market insights: {e}")
         return "Market insights unavailable - proceeding with standard analysis."
 
-def create_agent(job_id: str):
-    """Create the reporter agent with tools."""
+def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_data: Dict[str, Any], db=None):
+    """Create the reporter agent with tools and context."""
     
     # Get model configuration
     model_id = os.getenv('BEDROCK_MODEL_ID', 'anthropic.claude-3-7-sonnet-20250219-v1:0')
     # Add us. prefix for inference profile if not already present
     if not model_id.startswith('us.') and 'anthropic.claude' in model_id:
         model_id = f"us.{model_id}"
-    region = os.getenv('BEDROCK_MODEL_REGION', os.getenv('AWS_REGION', 'us-east-1'))
-    
-    # Set region if needed
-    if region != os.getenv('AWS_REGION'):
-        os.environ['AWS_REGION'] = region
-        os.environ['AWS_DEFAULT_REGION'] = region
+    # Set region for LiteLLM Bedrock calls
+    bedrock_region = os.getenv('BEDROCK_REGION', 'us-west-2')
+    os.environ['AWS_REGION_NAME'] = bedrock_region
     
     model = LitellmModel(model=f"bedrock/{model_id}")
     
-    # Bind job_id to the update tool
-    async def update_report(report_content: str) -> str:
-        """Store the generated portfolio analysis report in the database."""
-        return await update_job_report(job_id, report_content)
+    # Create context
+    context = ReporterContext(
+        job_id=job_id,
+        portfolio_data=portfolio_data,
+        user_data=user_data,
+        db=db
+    )
     
-    update_report.__name__ = "update_report"
+    # Tools - just the decorated functions!
+    tools = [update_report, get_market_insights]
     
-    tools = [
-        function_tool(update_report),
-        get_market_insights
-    ]
+    # Format portfolio for analysis
+    portfolio_summary = format_portfolio_for_analysis(portfolio_data, user_data)
     
-    return model, tools
+    # Create task
+    task = f"""Analyze this investment portfolio and write a comprehensive report.
+
+{portfolio_summary}
+
+Your task:
+1. First, get market insights for the top holdings using get_market_insights()
+2. Analyze the portfolio's current state, strengths, and weaknesses
+3. Write a detailed, professional report in markdown format
+4. Save the report using update_report()
+
+The report should include:
+- Executive Summary
+- Portfolio Composition Analysis
+- Risk Assessment
+- Diversification Analysis
+- Retirement Readiness (based on user goals)
+- Recommendations
+- Market Context (from insights)
+
+Make the report informative yet accessible to a retail investor."""
+    
+    return model, tools, task, context

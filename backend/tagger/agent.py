@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 from agents import Agent, Runner, trace
 from agents.extensions.models.litellm_model import LitellmModel
 from dotenv import load_dotenv
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from litellm.exceptions import RateLimitError
 
 from src.schemas import InstrumentCreate
 from templates import TAGGER_INSTRUCTIONS, CLASSIFICATION_PROMPT
@@ -134,6 +135,11 @@ async def classify_instrument(
     model_id = BEDROCK_MODEL_ID
     if not model_id.startswith('us.'):
         model_id = f"us.{model_id}"
+    
+    # Set region for LiteLLM Bedrock calls
+    bedrock_region = os.getenv('BEDROCK_REGION', 'us-west-2')
+    os.environ['AWS_REGION_NAME'] = bedrock_region
+    
     model = LitellmModel(model=f"bedrock/{model_id}")
     
     # Create the classification task
@@ -176,8 +182,10 @@ async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassificat
     
     # Add retry decorator to classify_instrument calls
     @retry(
-        stop=stop_after_attempt(2),  # Just 2 attempts total
-        wait=wait_exponential(multiplier=1, min=2, max=4)  # Wait 2-4 seconds
+        retry=retry_if_exception_type(RateLimitError),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        before_sleep=lambda retry_state: logger.info(f"Tagger: Rate limit hit, retrying in {retry_state.next_action.sleep} seconds...")
     )
     async def classify_with_retry(symbol, name, instrument_type):
         return await classify_instrument(symbol, name, instrument_type)

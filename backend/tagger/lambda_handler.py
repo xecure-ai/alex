@@ -9,7 +9,7 @@ import asyncio
 import logging
 from typing import List, Dict, Any
 
-from src.models import Database
+from src import Database
 from src.schemas import InstrumentCreate
 from agent import tag_instruments, classification_to_db_format
 
