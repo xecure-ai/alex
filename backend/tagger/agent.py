@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Get configuration
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
-BEDROCK_MODEL_REGION = os.getenv("BEDROCK_MODEL_REGION", "us-west-2")
+BEDROCK_REGION = os.getenv("BEDROCK_REGION", "us-west-2")
 
 
 class AllocationBreakdown(BaseModel):
