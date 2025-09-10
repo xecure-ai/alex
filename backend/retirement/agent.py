@@ -6,22 +6,15 @@ import os
 import json
 import logging
 import random
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
-from dataclasses import dataclass
 
-from agents import function_tool, RunContextWrapper
+# No tools needed - simplified agent
 from agents.extensions.models.litellm_model import LitellmModel
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class RetirementContext:
-    """Context for the Retirement agent"""
-    job_id: str
-    portfolio_data: Dict[str, Any]
-    user_preferences: Dict[str, Any]
-    db: Optional[Any] = None  # Database connection (optional for testing)
+# Context removed - no longer needed without tools
 
 def calculate_portfolio_value(portfolio_data: Dict[str, Any]) -> float:
     """Calculate current portfolio value."""
@@ -230,56 +223,7 @@ def generate_projections(
     
     return projections
 
-@function_tool
-async def update_job_retirement(wrapper: RunContextWrapper[RetirementContext], analysis: str) -> str:
-    """
-    Store the retirement analysis in the database.
-    
-    Args:
-        wrapper: Context wrapper with job_id and database
-        analysis: JSON string containing the complete retirement analysis
-    
-    Returns:
-        Success or error message
-    """
-    job_id = wrapper.context.job_id
-    db = wrapper.context.db
-    
-    if not job_id:
-        return "Error: No job ID available in context"
-    
-    try:
-        if not db:
-            import sys
-            import os
-            # Add database package to path
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-            from src.models import Database
-            db = Database()
-        
-        # Parse the analysis
-        analysis_data = json.loads(analysis)
-        
-        # Add metadata
-        retirement_payload = {
-            'analysis': analysis_data,
-            'generated_at': datetime.utcnow().isoformat(),
-            'agent': 'retirement'
-        }
-        
-        # Update the database
-        success = db.jobs.update_retirement(job_id, retirement_payload)
-        
-        if success:
-            logger.info(f"Retirement: Stored retirement analysis for job {job_id}")
-            return f"Successfully stored retirement analysis for job {job_id}"
-        else:
-            logger.error(f"Retirement: Failed to update job {job_id}")
-            return f"Failed to update job {job_id} with retirement analysis"
-            
-    except Exception as e:
-        logger.error(f"Retirement: Error updating retirement analysis: {e}")
-        return f"Error storing retirement analysis: {str(e)}"
+# Tool removed - analysis is now saved directly in lambda_handler
 
 def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_preferences: Dict[str, Any], db=None):
     """Create the retirement agent with tools and context."""
@@ -321,16 +265,10 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_preferences: 
         current_age
     )
     
-    # Create context
-    context = RetirementContext(
-        job_id=job_id,
-        portfolio_data=portfolio_data,
-        user_preferences=user_preferences,
-        db=db
-    )
+    # No context needed anymore - simplified agent
     
-    # Tools - just the decorated function!
-    tools = [update_job_retirement]
+    # No tools needed - agent will return analysis as final output
+    tools = []
     
     # Format comprehensive context for the agent
     task = f"""
@@ -374,13 +312,13 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_preferences: 
 - Target Income: ${target_income:,.0f}
 - Gap: ${target_income - (portfolio_value * 0.04):,.0f}
 
-Your task: Analyze this retirement readiness data and provide:
+Your task: Analyze this retirement readiness data and provide a comprehensive retirement analysis including:
 1. Clear assessment of retirement readiness
 2. Specific recommendations to improve success rate
 3. Risk mitigation strategies
 4. Action items with timeline
 
-After your analysis, use the update_retirement tool to store your complete findings.
+Provide your analysis in clear markdown format with specific numbers and actionable recommendations.
 """
     
-    return model, tools, task, context
+    return model, tools, task

@@ -6,9 +6,8 @@ REPORTER_INSTRUCTIONS = """You are a Report Writer Agent specializing in portfol
 
 Your primary task is to analyze the provided portfolio and generate a comprehensive markdown report.
 
-You have access to these tools:
+You have access to this tool:
 1. get_market_insights - Retrieve relevant market context for specific symbols
-2. update_report - Store your final analysis report in the database
 
 Your workflow:
 1. First, analyze the portfolio data provided
@@ -22,7 +21,7 @@ Your workflow:
    - Specific Recommendations (5-7 actionable items)
    - Conclusion
 
-4. Use update_report to store your complete analysis
+4. Respond with your complete analysis in clear markdown format.
 
 Report Guidelines:
 - Write in clear, professional language accessible to retail investors
@@ -32,7 +31,6 @@ Report Guidelines:
 - Prioritize recommendations by impact
 - Keep sections concise but comprehensive
 
-Remember: You must call update_report with your final markdown report to complete the task.
 """
 
 ANALYSIS_TASK_TEMPLATE = """Generate a comprehensive portfolio analysis report for this portfolio:

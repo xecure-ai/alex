@@ -61,12 +61,69 @@ def test_retirement():
         body = json.loads(result['body'])
         print(f"Success: {body.get('success', False)}")
         print(f"Message: {body.get('message', 'N/A')}")
+        
+        # Check what was actually saved in the database
+        print("\n" + "=" * 60)
+        print("CHECKING DATABASE CONTENT")
+        print("=" * 60)
+        
+        job = db.jobs.find_by_id(job_id)
+        if job and job.get('retirement_payload'):
+            payload = job['retirement_payload']
+            print(f"✅ Retirement data found in database")
+            print(f"Payload keys: {list(payload.keys())}")
+            
+            if 'analysis' in payload:
+                analysis = payload['analysis']
+                print(f"\nAnalysis type: {type(analysis).__name__}")
+                
+                if isinstance(analysis, str):
+                    print(f"Analysis length: {len(analysis)} characters")
+                    
+                    # Check if it contains reasoning artifacts
+                    reasoning_indicators = [
+                        "I need to",
+                        "I will",
+                        "Let me",
+                        "First,",
+                        "I should",
+                        "I'll",
+                        "Now I",
+                        "Next,",
+                    ]
+                    
+                    contains_reasoning = any(indicator.lower() in analysis.lower() for indicator in reasoning_indicators)
+                    
+                    if contains_reasoning:
+                        print("⚠️  WARNING: Analysis may contain reasoning/thinking text")
+                    else:
+                        print("✅ Analysis appears to be final output only (no reasoning detected)")
+                    
+                    # Show first 500 characters and last 200 characters
+                    print(f"\nFirst 500 characters:")
+                    print("-" * 40)
+                    print(analysis[:500])
+                    print("-" * 40)
+                    
+                    if len(analysis) > 700:
+                        print(f"\nLast 200 characters:")
+                        print("-" * 40)
+                        print(analysis[-200:])
+                        print("-" * 40)
+                else:
+                    print(f"⚠️  Analysis is not a string: {type(analysis)}")
+                    print(f"Content: {str(analysis)[:200]}")
+            
+            print(f"\nGenerated at: {payload.get('generated_at', 'N/A')}")
+            print(f"Agent: {payload.get('agent', 'N/A')}")
+        else:
+            print("❌ No retirement data found in database")
     else:
         print(f"Error: {result['body']}")
     
     # Clean up - delete the test job
     db.jobs.delete(job_id)
-    print(f"Deleted test job: {job_id}")
+    print(f"\nDeleted test job: {job_id}")
     
     print("=" * 60)
 

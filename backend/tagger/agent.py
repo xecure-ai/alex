@@ -131,9 +131,10 @@ async def classify_instrument(
     Returns:
         Complete classification with allocations
     """
-    # Initialize the model - use us. prefix for cross-region inference profile
+    # Initialize the model
     model_id = BEDROCK_MODEL_ID
-    if not model_id.startswith('us.'):
+    # Only add us. prefix for anthropic models, not openai models
+    if not model_id.startswith('us.') and model_id.startswith('anthropic.'):
         model_id = f"us.{model_id}"
     
     # Set region for LiteLLM Bedrock calls

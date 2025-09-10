@@ -101,48 +101,7 @@ def format_portfolio_for_analysis(portfolio_data: Dict[str, Any], user_data: Dic
     
     return '\n'.join(lines)
 
-@function_tool
-async def update_report(wrapper: RunContextWrapper[ReporterContext], report_content: str) -> str:
-    """
-    Store the generated portfolio analysis report in the database.
-    
-    Args:
-        wrapper: Context wrapper with job_id and database
-        report_content: The markdown-formatted analysis report
-    
-    Returns:
-        Success confirmation message
-    """
-    job_id = wrapper.context.job_id
-    db = wrapper.context.db
-    
-    if not job_id:
-        return "Error: No job ID available in context"
-    
-    try:
-        if db:
-            # Update job with report
-            report_payload = {
-                'content': report_content,
-                'generated_at': datetime.utcnow().isoformat(),
-                'agent': 'reporter'
-            }
-            
-            success = db.jobs.update_report(job_id, report_payload)
-            
-            if success:
-                logger.info(f"Reporter: Stored report for job {job_id}")
-                return f"Successfully stored the analysis report for job {job_id}"
-            else:
-                logger.error(f"Reporter: Failed to update job {job_id}")
-                return f"Failed to store report for job {job_id}"
-        else:
-            logger.info(f"Reporter: Generated report for job {job_id} (no database)")
-            return f"Report generated successfully (not saved - no database)"
-            
-    except Exception as e:
-        logger.error(f"Reporter: Error updating job report: {e}")
-        return f"Error storing report: {str(e)}"
+# update_report tool removed - report is now saved directly in lambda_handler
 
 @function_tool
 async def get_market_insights(wrapper: RunContextWrapper[ReporterContext], symbols: List[str]) -> str:
@@ -234,8 +193,8 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_data: Dict[st
         db=db
     )
     
-    # Tools - just the decorated functions!
-    tools = [update_report, get_market_insights]
+    # Tools - only get_market_insights now, report saved in lambda_handler
+    tools = [get_market_insights]
     
     # Format portfolio for analysis
     portfolio_summary = format_portfolio_for_analysis(portfolio_data, user_data)
@@ -248,8 +207,7 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_data: Dict[st
 Your task:
 1. First, get market insights for the top holdings using get_market_insights()
 2. Analyze the portfolio's current state, strengths, and weaknesses
-3. Write a detailed, professional report in markdown format
-4. Save the report using update_report()
+3. Generate a detailed, professional analysis report in markdown format
 
 The report should include:
 - Executive Summary
@@ -260,6 +218,7 @@ The report should include:
 - Recommendations
 - Market Context (from insights)
 
+Provide your complete analysis as the final output in clear markdown format.
 Make the report informative yet accessible to a retail investor."""
     
     return model, tools, task, context

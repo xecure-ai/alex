@@ -7,6 +7,7 @@ import json
 import asyncio
 import logging
 from typing import Dict, Any
+from datetime import datetime
 
 from agents import Agent, Runner, trace
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -22,7 +23,7 @@ except ImportError:
 from src import Database
 
 from templates import RETIREMENT_INSTRUCTIONS
-from agent import create_agent, RetirementContext
+from agent import create_agent
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -67,28 +68,39 @@ async def run_retirement_agent(job_id: str, portfolio_data: Dict[str, Any]) -> D
     # Initialize database
     db = Database()
     
-    # Create agent with tools and context
-    model, tools, task, context = create_agent(job_id, portfolio_data, user_preferences, db)
+    # Create agent (simplified - no tools or context)
+    model, tools, task = create_agent(job_id, portfolio_data, user_preferences, db)
     
-    # Run agent with context
+    # Run agent (simplified - no context)
     with trace("Retirement Agent"):
-        agent = Agent[RetirementContext](  # Specify the context type
+        agent = Agent(
             name="Retirement Specialist",
             instructions=RETIREMENT_INSTRUCTIONS,
             model=model,
-            tools=tools
+            tools=tools  # Empty list now
         )
         
         result = await Runner.run(
             agent,
             input=task,
-            context=context,  # Pass the context
-            max_turns=5
+            max_turns=20
         )
         
+        # Save the analysis to database
+        retirement_payload = {
+            'analysis': result.final_output,
+            'generated_at': datetime.utcnow().isoformat(),
+            'agent': 'retirement'
+        }
+        
+        success = db.jobs.update_retirement(job_id, retirement_payload)
+        
+        if not success:
+            logger.error(f"Failed to save retirement analysis for job {job_id}")
+        
         return {
-            'success': True,
-            'message': 'Retirement analysis completed',
+            'success': success,
+            'message': 'Retirement analysis completed' if success else 'Analysis completed but failed to save',
             'final_output': result.final_output
         }
 

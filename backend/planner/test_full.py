@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Import database
-from src.models import Database
+from src import Database
 
 db = Database()
 sqs = boto3.client('sqs')

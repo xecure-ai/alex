@@ -7,6 +7,7 @@ import json
 import asyncio
 import logging
 from typing import Dict, Any
+from datetime import datetime
 
 from agents import Agent, Runner, trace
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -55,9 +56,21 @@ async def run_reporter_agent(job_id: str, portfolio_data: Dict[str, Any], user_d
             max_turns=10
         )
         
+        # Save the report to database
+        report_payload = {
+            'content': result.final_output,
+            'generated_at': datetime.utcnow().isoformat(),
+            'agent': 'reporter'
+        }
+        
+        success = db.jobs.update_report(job_id, report_payload)
+        
+        if not success:
+            logger.error(f"Failed to save report for job {job_id}")
+        
         return {
-            'success': True,
-            'message': 'Report generated and stored',
+            'success': success,
+            'message': 'Report generated and stored' if success else 'Report generated but failed to save',
             'final_output': result.final_output
         }
 
