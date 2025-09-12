@@ -67,6 +67,32 @@ def test_charter():
         body = json.loads(result['body'])
         print(f"Success: {body.get('success', False)}")
         print(f"Message: {body.get('message', 'N/A')}")
+        
+        # Check what charts were created
+        job = db.jobs.find_by_id(job_id)
+        if job and job.get('charts_payload'):
+            print(f"\n📊 Charts Created ({len(job['charts_payload'])} total):")
+            print("=" * 50)
+            for chart_key, chart_data in job['charts_payload'].items():
+                print(f"\n🎯 Chart: {chart_key}")
+                print(f"   Title: {chart_data.get('title', 'N/A')}")
+                print(f"   Type: {chart_data.get('type', 'N/A')}")
+                print(f"   Description: {chart_data.get('description', 'N/A')}")
+                
+                data_points = chart_data.get('data', [])
+                print(f"   Data Points ({len(data_points)}):")
+                for i, point in enumerate(data_points):
+                    name = point.get('name', 'N/A')
+                    value = point.get('value', 0)
+                    percentage = point.get('percentage', 0)
+                    color = point.get('color', 'N/A')
+                    print(f"     {i+1}. {name}: ${value:,.2f} ({percentage:.1f}%) {color}")
+                
+                # Verify percentages sum to ~100%
+                total_pct = sum(p.get('percentage', 0) for p in data_points)
+                print(f"   ✅ Total percentage: {total_pct:.1f}%")
+        else:
+            print("\n❌ No charts found in database")
     else:
         print(f"Error: {result['body']}")
     

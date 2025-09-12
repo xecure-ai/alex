@@ -299,7 +299,8 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], db):
         for position in account.get("positions", []):
             total_positions += 1
             instrument = position.get("instrument", {})
-            price = float(instrument.get("current_price", 100))
+            price_value = instrument.get("current_price", 100)
+            price = float(price_value if price_value is not None else 100)
             total_value += float(position.get("quantity", 0)) * price
 
     # Bind job_id and data to tools

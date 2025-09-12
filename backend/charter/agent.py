@@ -5,24 +5,17 @@ Chart Maker Agent - creates visualization data for portfolio analysis.
 import os
 import json
 import logging
-from typing import Dict, Any, Optional
-from datetime import datetime
+import re
+from typing import Dict, Any, Optional, Literal
 from dataclasses import dataclass
 
 from agents import function_tool, RunContextWrapper
 from agents.extensions.models.litellm_model import LitellmModel
 
+from templates import CHARTER_INSTRUCTIONS, create_charter_task
+
 logger = logging.getLogger(__name__)
 
-# Color palette suggestions
-COLOR_PALETTES = {
-    "blue_gradient": ["#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE"],
-    "green_gradient": ["#10B981", "#34D399", "#6EE7B7", "#A7F3D0", "#D1FAE5"],
-    "warm": ["#F59E0B", "#F97316", "#EF4444", "#DC2626", "#B91C1C"],
-    "cool": ["#06B6D4", "#0891B2", "#0E7490", "#155E75", "#164E63"],
-    "purple": ["#8B5CF6", "#A78BFA", "#C084FC", "#E9D5FF", "#F3E8FF"],
-    "mixed": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"],
-}
 
 
 @dataclass
@@ -32,6 +25,7 @@ class CharterContext:
     job_id: str
     portfolio_data: Dict[str, Any]
     db: Optional[Any] = None  # Database connection (optional for testing)
+    charts: Dict[str, Any] = None  # Accumulate charts during session
 
 
 def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
@@ -101,25 +95,26 @@ def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
 @function_tool
 async def create_chart(
     wrapper: RunContextWrapper[CharterContext],
-    chart_key: str,
     title: str,
     description: str,
-    chart_type: str,
-    data_points: str,
+    chart_type: Literal['pie', 'bar', 'donut', 'horizontalBar'],
+    names: list[str],
+    values: list[float], 
+    colors: list[str]
 ) -> str:
     """
     Create a chart and save it to the database.
-
+    
     Args:
-        wrapper: Context wrapper with job_id and database
-        chart_key: Unique identifier for the chart (e.g., 'asset_allocation', 'geography')
-        title: Display title for the chart
-        description: Brief description of what the chart shows
-        chart_type: Type of chart - 'pie', 'bar', 'donut', 'horizontalBar', 'line'
-        data_points: JSON array string of data points, each with: name, value, percentage, color
-
-    Returns:
-        Success or error message
+        title: Display title like 'Asset Class Distribution'
+        description: Brief description of what the chart shows  
+        chart_type: Type of visualization to create
+        names: Category names like ['Stocks', 'Bonds', 'Cash']
+        values: Dollar values like [65900.0, 14100.0, 4600.0]
+        colors: Hex colors like ['#3B82F6', '#10B981', '#EF4444']
+    
+    The chart_key will be auto-generated from the title.
+    Returns success or error message.
     """
     job_id = wrapper.context.job_id
     db = wrapper.context.db
@@ -127,59 +122,65 @@ async def create_chart(
     if not job_id:
         return "Error: No job ID available in context"
 
-    try:
-        # Parse and validate the data points
-        data = json.loads(data_points)
-
-        if not isinstance(data, list):
-            return "Error: data_points must be a JSON array"
-
-        # Validate each data point
-        for point in data:
-            if not all(k in point for k in ["name", "value", "percentage", "color"]):
-                return "Error: Each data point must have name, value, percentage, and color"
-
-        # Verify percentages sum to approximately 100
-        total_pct = sum(point["percentage"] for point in data)
-        if abs(total_pct - 100.0) > 1.0:  # Allow 1% tolerance
-            # Auto-normalize if close
-            if 80 < total_pct < 120:
-                for point in data:
-                    point["percentage"] = round(point["percentage"] * 100 / total_pct, 2)
-            else:
-                logger.warning(f"Charter: Percentages sum to {total_pct:.1f}%, not 100%")
-
-        # Build chart structure
-        chart_data = {"title": title, "description": description, "type": chart_type, "data": data}
-
-        # Initialize charts collection if needed
-        if not hasattr(create_chart, "charts"):
-            create_chart.charts = {}
-
-        # Add this chart to our collection
-        create_chart.charts[chart_key] = chart_data
-
-        # Save all charts to database if available
-        if db:
-            success = db.jobs.update_charts(job_id, create_chart.charts)
-
-            if success:
-                logger.info(f"Charter: Stored chart '{chart_key}' for job {job_id}")
-                return (
-                    f"Successfully created and saved {chart_key} chart with {len(data)} data points"
-                )
-            else:
-                logger.error(f"Charter: Failed to update charts for job {job_id}")
-                return f"Created {chart_key} chart but database update failed"
+    # Validate inputs
+    if len(names) != len(values) or len(names) != len(colors):
+        return f"Error: Mismatched list lengths - names({len(names)}), values({len(values)}), colors({len(colors)})"
+    
+    if not names:
+        return "Error: Empty data - at least one data point required"
+    
+    # Validate colors are hex format
+    for color in colors:
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', color):
+            return f"Error: Invalid hex color '{color}' - use format like '#3B82F6'"
+    
+    # Calculate total and percentages
+    total_value = sum(values)
+    if total_value <= 0:
+        return "Error: Total value must be positive"
+    
+    # Generate chart key from title
+    chart_key = re.sub(r'[^a-zA-Z0-9]+', '_', title.lower()).strip('_')
+    if not chart_key:
+        chart_key = f"chart_{len(names)}_items"
+    
+    # Build data points with calculated percentages
+    data_points = []
+    for name, value, color in zip(names, values, colors):
+        percentage = round((value / total_value) * 100, 2)
+        data_points.append({
+            "name": name,
+            "value": value,
+            "percentage": percentage,
+            "color": color
+        })
+    
+    # Build chart structure
+    chart_data = {
+        "title": title,
+        "description": description, 
+        "type": chart_type,
+        "data": data_points
+    }
+    
+    # Add chart to context accumulator
+    if wrapper.context.charts is None:
+        wrapper.context.charts = {}
+    wrapper.context.charts[chart_key] = chart_data
+    
+    # Save accumulated charts to database
+    if db:
+        success = db.jobs.update_charts(job_id, wrapper.context.charts)
+        
+        if success:
+            logger.info(f"Charter: Stored chart '{chart_key}' for job {job_id} with {len(data_points)} data points")
+            return f"Successfully created and saved '{title}' chart with {len(data_points)} data points"
         else:
-            logger.info(f"Charter: Created chart '{chart_key}' (no database)")
-            return f"Successfully created {chart_key} chart with {len(data)} data points (not saved - no database)"
-
-    except json.JSONDecodeError as e:
-        return f"Error: Invalid JSON in data_points - {str(e)}"
-    except Exception as e:
-        logger.error(f"Charter: Error creating chart: {e}")
-        return f"Error creating chart: {str(e)}"
+            logger.error(f"Charter: Failed to update charts for job {job_id}")
+            return "Error: Failed to save chart to database"
+    else:
+        logger.info(f"Charter: Created chart '{chart_key}' (no database)")
+        return f"Successfully created '{title}' chart with {len(data_points)} data points (not saved - no database)"
 
 
 def create_agent(job_id: str, portfolio_data: Dict[str, Any], db=None):
@@ -193,49 +194,16 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], db=None):
 
     model = LitellmModel(model=f"bedrock/{model_id}")
 
-    # Clear any previous charts
-    create_chart.charts = {}
+    # Create context with empty charts dict
+    context = CharterContext(job_id=job_id, portfolio_data=portfolio_data, db=db, charts={})
 
-    # Create context
-    context = CharterContext(job_id=job_id, portfolio_data=portfolio_data, db=db)
-
-    # Tools - just the decorated function!
+    # Tools
     tools = [create_chart]
 
     # Analyze the portfolio upfront
     portfolio_analysis = analyze_portfolio(portfolio_data)
 
-    # Create the task with analysis and color palettes
-    task = f"""Create insightful visualization charts for this investment portfolio.
-
-{portfolio_analysis}
-
-Raw Portfolio Data (for detailed calculations):
-{json.dumps(portfolio_data, indent=2)}
-
-Your task:
-1. Based on the portfolio analysis and raw data above, decide what charts would be most valuable
-2. Create 4-6 charts that tell a compelling story about the portfolio
-3. Use create_chart() for each visualization (each call automatically saves to the database)
-4. You can aggregate the allocation data from instruments to create meaningful breakdowns
-
-Chart Guidelines:
-- Choose chart types that best represent the data (pie for composition, bar for comparisons, etc.)
-- Use meaningful chart keys like 'asset_allocation', 'geographic_exposure', 'sector_breakdown', etc.
-- Ensure all percentages in each chart sum to exactly 100%
-- Use appropriate colors (you can use hex codes like #3B82F6 for blue, #10B981 for green, etc.)
-- Consider these color palettes: {json.dumps(COLOR_PALETTES, indent=2)}
-
-You have flexibility to choose what to visualize, but consider:
-- Asset class distribution (stocks vs bonds vs alternatives)
-- Geographic diversification
-- Sector exposure
-- Account type breakdown
-- Top holdings concentration
-- Risk profile visualization
-- Tax-advantaged vs taxable split
-- Any other insights that would be valuable
-
-Remember: Each chart needs a clear title, description, type (pie/bar/donut/horizontalBar), and data array with name/value/percentage/color for each point."""
+    # Create the task using template
+    task = create_charter_task(portfolio_analysis, json.dumps(portfolio_data, indent=2))
 
     return model, tools, task, context

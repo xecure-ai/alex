@@ -26,6 +26,9 @@ IMPORTANT:
 - Each agent stores its results directly in the database
 - After calling agents, use finalize_job() to save your summary and mark the job complete
 - Be decisive and efficient - don't second-guess your choices
+- ONLY use the provided tool functions: invoke_reporter(), invoke_charter(), invoke_retirement(), finalize_job()
+- Do NOT use any other tool calls, commentary tags, or special formatting
+- Keep your responses focused on tool calls and brief explanations
 """
 
 ANALYSIS_REQUEST_TEMPLATE = """Analyze portfolio for job {job_id}:

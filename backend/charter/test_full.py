@@ -3,16 +3,15 @@
 Full test for Charter agent via Lambda
 """
 
-import os
 import json
 import boto3
 import time
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
-
 from src import Database
 from src.schemas import JobCreate
+
+load_dotenv(override=True)
 
 def test_charter_lambda():
     """Test the Charter agent via Lambda invocation"""
@@ -28,8 +27,7 @@ def test_charter_lambda():
         job_type="portfolio_analysis",
         request_payload={"analysis_type": "test", "test": True}
     )
-    job = db.jobs.create(job_create.model_dump())
-    job_id = job['id']
+    job_id = db.jobs.create(job_create.model_dump())
     
     # Load portfolio data for the test
     user = db.users.find_by_clerk_id(test_user_id)
@@ -84,10 +82,26 @@ def test_charter_lambda():
         job = db.jobs.find_by_id(job_id)
         
         if job and job.get('charts_payload'):
-            print("\n✅ Charts generated successfully!")
-            print(f"Number of charts: {len(job['charts_payload'])}")
-            for chart_key in list(job['charts_payload'].keys())[:3]:
-                print(f"  - {chart_key}")
+            print(f"\n📊 Charts Created ({len(job['charts_payload'])} total):")
+            print("=" * 50)
+            for chart_key, chart_data in job['charts_payload'].items():
+                print(f"\n🎯 Chart: {chart_key}")
+                print(f"   Title: {chart_data.get('title', 'N/A')}")
+                print(f"   Type: {chart_data.get('type', 'N/A')}")
+                print(f"   Description: {chart_data.get('description', 'N/A')}")
+                
+                data_points = chart_data.get('data', [])
+                print(f"   Data Points ({len(data_points)}):")
+                for i, point in enumerate(data_points):
+                    name = point.get('name', 'N/A')
+                    value = point.get('value', 0)
+                    percentage = point.get('percentage', 0)
+                    color = point.get('color', 'N/A')
+                    print(f"     {i+1}. {name}: ${value:,.2f} ({percentage:.1f}%) {color}")
+                
+                # Verify percentages sum to ~100%
+                total_pct = sum(p.get('percentage', 0) for p in data_points)
+                print(f"   ✅ Total percentage: {total_pct:.1f}%")
         else:
             print("\n❌ No charts found in database")
             

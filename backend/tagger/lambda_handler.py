@@ -83,6 +83,7 @@ async def process_instruments(instruments: List[Dict[str, str]]) -> Dict[str, An
                 'symbol': c.symbol,
                 'name': c.name,
                 'type': c.instrument_type,
+                'current_price': c.current_price,
                 'asset_class': c.allocation_asset_class.model_dump(),
                 'regions': c.allocation_regions.model_dump(),
                 'sectors': c.allocation_sectors.model_dump()

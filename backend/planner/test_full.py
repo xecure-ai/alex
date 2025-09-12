@@ -13,7 +13,7 @@ import json
 import boto3
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Load environment
@@ -63,7 +63,7 @@ def main():
     
     # Check for test user
     print("📊 Checking test data...")
-    test_user_id = 'test_user'
+    test_user_id = 'test_user_001'
     user = db.users.find_by_clerk_id(test_user_id)
     
     if not user:
@@ -90,13 +90,12 @@ def main():
         'status': 'pending',
         'request_payload': {
             'analysis_type': 'full',
-            'requested_at': datetime.utcnow().isoformat(),
+            'requested_at': datetime.now(timezone.utc).isoformat(),
             'test_run': True
         }
     }
     
-    job = db.jobs.create(job_data)
-    job_id = job['id']
+    job_id = db.jobs.create(job_data)
     print(f"✓ Created job: {job_id}")
     
     # Send to SQS

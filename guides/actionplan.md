@@ -366,43 +366,54 @@ IMPORTANT: you MUST remember to use "uv run my_module.py" not "python my_module.
 
 ### Phase 6: Integration Testing
 
-#### 6.1 SQS Integration Test
-- [ ] Prerequisites: Terraform must be applied (Phase 5 complete)
-- [ ] Run test_integration.py:
-  - `cd backend/planner && uv run test_integration.py`
-- [ ] This will:
-  - Create test job for 'test_user' in database
-  - Send job_id to SQS queue (created by Terraform)
-  - Trigger Lambda via SQS event
-  - Poll for completion (3 minute timeout)
-  - Display formatted results
-- [ ] Verify all agents were invoked and results stored
-- [ ] Verify:
-  - Report generates correctly
-  - Charts data is valid JSON
-  - Retirement projections calculate
-  - Job completes successfully
+#### 6.1 Major issue with charter - review and remediation plan ✅ COMPLETE
+- [x] Read the code in charter/agent.py
+  - Reviewed code like: `create_chart.charts = {}` in create_agent - stateful anti-pattern
+  - Reviewed the tool method create_chart signature - unreliable JSON string parameter
+  - Reviewed the body of create_chart - poor implementation with function state
+- [x] Write a new file guides/remediation.md that summarizes your self-review, and proposes a solution that is clean, reliable and simple
+- [x] Write a detailed, clear action plan in remediation.md to fix this. Include logging in the fix so that the tool use can be tracked
+- [x] IMPLEMENTED FIX: Replaced JSON string with structured parameters (list[str], list[float]), removed stateful functions, added proper validation
 
-#### 6.2 Full End-to-End Tests
-- [ ] Run additional test scenarios to verify agent autonomy
+#### 6.2 SQS Integration Test ✅ COMPLETE
+- [x] Prerequisites: Terraform must be applied (Phase 5 complete)
+- [x] Run test via SQS (test_sqs_direct.py created and tested)
+- [x] This successfully:
+  - Created test job for 'test_user_001' in database
+  - Sent job_id to SQS queue (alex-analysis-jobs)
+  - Triggered Lambda via SQS event
+  - Polled for completion (completed in 103 seconds)
+  - Displayed formatted results
+- [x] Verified all agents were invoked and results stored
+- [x] Verified:
+  - Report generates correctly (9291 chars)
+  - Charts data is valid JSON (5 charts created)
+  - Retirement projections calculate successfully
+  - Job completes successfully with Charter working perfectly
 
-#### 6.3 Autonomy Test
-- [ ] Test with simple portfolio (1 position)
-  - Verify planner skips charter
-- [ ] Test with complex portfolio (10+ positions)
-  - Verify planner calls all agents
-- [ ] Test with no retirement goals
-  - Verify planner skips retirement agent
+#### 6.3 Full End-to-End Tests
+- [ ] Rerun `uv run test_simple.py` for all agents to ensure success
+- [ ] Cleanup all the extra test files in planner/ leaving test_simple, test_full, and moving "test_sqs_direct" into the parent backend directory
+- [ ] Review and improve test_sqs_direct, renaming it to test_full; ensure that any test data in the db is set up correctly
+- [ ] Redeploy all agents
+- [ ] Rerun test_full for each agent
+- [ ] Rerun test_full in backend to test everything
+- [ ] Do not be dismissive of any error - we need to investigate everything
 
 #### 6.4 Tagger Workflow Test
-- [ ] Test with portfolio containing unknown instruments (e.g., new ETF)
+- [ ] Test with portfolio containing unknown instruments (e.g., new ETF) with unpopulated instrument in database
   - Verify tagger is called automatically
   - Verify allocations are populated in database
+  - Verify price is populated in database
   - Verify main agents receive updated data
-- [ ] Test with all known instruments
-  - Verify tagger is NOT called (efficiency)
-- [ ] Test tagger failure handling
-  - Verify orchestration continues even if tagger fails
+
+#### 6.5 Larger Test
+- [ ] Create a new test in backend called test_scale
+- [ ] Set up 5 users in the database with portfolio sizes ranging from 0 to 10 positions
+- [ ] If the database supports this, have 3 of the users having multiple accounts with different positions
+- [ ] test_scale to run the analysis for all 5 users concurrently
+- [ ] Review the results and ensure everything works well - do not 
+
 
 ### Phase 7: Documentation & Cleanup
 

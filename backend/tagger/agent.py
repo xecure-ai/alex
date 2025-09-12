@@ -3,8 +3,9 @@ InstrumentTagger Agent - Classifies financial instruments using OpenAI Agents SD
 """
 
 import os
-from typing import List, Optional
+from typing import List
 import logging
+from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from agents import Agent, Runner, trace
@@ -97,6 +98,7 @@ class InstrumentClassification(BaseModel):
     symbol: str = Field(description="Ticker symbol of the instrument")
     name: str = Field(description="Name of the instrument")
     instrument_type: str = Field(description="Type: etf, stock, mutual_fund, bond_fund, etc.")
+    current_price: float = Field(description="Current price per share in USD", gt=0)
 
     # Separate allocation objects
     allocation_asset_class: AllocationBreakdown = Field(description="Asset class breakdown")
@@ -306,6 +308,7 @@ def classification_to_db_format(classification: InstrumentClassification) -> Ins
         symbol=classification.symbol,
         name=classification.name,
         instrument_type=classification.instrument_type,
+        current_price=Decimal(str(classification.current_price)),  # Use actual price from classification
         allocation_asset_class=asset_class_dict,
         allocation_regions=regions_dict,
         allocation_sectors=sectors_dict,
