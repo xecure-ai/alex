@@ -316,9 +316,18 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], db):
         """Invoke the Retirement Specialist agent for retirement projections."""
         return await invoke_retirement_internal(job_id)
 
-    async def finalize(summary: str, key_findings: List[str], recommendations: List[str]) -> str:
-        """Finalize the job with summary and mark as completed."""
-        return await finalize_job_internal(job_id, summary, key_findings, recommendations, db)
+    async def finalize(summary: str, key_findings: str, recommendations: str) -> str:
+        """Finalize the job with summary and mark as completed. 
+        
+        Args:
+            summary: Executive summary of the analysis
+            key_findings: Key findings from the analysis (comma-separated)
+            recommendations: Actionable recommendations (comma-separated)
+        """
+        # Convert comma-separated strings to lists
+        findings_list = [f.strip() for f in key_findings.split(',') if f.strip()]
+        recommendations_list = [r.strip() for r in recommendations.split(',') if r.strip()]
+        return await finalize_job_internal(job_id, summary, findings_list, recommendations_list, db)
 
     reporter.__name__ = "invoke_reporter"
     charter.__name__ = "invoke_charter"

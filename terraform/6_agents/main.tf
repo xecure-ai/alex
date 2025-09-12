@@ -29,7 +29,7 @@ resource "aws_sqs_queue" "analysis_jobs" {
   max_message_size          = 262144
   message_retention_seconds = 86400  # 1 day
   receive_wait_time_seconds = 10     # Long polling
-  visibility_timeout_seconds = 310   # 5 minutes + 10 seconds buffer (matches Planner Lambda timeout)
+  visibility_timeout_seconds = 910   # 15 minutes + 10 seconds buffer (matches Planner Lambda timeout)
   
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.analysis_jobs_dlq.arn
@@ -218,7 +218,7 @@ resource "aws_lambda_function" "planner" {
   
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 300  # 5 minutes (per actionplan.md Phase 5.1)
+  timeout     = 900  # 15 minutes for planner
   memory_size = 2048  # 2GB for planner
   
   environment {
@@ -262,7 +262,7 @@ resource "aws_lambda_function" "tagger" {
   
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 60
+  timeout     = 300  # 5 minutes for tagger
   memory_size = 1024
   
   environment {
@@ -297,7 +297,7 @@ resource "aws_lambda_function" "reporter" {
   
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 60  # 1 minute for reporter agent
+  timeout     = 300  # 5 minutes for reporter agent
   memory_size = 1024
   
   environment {
@@ -333,7 +333,7 @@ resource "aws_lambda_function" "charter" {
   
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 60  # 1 minute for charter agent
+  timeout     = 300  # 5 minutes for charter agent
   memory_size = 1024
   
   environment {
@@ -368,7 +368,7 @@ resource "aws_lambda_function" "retirement" {
   
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
-  timeout     = 60  # 1 minute for retirement agent
+  timeout     = 300  # 5 minutes for retirement agent
   memory_size = 1024
   
   environment {

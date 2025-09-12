@@ -52,13 +52,61 @@ async def run_charter_agent(job_id: str, portfolio_data: Dict[str, Any], db=None
             agent,
             input=task,
             context=context,  # Pass the context
-            max_turns=8
+            max_turns=20  # Increased from 8 to potentially resolve Lambda execution issues
         )
+        
+        # COMPREHENSIVE DIAGNOSTIC LOGGING - Debug Step 1
+        logger.info(f"===== CHARTER RUNNER RESULT DIAGNOSTICS =====")
+        logger.info(f"Charter: Runner result type: {type(result)}")
+        logger.info(f"Charter: Runner result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+        
+        # Log messages if available
+        if hasattr(result, 'messages'):
+            logger.info(f"Charter: Number of turns taken: {len(result.messages)}")
+            for i, msg in enumerate(result.messages):
+                msg_str = str(msg)[:500]  # First 500 chars
+                logger.info(f"Charter: Turn {i}: {msg_str}")
+                # Also log if the message contains tool calls
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    logger.info(f"Charter: Turn {i} has {len(msg.tool_calls)} tool calls")
+                    for j, tool_call in enumerate(msg.tool_calls):
+                        logger.info(f"Charter: Turn {i} Tool {j}: {tool_call}")
+        else:
+            logger.info(f"Charter: Result has no 'messages' attribute")
+        
+        # Log final output details
+        logger.info(f"Charter: Has final_output: {hasattr(result, 'final_output')}")
+        if hasattr(result, 'final_output'):
+            logger.info(f"Charter: Final output type: {type(result.final_output)}")
+            logger.info(f"Charter: Final output length: {len(result.final_output) if result.final_output else 0}")
+            logger.info(f"Charter: Final output preview: {result.final_output[:200] if result.final_output else 'None'}")
+        
+        # Log the conversation flow
+        if hasattr(result, 'to_input_list'):
+            input_list = result.to_input_list()
+            logger.info(f"Charter: Conversation turns: {len(input_list)}")
+            for i, msg in enumerate(input_list[:5]):  # First 5 messages
+                logger.info(f"Charter: Message {i} - Role: {msg.get('role', 'unknown')}, Content length: {len(str(msg.get('content', '')))}")
+                if msg.get('tool_calls'):
+                    logger.info(f"Charter: Message {i} has {len(msg['tool_calls'])} tool calls")
+        
+        # Log raw responses to see what the model actually returned
+        if hasattr(result, 'raw_responses'):
+            logger.info(f"Charter: Number of raw responses: {len(result.raw_responses) if result.raw_responses else 0}")
+            if result.raw_responses:
+                for i, response in enumerate(result.raw_responses[:3]):  # First 3 responses
+                    logger.info(f"Charter: Raw response {i} preview: {str(response)[:500]}")
+        
+        # Log context state after execution
+        logger.info(f"Charter: Context charts after execution: {len(context.charts)} charts")
+        logger.info(f"Charter: Chart keys: {list(context.charts.keys())}")
         
         return {
             'success': True,
             'message': 'Charts generated successfully',
-            'final_output': result.final_output
+            'final_output': result.final_output,
+            'charts_generated': len(context.charts),
+            'chart_keys': list(context.charts.keys())
         }
 
 def lambda_handler(event, context):

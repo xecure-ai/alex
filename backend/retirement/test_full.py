@@ -28,8 +28,7 @@ def test_retirement_lambda():
         job_type="portfolio_analysis",
         request_payload={"analysis_type": "test", "test": True}
     )
-    job = db.jobs.create(job_create.model_dump())
-    job_id = job['id']
+    job_id = db.jobs.create(job_create.model_dump())
     
     print(f"Testing Retirement Lambda with job {job_id}")
     print("=" * 60)

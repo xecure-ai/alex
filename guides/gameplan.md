@@ -1,8 +1,10 @@
 # Alex Financial Planner SaaS - Development Gameplan
 
-**INTERNAL DOCUMENT - For Development Team Only - Students will refer to the numbered guides in the guides folder**
+**INTERNAL DOCUMENT - For you (Claude Code) and me (the user, Ed) only - Students will refer to the numbered guides in the guides folder**
 
-This document outlines the complete plan for building the Alex Financial Planner SaaS platform. This is the roadmap for Parts 5-8 of the course.
+The Alex project will be deployed by students on the course AI in Production. The code and Terraform scripts are being built by you and me now.
+
+This document covers our plan for building the Alex Financial Planner SaaS platform.
 
 ## Current Status
 
@@ -36,11 +38,12 @@ Approach:
 2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
 3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
 4. Do not prematurely declare victory. Prove that the issue is fully fixed.
+5. Beware: you have a tendancy to be dismissive of issues and call them "expected". Pay attention to every error!
 
 ## Infrastructure Management Strategy (Terraform)
 
 ### Why Separate Terraform Directories?
-For this educational project, we use a unique approach designed to simplify the learning experience:
+For this educational project, we use a simple approach:
 - **Each guide has its own Terraform directory** (e.g., `terraform/2_sagemaker`, `terraform/3_ingestion`)
 - **Local state files** instead of remote S3 state
 - **Independent deployments** - each part can be deployed without affecting others
@@ -66,12 +69,6 @@ uv add --editable ../database  # Add shared database package (for services that 
 - IMPORTANT: Scripts are called with `uv run script_name.py` (works on Mac/Linux/Windows) not `uv python run script_name.py`
 - Examples: `package_docker.py` for Lambda packaging using docker so that AWS architecture is supported, `deploy.py` for deployments, `migrate.py` for database migrations
 - This ensures consistent behavior across all operating systems
-
-### Benefits
-- Clean dependency isolation per service
-- Simplified Lambda packaging (each service packages only its dependencies)
-- Consistent database models via shared package
-- Cross-platform compatibility
 
 ## Current State (Parts 1-5 Complete)
 
@@ -106,22 +103,6 @@ uv add --editable ../database  # Add shared database package (for services that 
 - **LLM-compatible** - Field descriptions and examples for structured outputs
 - **Separate Create/Update schemas** - InstrumentCreate, JobUpdate, etc. for different operations
 - **Analysis output schemas** - PortfolioAnalysis, RebalanceRecommendation for agent responses
-
-## Technical Architecture
-
-### AI Models
-- **OpenAI OSS 120B** via AWS Bedrock for all agents
-- **Existing SageMaker** for embeddings
-- **OpenAI Agents SDK** with Bedrock using LiteLLM integration for agent orchestration
-
-### Infrastructure Choices
-- **Aurora Serverless v2 PostgreSQL with Data API** - No VPC needed, scales to zero
-- **Lambda** for ALL backend services (agents and API)
-- **API Gateway** for REST API endpoints with CORS
-- **SQS** for async job queue
-- **S3 + CloudFront** for static React SPA
-- **Clerk** for authentication (client-side only)
-- **LangFuse** for observability (native OpenAI Agents SDK support)
 
 ### Project Structure
 ```
@@ -173,12 +154,7 @@ alex/
 │       ├── lambda_handler.py  # Lambda + API Gateway
 │       └── package.py
 │
-├── frontend/              # React SPA (Guide 7)
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── lib/
-│   └── vite.config.ts
+├── frontend/              # NextJS React SPA (Guide 7)
 │
 └── guides/
     ├── 5_database.md
@@ -196,8 +172,7 @@ The correct package to install is `openai-agents`
 `uv add openai-agents`  
 `uv add "openai-agents[litellm]"`  
 
-This code shows idiomatic use of OpenAI Agents SDK with appropriate parameters and use of Tools. This is the approach to be used. Only use Tools where they make sense. We will not use Structured Outputs due to Bedrock limitations.
-
+This code shows idiomatic use with appropriate parameters and use of Tools. Only use Tools where they make sense. We will not use Tools and Structured Outputs together due to Bedrock limitations.
 BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace().
 
 ```python
@@ -273,9 +248,22 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 ### Objective
 Build the AI agent ecosystem where a main orchestrator delegates to specialized agents.
 
+### Agent structure
+
+Every agent folder has the following:
+
+pyproject.toml # uv details  
+lambda_handler.py # the lambda function
+agent.py # the agent and tool code
+templates.py # the instructions and task templates
+package_docker.py # to package up
+xxx_lambda.zip # the zip
+test_simple.py # the local test
+test_full.py # the remote test
+
 ### Steps
 
-1. **Build Financial Planner Agent** (Orchestrator - Lambda)
+1. **Build planner agent** (planner - Lambda)
    - Lambda function with SQS trigger
    - 15 minute timeout, 3GB memory
    - Configurable Bedrock model via `BEDROCK_MODEL_ID` env var
@@ -285,7 +273,7 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
    - Updates job status in database
    - ✅ **Test**: Local invocation, SQS message processing
 
-2. **Build InstrumentTagger Agent** (Lambda)
+2. **Build tagger Agent** (Lambda)
    - Simple agent for populating missing instrument reference data
    - Uses Structured Outputs to classify instruments
    - Populates: asset_class, regions, sectors allocations
@@ -293,19 +281,19 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
    - Future enhancement: Add Polygon API tool for real-time data
    - ✅ **Test**: Tag various ETFs and stocks, verify allocations sum to 100
 
-3. **Build Report Writer Agent** (Lambda)
+3. **Build reporter Agent** (Lambda)
    - Analyzes portfolio data
    - Generates markdown reports
    - Stores in database
    - ✅ **Test**: Invoke with test portfolio, verify markdown output
 
-4. **Build Chart Maker Agent** (Lambda)
+4. **Build charter Agent** (Lambda)
    - Creates JSON data for charts
    - Calculates allocations by asset class, region, sector, with autonomy to decide
    - Formats for Recharts
    - ✅ **Test**: Verify JSON structure matches Recharts schema
 
-5. **Build Retirement Specialist Agent** (Lambda)
+5. **Build retirment Agent** (Lambda)
    - Projects retirement income
    - Monte Carlo simulations
    - Creates projection charts
@@ -331,57 +319,16 @@ User Request → API → SQS → Planner (Lambda)
                              Job marked complete
 ```
 
-**Simplification Note**: InstrumentTagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable. This is the ONLY task that is OK to use Structured Outputs, as it doesn't use any tools.
-
-### Deliverables
-- Working orchestrator Lambda with SQS trigger
-- Four specialized Lambda agents (InstrumentTagger, Report Writer, Chart Maker, Retirement)
-- Automatic instrument data population
-- Full portfolio analysis capability
-- Async job processing via SQS
+**Simplification Note**: tagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable. This is the ONLY task that is OK to use Structured Outputs, as it doesn't use any tools.
 
 ### Testing strategy for Part 6
 
-### Running the Full Integration Test:
-
-Navigate to the planner directory  
-`cd backend/planner`
-
-Run the full test using   
-`uv run test_full.py`
-
-What the Test Does:
-
-1. Creates a test job in the Aurora database for the test user
-2. Submits the job to the SQS queue (alex-analysis-jobs)
-3. Triggers the Planner Lambda which orchestrates all agents:
-    - InstrumentTagger (classifies unknown instruments)
-    - Report Writer (generates analysis narrative)
-    - Chart Maker (creates visualization data)
-    - Retirement Specialist (projects future outcomes)
-4. Monitors progress by polling the database status
-5. Shows results when complete (typically 90-120 seconds)
-
-Other Useful Test Commands:
-
-Test the planner locally (without Lambda)  
-`uv run test_local.py`
-
-Test just the SQS integration
-`uv run test_integration.py`
-
-Check job status in the database
-`uv run check_jobs.py`
-
-Test individual agents
-`cd ../tagger && uv run test_local.py`
-`cd ../reporter && uv run test_local.py`
-
-Monitoring:
-
-- CloudWatch Logs
-- SQS Console
-- Database: Use check_jobs.py to see job statuses
+Each of the 5 agents has the following in their directory:
+For local testing: test_simple.py
+For remote testing: test_full.py
+The backend parent directory has the overall scripts:
+For testing everything locally: test_simple.py
+For testing remotely: test_full.py
 
 ### Acceptance Criteria for Part 6
 

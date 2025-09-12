@@ -37,19 +37,19 @@ def package_lambda():
         
         print("Creating Lambda package using Docker...")
         
-        # Create requirements file with all dependencies
-        requirements = """
-openai-agents[litellm]
-boto3
-pydantic
-python-dotenv
-tenacity
-"""
+        # Export exact requirements from uv.lock (excluding the editable database package)
+        print("Exporting requirements from uv.lock...")
+        requirements_result = run_command(
+            ["uv", "export", "--no-hashes", "--no-emit-project"],
+            cwd=str(planner_dir)
+        )
         
         req_file = temp_path / "requirements.txt"
-        req_file.write_text(requirements.strip())
+        req_file.write_text(requirements_result)
         
         # Use Docker to install dependencies for Lambda's architecture
+        # The --no-emit-project excludes the current project from requirements
+        # We still need to manually install the database package
         docker_cmd = [
             "docker", "run", "--rm",
             "--platform", "linux/amd64",

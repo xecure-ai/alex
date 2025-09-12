@@ -391,14 +391,33 @@ IMPORTANT: you MUST remember to use "uv run my_module.py" not "python my_module.
   - Retirement projections calculate successfully
   - Job completes successfully with Charter working perfectly
 
-#### 6.3 Full End-to-End Tests
-- [ ] Rerun `uv run test_simple.py` for all agents to ensure success
-- [ ] Cleanup all the extra test files in planner/ leaving test_simple, test_full, and moving "test_sqs_direct" into the parent backend directory
-- [ ] Review and improve test_sqs_direct, renaming it to test_full; ensure that any test data in the db is set up correctly
-- [ ] Redeploy all agents
-- [ ] Rerun test_full for each agent
-- [ ] Rerun test_full in backend to test everything
-- [ ] Do not be dismissive of any error - we need to investigate everything
+#### 6.3 🔴 REGRESSION: Showstopper Issue with Charter Not Generating Charts
+
+##### Critical Regression Detected
+- **SEVERITY**: SHOWSTOPPER - Charter was working, now completely broken
+- **SYMPTOM**: Charter agent runs successfully but creates 0 charts
+- **IMPACT**: No visualizations = System unusable for production
+- **STATUS**: UNRESOLVED - but strong evidence that this was caused by lambda timeout
+
+##### SOLUTION
+
+This is believed to be due to a Lambda Timeout causing the charter to fail.
+
+ACTION PLAN FOR YOU (Claude Code)
+
+- [X] Update timeout to be 5 mins for each agent, except the planner which should be 15 mins (it should already be)
+- [X] Test each agent 3 times locally with test_simple.py in each directory. Monitor all log messages. If any issues, STOP and report to user (Ed)
+- [X] Test run_simple.py in the backend directory 3 times. Monitor all log messages. If any issues, STOP and report to user (Ed)
+- [X] Deploy using backend/deploy_all_lambdas.py
+- [X] Check that new versions were deployed and uploaded to lambda properly - verify all, and verify timeouts
+- [ ] Now test each agent 3 times remotely with test_full.py in each directory. Monitor all log messages. If any issues, STOP and report to user (Ed). FAIL - STOPPED - CHARTER STILL FAILING!
+- [ ] Test run_full.py in the backend directory 3 times. Monitor all log messages. If any issues, STOP and report to user (Ed)
+
+To watch for:
+
+1. Note that since these can take several minutes to run, you may need to monitor for 3-5 minutes for completion
+2. We believe that timeouts have been causing the issue, but it's not conclusively proven
+3. There is also another point of suspicion: the charter agent uses a hacky approach to update charts in the database. (Charts accumulate in agent context, and get over-written each time. This might not work well with async / concurrent tool use.) Let's not fix this unless we prove it's a problem, but watch out for it. If necessary, this could be addressed by doing a database read, add chart, write. But we should only do this if we conclusively prove that this is a problem.
 
 #### 6.4 Tagger Workflow Test
 - [ ] Test with portfolio containing unknown instruments (e.g., new ETF) with unpopulated instrument in database
@@ -406,13 +425,25 @@ IMPORTANT: you MUST remember to use "uv run my_module.py" not "python my_module.
   - Verify allocations are populated in database
   - Verify price is populated in database
   - Verify main agents receive updated data
+- [ ] Do not be dismissive of any error - if any problems, stop, explain to me (the user, Ed) and let's decide how to continue
 
-#### 6.5 Larger Test
-- [ ] Create a new test in backend called test_scale
+#### 6.5 Multiple Accounts Test
+- [ ] Do a code review to make sure all code can handle 1 user with multiple accounts
+- [ ] Create a new test in backend called test_multiple_accounts.py
+- [ ] Make this test create 1 user in the database with 3 accounts, each different portfolios
+- [ ] Do a full run via SQS for this user
+- [ ] Review the results and ensure everything works well - do not dismiss errors
+- [ ] Do not be dismissive of any error - if any problems, stop, explain to me (the user, Ed) and let's decide how to continue
+- [ ] The test should clean up db data after running, after clearly reporting what data was produced
+
+#### 6.6 Larger Test
+- [ ] Create a new test in backend called test_scale.py
 - [ ] Set up 5 users in the database with portfolio sizes ranging from 0 to 10 positions
-- [ ] If the database supports this, have 3 of the users having multiple accounts with different positions
+- [ ] Have 3 of the users having multiple accounts with different positions
 - [ ] test_scale to run the analysis for all 5 users concurrently
-- [ ] Review the results and ensure everything works well - do not 
+- [ ] Review the results and ensure everything works well - do not dismiss errors
+- [ ] Do not be dismissive of any error - if any problems, stop, explain to me (the user, Ed) and let's decide how to continue
+- [ ] The test should clean up db data after running, after clearly reporting what data was produced
 
 
 ### Phase 7: Documentation & Cleanup

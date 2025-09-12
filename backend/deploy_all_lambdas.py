@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Deploy all Part 6 Lambda functions to AWS.
-This script packages and deploys all agent Lambda functions via S3.
+Deploy all Part 6 Lambda functions to AWS using Terraform.
+This script ensures Lambda functions are properly updated by:
+1. Optionally packaging the Lambda functions
+2. Tainting Lambda resources in Terraform to force recreation
+3. Running terraform apply to deploy with the latest code
 
 Usage:
     cd backend
@@ -14,64 +17,65 @@ Options:
 import boto3
 import sys
 import subprocess
+import os
 from pathlib import Path
 from typing import List, Tuple
 
-def deploy_lambda_function(function_name: str, zip_path: Path, bucket_name: str) -> bool:
+def taint_and_deploy_via_terraform() -> bool:
     """
-    Deploy a single Lambda function via S3.
+    Deploy Lambda functions using Terraform with forced recreation.
     
-    Args:
-        function_name: Name of the Lambda function
-        zip_path: Path to the deployment package
-        bucket_name: S3 bucket for Lambda packages
-        
     Returns:
         True if successful, False otherwise
     """
-    s3_client = boto3.client('s3')
-    lambda_client = boto3.client('lambda')
-    
-    # Check if zip file exists
-    if not zip_path.exists():
-        print(f"❌ {zip_path} not found. Run package_docker.py first.")
+    # Change to terraform directory
+    terraform_dir = Path(__file__).parent.parent / "terraform" / "6_agents"
+    if not terraform_dir.exists():
+        print(f"❌ Terraform directory not found: {terraform_dir}")
         return False
     
-    # Upload to S3
-    s3_key = f"lambda-packages/{function_name}.zip"
-    print(f"📦 Uploading {function_name} to S3...")
+    # Lambda function names to taint
+    lambda_functions = ['planner', 'tagger', 'reporter', 'charter', 'retirement']
     
-    try:
-        with open(zip_path, 'rb') as f:
-            s3_client.upload_fileobj(f, bucket_name, s3_key)
-        print(f"   ✓ Uploaded to s3://{bucket_name}/{s3_key}")
-    except Exception as e:
-        print(f"   ✗ Failed to upload: {e}")
-        return False
+    print("📌 Step 1: Tainting Lambda functions to force recreation...")
+    print("-" * 50)
     
-    # Update Lambda function code
-    print(f"🚀 Updating Lambda function {function_name}...")
-    
-    try:
-        response = lambda_client.update_function_code(
-            FunctionName=function_name,
-            S3Bucket=bucket_name,
-            S3Key=s3_key
+    # Taint each Lambda function
+    for func in lambda_functions:
+        print(f"   Tainting aws_lambda_function.{func}...")
+        result = subprocess.run(
+            ['terraform', 'taint', f'aws_lambda_function.{func}'],
+            cwd=terraform_dir,
+            capture_output=True,
+            text=True
         )
         
-        # Wait for update to complete
-        waiter = lambda_client.get_waiter('function_updated')
-        waiter.wait(FunctionName=function_name)
-        
-        print(f"   ✓ Successfully updated {function_name}")
+        if result.returncode == 0 or "already" in result.stderr:
+            print(f"      ✓ {func} marked for recreation")
+        elif "No such resource instance" in result.stderr:
+            print(f"      ⚠️ {func} doesn't exist (will be created)")
+        else:
+            print(f"      ⚠️ Warning: {result.stderr[:100]}")
+    
+    print()
+    print("🚀 Step 2: Running terraform apply...")
+    print("-" * 50)
+    
+    # Run terraform apply
+    result = subprocess.run(
+        ['terraform', 'apply', '-auto-approve'],
+        cwd=terraform_dir,
+        capture_output=False,  # Show output directly
+        text=True
+    )
+    
+    if result.returncode == 0:
+        print()
+        print("✅ Terraform deployment completed successfully!")
         return True
-        
-    except lambda_client.exceptions.ResourceNotFoundException:
-        print(f"   ⚠️  Function {function_name} not found in AWS")
-        print(f"      Run terraform apply first to create the Lambda function")
-        return False
-    except Exception as e:
-        print(f"   ✗ Failed to update: {e}")
+    else:
+        print()
+        print("❌ Terraform deployment failed!")
         return False
 
 def package_lambda(service_name: str, service_dir: Path) -> bool:
@@ -124,7 +128,7 @@ def main():
     # Check for --package flag
     force_package = '--package' in sys.argv
     
-    print("🎯 Deploying Alex Agent Lambda Functions")
+    print("🎯 Deploying Alex Agent Lambda Functions (via Terraform)")
     print("=" * 50)
     
     # Get AWS account ID
@@ -139,37 +143,23 @@ def main():
         print("   Make sure your AWS credentials are configured")
         sys.exit(1)
     
-    # S3 bucket name
-    bucket_name = f"alex-lambda-packages-{account_id}"
-    
-    # Ensure S3 bucket exists
-    s3_client = boto3.client('s3')
-    try:
-        s3_client.head_bucket(Bucket=bucket_name)
-        print(f"S3 Bucket: {bucket_name} ✓")
-    except:
-        print(f"❌ S3 bucket {bucket_name} not found")
-        print("   Run terraform apply to create the infrastructure")
-        sys.exit(1)
-    
     print()
     
-    # Define Lambda functions to deploy
+    # Define Lambda functions to check/package
     backend_dir = Path(__file__).parent
-    functions: List[Tuple[str, str, Path]] = [
-        ('alex-planner', 'planner', backend_dir / 'planner' / 'planner_lambda.zip'),
-        ('alex-tagger', 'tagger', backend_dir / 'tagger' / 'tagger_lambda.zip'),
-        ('alex-reporter', 'reporter', backend_dir / 'reporter' / 'reporter_lambda.zip'),
-        ('alex-charter', 'charter', backend_dir / 'charter' / 'charter_lambda.zip'),
-        ('alex-retirement', 'retirement', backend_dir / 'retirement' / 'retirement_lambda.zip'),
+    services = [
+        ('planner', backend_dir / 'planner' / 'planner_lambda.zip'),
+        ('tagger', backend_dir / 'tagger' / 'tagger_lambda.zip'),
+        ('reporter', backend_dir / 'reporter' / 'reporter_lambda.zip'),
+        ('charter', backend_dir / 'charter' / 'charter_lambda.zip'),
+        ('retirement', backend_dir / 'retirement' / 'retirement_lambda.zip'),
     ]
     
     # Check if packages exist and optionally package them
     print("📋 Checking deployment packages...")
-    missing_packages = []
     services_to_package = []
     
-    for func_name, service_name, zip_path in functions:
+    for service_name, zip_path in services:
         service_dir = backend_dir / service_name
         
         if force_package:
@@ -181,7 +171,6 @@ def main():
             print(f"   ✓ {service_name}: {size_mb:.1f} MB")
         else:
             print(f"   ✗ {service_name}: Not found")
-            missing_packages.append((service_name, service_dir))
             services_to_package.append((service_name, service_dir))
     
     # Package missing or all services if requested
@@ -203,41 +192,30 @@ def main():
                 sys.exit(1)
     
     print()
-    print("🚀 Deploying Lambda functions...")
-    print("-" * 50)
     
-    # Deploy each function
-    success_count = 0
-    failed_functions = []
-    
-    for func_name, service_name, zip_path in functions:
-        if deploy_lambda_function(func_name, zip_path, bucket_name):
-            success_count += 1
-        else:
-            failed_functions.append(func_name)
-        print()
-    
-    # Summary
-    print("=" * 50)
-    print(f"✅ Deployment Summary:")
-    print(f"   • Successful: {success_count}/{len(functions)}")
-    
-    if failed_functions:
-        print(f"   • Failed: {', '.join(failed_functions)}")
-        print()
-        print("💡 Troubleshooting tips:")
-        print("   1. Check if Lambda functions exist: aws lambda list-functions")
-        print("   2. Run terraform apply to create missing functions")
-        print("   3. Ensure deployment packages exist (run package_docker.py)")
-        print("   4. Check AWS credentials and permissions")
-    else:
+    # Deploy via Terraform with forced recreation
+    if taint_and_deploy_via_terraform():
         print()
         print("🎉 All Lambda functions deployed successfully!")
         print()
+        print("⚠️  IMPORTANT: Lambda functions were FORCE RECREATED")
+        print("   This ensures your latest code is running in AWS")
+        print()
         print("Next steps:")
-        print("   1. Test individual functions: cd <service> && uv run test_local.py")
-        print("   2. Run integration test: cd planner && uv run test_integration.py")
-        print("   3. Submit a job via SQS to test the full orchestration")
+        print("   1. Test locally: cd <service> && uv run test_simple.py")
+        print("   2. Run integration test: cd backend && uv run test_full.py")
+        print("   3. Monitor CloudWatch Logs for each function")
+        sys.exit(0)
+    else:
+        print()
+        print("❌ Deployment failed!")
+        print()
+        print("💡 Troubleshooting tips:")
+        print("   1. Check terraform output for errors")
+        print("   2. Ensure all packages exist (use --package flag)")
+        print("   3. Verify AWS credentials and permissions")
+        print("   4. Check terraform state: cd terraform/6_agents && terraform plan")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
