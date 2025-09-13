@@ -113,7 +113,10 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/api/user", response_model=UserResponse)
-async def get_or_create_user(clerk_user_id: str = Depends(get_current_user_id)):
+async def get_or_create_user(
+    clerk_user_id: str = Depends(get_current_user_id),
+    creds: HTTPAuthorizationCredentials = Depends(clerk_guard)
+):
     """Get user or create if first time"""
 
     try:
@@ -123,30 +126,22 @@ async def get_or_create_user(clerk_user_id: str = Depends(get_current_user_id)):
         if user:
             return UserResponse(user=user, created=False)
 
-        # Create new user with defaults
+        # Create new user with defaults from JWT token
+        token_data = creds.decoded
         display_name = token_data.get('name') or token_data.get('email', '').split('@')[0] or "New User"
 
-        # Create user with basic info
-        # Note: create_user returns the clerk_user_id, not an id
-        created_clerk_id = db.users.create_user(
-            clerk_user_id=clerk_user_id,
-            display_name=display_name,
-            years_until_retirement=20,
-            target_retirement_income=100000
-        )
-
-        # Update with allocation targets using the database client directly
-        # since the users table uses clerk_user_id as primary key, not id
-        update_data = {
+        # Create user with ALL defaults in one operation
+        user_data = {
+            'clerk_user_id': clerk_user_id,
+            'display_name': display_name,
+            'years_until_retirement': 20,
+            'target_retirement_income': 60000,
             'asset_class_targets': {"equity": 70, "fixed_income": 30},
             'region_targets': {"north_america": 50, "international": 50}
         }
-        db.users.db.update(
-            'users',
-            update_data,
-            "clerk_user_id = :clerk_user_id",
-            {'clerk_user_id': created_clerk_id}
-        )
+
+        # Insert directly with all data
+        created_clerk_id = db.users.db.insert('users', user_data, returning='clerk_user_id')
 
         # Fetch the created user
         created_user = db.users.find_by_clerk_id(clerk_user_id)
@@ -169,12 +164,19 @@ async def update_user(user_update: UserUpdate, clerk_user_id: str = Depends(get_
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        # Update user
+        # Update user - users table uses clerk_user_id as primary key
         update_data = user_update.model_dump(exclude_unset=True)
-        db.users.update(user['id'], update_data)
+
+        # Use the database client directly since users table has clerk_user_id as PK
+        db.users.db.update(
+            'users',
+            update_data,
+            "clerk_user_id = :clerk_user_id",
+            {'clerk_user_id': clerk_user_id}
+        )
 
         # Return updated user
-        updated_user = db.users.find_by_id(user['id'])
+        updated_user = db.users.find_by_clerk_id(clerk_user_id)
         return updated_user
 
     except Exception as e:

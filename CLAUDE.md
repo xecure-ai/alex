@@ -559,11 +559,11 @@ IMPORTANT: keep `uv run run_local.py` working in addition to the deployed versio
 
 ### Step 3: Dashboard with Account Management
 **3a. Navigation and layout components**
-- [ ] Create components/Layout.tsx with nav bar:
+- [x] Create components/Layout.tsx with nav bar:
   - Logo/brand: "Alex AI Financial Advisor"
   - Navigation: Dashboard | Accounts | Advisor Team | Analysis
   - User button (Clerk) in top right
-- [ ] Footer with disclaimer: "This AI-generated advice has not been vetted by a qualified financial advisor and should not be used for trading decisions. For informational purposes only."
+- [x] Footer with disclaimer: "This AI-generated advice has not been vetted by a qualified financial advisor and should not be used for trading decisions. For informational purposes only."
 
 **3b. Dashboard page (pages/dashboard.tsx)**
 - [ ] On page load:
