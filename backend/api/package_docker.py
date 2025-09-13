@@ -52,9 +52,12 @@ def main():
             "__pycache__", "*.pyc", ".env*", "*.zip", "package_docker.py", "test_*.py"
         ))
 
+        # Copy lambda_handler.py to root level for Lambda to find it
+        shutil.copy2(api_dir / "lambda_handler.py", package_dir / "lambda_handler.py")
+
         # Copy database package
-        database_src = backend_dir / "database" / "src" / "alex_database"
-        database_dst = package_dir / "alex_database"
+        database_src = backend_dir / "database" / "src"
+        database_dst = package_dir / "src"
         if database_src.exists():
             shutil.copytree(database_src, database_dst, ignore=shutil.ignore_patterns(
                 "__pycache__", "*.pyc"
@@ -71,8 +74,7 @@ def main():
             f.write("uvicorn>=0.35.0\n")
             f.write("mangum>=0.19.0\n")
             f.write("boto3>=1.26.0\n")
-            f.write("python-jose[cryptography]>=3.5.0\n")
-            f.write("httpx>=0.28.0\n")
+            f.write("fastapi-clerk-auth>=0.0.7\n")
             f.write("pydantic>=2.0.0\n")
             f.write("python-dotenv>=1.0.0\n")
 
@@ -95,10 +97,11 @@ CMD ["api.main.handler"]
         with open(dockerfile, "w") as f:
             f.write(dockerfile_content)
 
-        # Build Docker image
-        print("Building Docker image...")
+        # Build Docker image for x86_64 architecture (Lambda runtime)
+        print("Building Docker image for x86_64 architecture...")
         run_command([
             "docker", "build",
+            "--platform", "linux/amd64",
             "-t", "alex-api-packager",
             "."
         ], cwd=package_dir)

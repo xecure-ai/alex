@@ -10,6 +10,7 @@ This document covers our plan for building the Alex Financial Planner SaaS platf
 
 - Parts 1-6: complete and guides written in guides directory
 - Part 7 Step 1: ✅ COMPLETE - Landing page, Clerk auth, dashboard, API backend all working. User sync tested successfully.
+- Part 7 Step 2: ✅ COMPLETE - Terraform infrastructure, deployment scripts, Lambda packaging all ready. CORS properly configured.
 
 ADDITIONAL NOTE:
 
@@ -362,11 +363,15 @@ The landing page and dashboard have established excellent patterns that should b
 - Loading states: "Syncing..." text patterns
 - Error handling: Inline error messages in red
 
-**VERY IMPORTANT - You MUST follow these 3 crucial rules**
+**VERY IMPORTANT - You MUST follow these crucial rules**
 1. During your ongoing work, you MUST use absolute paths when changing directories. The project root on this machine is at `/Users/ed/projects/alex` and if you try relative directory changes you often make mistakes. ALWAYS use absolute paths when you `cd` to be reliable.
 2. You MUST pay attention to uv. Never use python directly. Always `uv run my_module.py` NEVER `uv run python xx` and NEVER `python xx`. If you want to run python code directly, the format is `uv run python -c 'print("hello")'`. Installing a package is `uv add xx` not `uv pip install xx`.
 3. NEVER guess arguments because you are ALWAYS wrong. For example, you tried to create a User in the database and invented parameters. Always check the code!
 
+**Lessons learned**
+1. CORS Configuration Pattern: API Gateway uses `allow_origins = ["*"]` and `allow_credentials = false`. Lambda handles auth, not API Gateway.
+2. **ALWAYS CHECK REFERENCE IMPLEMENTATIONS FIRST** - You failed to review the saas reference and chose a complex JWT authorizer approach when the reference used simple fastapi-clerk-auth. You invented "alex-api" as an audience value without any basis. This behavior MUST stop.
+3. **FOCUS ON SIMPLE AND CONSISTENT CODE** - The saas reference worked perfectly with fastapi-clerk-auth. Instead of using it, you chose python-jose manual validation which was unnecessarily complex. ALWAYS prefer proven, simple solutions from working references.
 
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
@@ -408,7 +413,7 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 
 **1c. Create FastAPI backend in backend/api**
 - [x] Initialize uv project with pyproject.toml using the documented approach from prior sections
-- [x] ~~uv add: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum~~ Used python-jose instead of fastapi-clerk-auth
+- [x] uv add: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum (NOW using fastapi-clerk-auth like saas reference)
 - [x] Create main.py with routes:
   - [x] GET /api/user - Get/create user profile (THIS IS WHERE USER SYNC HAPPENS)
   - [x] PUT /api/user - Update user settings
@@ -418,11 +423,11 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
   - [x] POST /api/positions - Add/update position
   - [x] POST /api/analyze - Trigger analysis (creates job, sends to SQS)
   - [x] GET /api/jobs/{job_id} - Get job status/results
-- [x] JWT validation using python-jose with CLERK_JWKS_URL on ALL routes (manual implementation)
+- [x] JWT validation using fastapi-clerk-auth (CORRECTED - initially used complex python-jose, now matches saas)
 - [x] Database operations using backend/database package
 
 **1d. User sync implementation in GET /api/user** ✅ COMPLETE
-- [x] Extract clerk_user_id from JWT token (using python-jose, not fastapi-clerk-auth)
+- [x] Extract clerk_user_id from JWT token (NOW using fastapi-clerk-auth like saas)
 - [x] Check if user exists in database
 - [x] If NOT exists (first-time user):
   - [x] Auto-create with defaults:
@@ -439,8 +444,12 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 **Important Backend Notes for Next Steps:**
 - **Database Import Pattern**: Import as `from src import Database` not `from alex_database`
 - **Database Usage**: Use `db = Database()` then access via `db.users`, `db.accounts`, `db.positions`, `db.jobs`
-- **Clerk JWKS URL**: Derived from instance name in publishable key (e.g., engaging-feline-80.clerk.accounts.dev)
-- **JWT Validation**: Manual implementation with python-jose, caching JWKS for 1 hour
+- **Clerk Authentication**: Use fastapi-clerk-auth EXACTLY like saas reference:
+  ```python
+  clerk_config = ClerkConfig(jwks_url=os.getenv("CLERK_JWKS_URL"))
+  clerk_guard = ClerkHTTPBearer(clerk_config)
+  ```
+  NO API Gateway JWT authorizer, NO manual JWT validation
 - **Missing Schemas**: Created UserUpdate, AccountUpdate, PositionUpdate as Pydantic models in API
 - **Database Methods**:
   - Users: `db.users.find_by_clerk_id(clerk_user_id)`, `db.users.create_user(...)`
@@ -485,9 +494,9 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
   - Troubleshooting common issues (CORS, JWT validation, etc.)
   - Expected outcomes with screenshots placeholders
 
-### Step 2: Deploy Infrastructure
+### Step 2: Deploy Infrastructure ✅ COMPLETE
 **2a. Terraform configuration in terraform/7_frontend/**
-- [ ] Create main.tf with:
+- [x] Create main.tf with:
   - S3 bucket for static frontend (with website configuration)
   - CloudFront distribution with:
     - S3 origin for frontend
@@ -500,36 +509,41 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
     - SQS send message
     - Lambda invoke (for direct agent testing)
     - Secrets Manager read
-- [ ] CORS configuration:
-  - Allow origins: CloudFront domain + http://localhost:3000
-  - Allow headers: Authorization, Content-Type
-  - Handle preflight OPTIONS requests
-- [ ] Environment variables for Lambda from existing infrastructure
+- [x] CORS configuration:
+  - **IMPORTANT**: API Gateway uses `allow_origins = ["*"]` with `allow_credentials = false`
+  - NO JWT authorizer at API Gateway level (auth handled in Lambda)
+  - **LESSON LEARNED**: Initially tried to add API Gateway JWT authorizer, which was:
+    - Unnecessarily complex
+    - Not present in the working saas/twin references
+    - Led to inventing "alex-api" audience value (completely made up)
+  - **CORRECT APPROACH**: Use fastapi-clerk-auth in Lambda exactly like saas reference
+- [x] Environment variables for Lambda from existing infrastructure
 
-**2b. Lambda packaging script (scripts/package_api.py)**
-- [ ] ~~Use Docker with AWS Lambda Python 3.12 image~~ Already created as backend/api/package_docker.py
-- [ ] ~~Install dependencies for correct architecture~~ Handled in package_docker.py
-- [ ] ~~Package FastAPI app as Lambda handler using mangum~~ Already done
-- [ ] ~~Create deployment zip with all dependencies~~ Creates api_lambda.zip
-- [ ] Note: May need to rename/move package_docker.py to scripts/package_api.py for consistency
+**2b. Lambda packaging script (backend/api/package_docker.py)** ✅ COMPLETE
+- [x] Uses Docker with AWS Lambda Python 3.12 image
+- [x] Installs dependencies for correct architecture
+- [x] Packages FastAPI app as Lambda handler using mangum
+- [x] Creates api_lambda.zip with all dependencies
+- [x] Fixed database package path issue (uses src/ not alex_database/)
 
-**2c. Deployment scripts (scripts/deploy.py, scripts/destroy.py)**
-- [ ] Python scripts using subprocess to run terraform/aws/npm commands
-- [ ] Deploy flow:
+**2c. Deployment scripts (scripts/deploy.py, scripts/destroy.py)** ✅ COMPLETE
+- [x] Python scripts using subprocess to run terraform/aws/npm commands
+- [x] Deploy flow:
   1. Package Lambda with Docker
   2. Build NextJS static site
   3. Deploy infrastructure with Terraform
   4. Upload frontend files to S3
   5. Invalidate CloudFront cache
   6. Output CloudFront URL
-- [ ] Destroy flow: reverse order with confirmation
+- [x] Destroy flow: reverse order with confirmation
+- [x] **NOTE**: Run from scripts directory: `cd scripts && uv run deploy.py`
 
-**2d. Deployment testing & documentation**
-- [ ] Create `ed_test_step2.md` with:
+**2d. Deployment testing & documentation** ✅ COMPLETE
+- [x] Create `ed_test_step2.md` with:
   - Prerequisites (AWS credentials, Docker running, terraform installed)
   - Deployment commands:
     ```bash
-    uv run scripts/deploy.py
+    cd scripts && uv run deploy.py
     ```
   - Test checklist:
     1. CloudFront URL is accessible
@@ -539,6 +553,9 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
     5. CloudWatch logs show Lambda execution
   - AWS Console verification steps
   - Rollback instructions if needed
+
+IMPORTANT: ask me to run `uv run deploy.py` rather than yourself, so that I can watch and wait for it to complete.
+IMPORTANT: keep `uv run run_local.py` working in addition to the deployed version where possible, so we can test locally as well as deployed.
 
 ### Step 3: Dashboard with Account Management
 **3a. Navigation and layout components**
@@ -783,159 +800,12 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 ### Objective
 Implement comprehensive observability with LangFuse, monitoring with CloudWatch, and security best practices.
 
-### Steps
-
-1. **Set Up LangFuse**
-   - Deploy LangFuse (Docker on ECS or use cloud version)
-   - Configure API keys
-   - Set up projects for each agent
-   - ✅ **Test**: LangFuse UI accessible, API works
-
-2. **Instrument All Agents**
-   - Add LangFuse to OpenAI Agents SDK config
-   - Trace every agent call
-   - Track tool usage
-   - Log prompts and completions
-   - Track costs per user
-   - ✅ **Test**: Traces appear in LangFuse with full detail
-
-3. **Create CloudWatch Dashboards**
-   - Agent invocation metrics
-   - Database performance
-   - API Gateway metrics
-   - Cost tracking
-   - Error rates
-   - ✅ **Test**: All metrics flowing, alerts working
-
-4. **Implement Security Hardening**
-   - API rate limiting (API Gateway)
-   - Secrets rotation for Aurora credentials
-   - WAF rules for CloudFront
-   - Least privilege IAM
-   - Data API access controls
-   - ✅ **Test**: Security scan with OWASP ZAP
-
-5. **Set Up Cost Monitoring**
-   - Budget alerts
-   - Per-user cost tracking
-   - Bedrock usage monitoring
-   - Database cost analysis
-   - ✅ **Test**: Cost allocation tags working
-
-### Observability Metrics
-- Agent execution time
-- Tool call frequency
-- Token usage per agent
-- Error rates by agent
-- User session tracking
-- Database query performance
-
-### Security Checklist
-- [ ] All secrets in Secrets Manager
-- [ ] Data API IAM authentication configured
-- [ ] API rate limiting enabled
-- [ ] WAF rules active
-- [ ] IAM roles follow least privilege
-- [ ] Database encrypted at rest
-- [ ] S3 buckets private
-- [ ] CloudTrail enabled
-
-### Deliverables
-- Full observability in LangFuse
-- CloudWatch dashboards
-- Security hardening complete
-- Cost tracking operational
-
-### Acceptance Criteria for Part 8
-
-#### LangFuse Integration for Rich Observability
-- [ ] LangFuse accessible and configured
-- [ ] All agent Lambda functions send detailed traces
-- [ ] Orchestrator creates parent trace with:
-  - Job metadata (user, portfolio size, job_id)
-  - Agent coordination timeline
-  - Decision points ("needs tagging", "retirement analysis required")
-- [ ] Each agent creates child trace with:
-  - Agent persona/role description
-  - Reasoning steps (chain of thought)
-  - Input/output tokens with cost
-  - Execution time and status
-  - Custom metadata (e.g., "instruments_tagged": 5)
-- [ ] Visual trace hierarchy shows:
-  ```
-  📊 Portfolio Analysis Job #123
-  ├── 🎯 Financial Planner (Orchestrator)
-  │   ├── Decision: Missing data for ARKK, SOFI
-  │   └── Routing to: InstrumentTagger
-  ├── 🏷️ InstrumentTagger 
-  │   ├── Tagged: ARKK → Tech ETF (100% equity)
-  │   └── Tagged: SOFI → Fintech Stock (100% equity)
-  ├── 📝 Report Writer (Parallel)
-  │   └── Generated: 2,500 word analysis
-  ├── 📊 Chart Maker (Parallel)
-  │   └── Created: 3 visualizations
-  └── 🎯 Retirement Specialist (Parallel)
-      └── Projection: 85% success rate
-  ```
-- [ ] Traces linked by job_id for correlation
-- [ ] Cost breakdown per agent and total
-- [ ] Success/failure status clearly visible
-
-#### CloudWatch Monitoring
-- [ ] Custom dashboard created with:
-  - Lambda invocation counts
-  - Lambda error rates
-  - API Gateway request counts
-  - SQS queue depth
-  - Aurora Data API latency
-- [ ] Alarms configured for:
-  - Lambda errors > 5% 
-  - SQS DLQ messages > 0
-  - API Gateway 5xx errors
-  - Database connection failures
-- [ ] Logs properly structured with JSON
-
-#### Security Hardening
-- [ ] API Gateway rate limiting enabled (e.g., 100 requests/minute per IP)
-- [ ] WAF rules active on CloudFront:
-  - SQL injection protection
-  - XSS protection
-  - Rate limiting
-- [ ] All Lambda environment variables use Secrets Manager
-- [ ] Database credentials rotated successfully
-- [ ] IAM roles follow least privilege principle
-- [ ] S3 buckets have versioning enabled
-- [ ] CloudTrail logging enabled for audit
-
-#### Cost Controls
-- [ ] AWS Budget alert at $50/month
-- [ ] Cost allocation tags on all resources:
-  - Project: alex
-  - Environment: production
-  - Owner: [your-name]
-- [ ] Per-user cost tracking via LangFuse
-- [ ] Aurora auto-pause configured (pause after 5 minutes idle)
-
-#### Performance Validation
-- [ ] Lambda cold starts < 2 seconds
-- [ ] API response times < 500ms (excluding analysis jobs)
-- [ ] Analysis completion < 3 minutes
-- [ ] Frontend loads < 2 seconds on 4G connection
-- [ ] Database queries < 100ms
-
-#### Security Testing
-- [ ] OWASP ZAP scan shows no high-risk vulnerabilities
-- [ ] Attempt SQL injection - properly blocked
-- [ ] Attempt XSS - properly sanitized
-- [ ] Try accessing API without token - returns 401
-- [ ] Try accessing another user's data - returns 403
+This will be built out but will include security, monitoring, observability and guardrails.
 
 ## Lambda Deployment Technique for Binary Compatibility
 
 ### The Architecture Issue
-Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python dependencies on macOS (ARM64) or Windows, binary packages like `pydantic_core` are compiled for the wrong architecture, causing runtime failures with errors like:
-- `ImportError: cannot import name 'ValidationError' from 'pydantic_core'`
-- Binary incompatibility errors for packages with C extensions
+Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python dependencies on macOS (ARM64) or Windows, binary packages like `pydantic_core` are compiled for the wrong architecture, causing runtime failures.
 
 ### Solution: Docker-Based Packaging
 Use Docker with the official AWS Lambda Python runtime image to compile dependencies for the correct architecture. This ensures all binary packages are compatible with Lambda's runtime environment.

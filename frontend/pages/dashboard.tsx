@@ -1,12 +1,20 @@
 import { useUser, UserButton, Protect, useAuth } from "@clerk/nextjs";
-import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
+import { API_URL } from "../lib/config";
+
+interface UserData {
+  clerk_user_id: string;
+  display_name: string;
+  years_until_retirement: number;
+  target_retirement_income: number;
+  asset_class_targets: Record<string, number>;
+  region_targets: Record<string, number>;
+}
 
 export default function Dashboard() {
   const { user, isLoaded: userLoaded } = useUser();
   const { getToken } = useAuth();
-  const router = useRouter();
-  const [userData, setUserData] = useState<any>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +31,7 @@ export default function Dashboard() {
         }
 
         // Call the API to get/create user
-        const response = await fetch("http://localhost:8000/api/user", {
+        const response = await fetch(`${API_URL}/api/user`, {
           headers: {
             "Authorization": `Bearer ${token}`,
           },
@@ -82,7 +90,7 @@ export default function Dashboard() {
               🎯 Your AI advisory team is ready to analyze your portfolio
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              Once the backend is connected, you'll be able to:
+              Once the backend is connected, you&apos;ll be able to:
             </p>
             <ul className="list-disc list-inside text-sm text-gray-600 mt-2 space-y-1">
               <li>Add your investment accounts</li>
@@ -106,13 +114,13 @@ export default function Dashboard() {
             ) : userData ? (
               <>
                 <p className="text-sm text-green-600 mt-2">
-                  ✅ User synced {userData.created ? "(newly created)" : "(existing user)"}
+                  ✅ User synced successfully
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  Database ID: {userData.user?.id}
+                  Display Name: {userData.display_name}
                 </p>
                 <p className="text-sm text-gray-500">
-                  Years until retirement: {userData.user?.years_until_retirement}
+                  Years until retirement: {userData.years_until_retirement}
                 </p>
               </>
             ) : null}

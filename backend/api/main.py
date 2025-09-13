@@ -13,14 +13,11 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 import boto3
-from jose import jwt, JWTError, jwk
-from jose.utils import base64url_decode
-import httpx
 from mangum import Mangum
 from dotenv import load_dotenv
+from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
 
 from src import Database
 from src.schemas import (
@@ -60,102 +57,22 @@ app.add_middleware(
 
 # Initialize services
 db = Database()
-security = HTTPBearer()
 
 # SQS client for job queueing
 sqs_client = boto3.client('sqs', region_name=os.getenv('DEFAULT_AWS_REGION', 'us-east-1'))
 SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL', '')
 
-# Clerk configuration
-CLERK_JWKS_URL = os.getenv('CLERK_JWKS_URL', '')
-CLERK_ISSUER = os.getenv('CLERK_ISSUER', '')
+# Clerk authentication setup (exactly like saas reference)
+clerk_config = ClerkConfig(jwks_url=os.getenv("CLERK_JWKS_URL"))
+clerk_guard = ClerkHTTPBearer(clerk_config)
 
-# Cache for JWKS
-jwks_cache = None
-jwks_cache_time = None
-
-async def get_jwks():
-    """Fetch and cache JWKS from Clerk"""
-    global jwks_cache, jwks_cache_time
-
-    # Cache for 1 hour
-    if jwks_cache and jwks_cache_time and (datetime.now() - jwks_cache_time).seconds < 3600:
-        return jwks_cache
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(CLERK_JWKS_URL)
-        response.raise_for_status()
-        jwks_cache = response.json()
-        jwks_cache_time = datetime.now()
-        return jwks_cache
-
-async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    """Verify JWT token from Clerk"""
-    token = credentials.credentials
-
-    try:
-        # Get JWKS
-        jwks = await get_jwks()
-        logger.info(f"JWKS loaded successfully with {len(jwks.get('keys', []))} keys")
-
-        # Decode token header to get kid
-        unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get('kid')
-        logger.info(f"Token kid: {kid}")
-
-        # Find the matching key
-        rsa_key = None
-        for key in jwks.get('keys', []):
-            if key['kid'] == kid:
-                rsa_key = key
-                break
-
-        if not rsa_key:
-            logger.error(f"No matching key found for kid: {kid}")
-            logger.error(f"Available kids: {[k['kid'] for k in jwks.get('keys', [])]}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Unable to find matching key"
-            )
-
-        # Convert JWK to key
-        try:
-            # python-jose expects the key in a specific format
-            key = jwk.construct(rsa_key)
-        except Exception as e:
-            logger.error(f"Failed to construct key from JWK: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid key format"
-            )
-
-        # Verify and decode token
-        payload = jwt.decode(
-            token,
-            key,
-            algorithms=['RS256'],
-            issuer=CLERK_ISSUER,
-            options={"verify_aud": False}  # Clerk doesn't always set audience
-        )
-
-        logger.info(f"Token verified successfully for user: {payload.get('sub')}")
-        return payload
-
-    except JWTError as e:
-        logger.error(f"JWT verification failed: {e}")
-        logger.error(f"Token (first 50 chars): {token[:50] if token else 'None'}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
-        )
-    except Exception as e:
-        logger.error(f"Authentication error: {e}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed"
-        )
+async def get_current_user_id(creds: HTTPAuthorizationCredentials = Depends(clerk_guard)) -> str:
+    """Extract user ID from validated Clerk token"""
+    # The clerk_guard dependency already validated the token
+    # creds.decoded contains the JWT payload
+    user_id = creds.decoded["sub"]
+    logger.info(f"Authenticated user: {user_id}")
+    return user_id
 
 # Request/Response models
 class UserResponse(BaseModel):
@@ -196,12 +113,8 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/api/user", response_model=UserResponse)
-async def get_or_create_user(token_data: Dict = Depends(verify_token)):
+async def get_or_create_user(clerk_user_id: str = Depends(get_current_user_id)):
     """Get user or create if first time"""
-    clerk_user_id = token_data.get('sub')
-
-    if not clerk_user_id:
-        raise HTTPException(status_code=400, detail="Invalid token: missing user ID")
 
     try:
         # Check if user exists
@@ -246,9 +159,8 @@ async def get_or_create_user(token_data: Dict = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/user")
-async def update_user(user_update: UserUpdate, token_data: Dict = Depends(verify_token)):
+async def update_user(user_update: UserUpdate, clerk_user_id: str = Depends(get_current_user_id)):
     """Update user settings"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get user
@@ -270,9 +182,8 @@ async def update_user(user_update: UserUpdate, token_data: Dict = Depends(verify
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/accounts")
-async def list_accounts(token_data: Dict = Depends(verify_token)):
+async def list_accounts(clerk_user_id: str = Depends(get_current_user_id)):
     """List user's accounts"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get accounts for user
@@ -284,9 +195,8 @@ async def list_accounts(token_data: Dict = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/accounts")
-async def create_account(account: AccountCreate, token_data: Dict = Depends(verify_token)):
+async def create_account(account: AccountCreate, clerk_user_id: str = Depends(get_current_user_id)):
     """Create new account"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Verify user exists
@@ -311,9 +221,8 @@ async def create_account(account: AccountCreate, token_data: Dict = Depends(veri
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/accounts/{account_id}")
-async def update_account(account_id: str, account_update: AccountUpdate, token_data: Dict = Depends(verify_token)):
+async def update_account(account_id: str, account_update: AccountUpdate, clerk_user_id: str = Depends(get_current_user_id)):
     """Update account"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Verify account belongs to user
@@ -341,9 +250,8 @@ async def update_account(account_id: str, account_update: AccountUpdate, token_d
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/accounts/{account_id}/positions")
-async def list_positions(account_id: str, token_data: Dict = Depends(verify_token)):
+async def list_positions(account_id: str, clerk_user_id: str = Depends(get_current_user_id)):
     """Get positions for account"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Verify account belongs to user
@@ -366,9 +274,8 @@ async def list_positions(account_id: str, token_data: Dict = Depends(verify_toke
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/positions")
-async def create_position(position: PositionCreate, token_data: Dict = Depends(verify_token)):
+async def create_position(position: PositionCreate, clerk_user_id: str = Depends(get_current_user_id)):
     """Create position"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Verify account belongs to user
@@ -399,9 +306,8 @@ async def create_position(position: PositionCreate, token_data: Dict = Depends(v
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/positions/{position_id}")
-async def update_position(position_id: str, position_update: PositionUpdate, token_data: Dict = Depends(verify_token)):
+async def update_position(position_id: str, position_update: PositionUpdate, clerk_user_id: str = Depends(get_current_user_id)):
     """Update position"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get position and verify ownership
@@ -433,9 +339,8 @@ async def update_position(position_id: str, position_update: PositionUpdate, tok
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/positions/{position_id}")
-async def delete_position(position_id: str, token_data: Dict = Depends(verify_token)):
+async def delete_position(position_id: str, clerk_user_id: str = Depends(get_current_user_id)):
     """Delete position"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get position and verify ownership
@@ -462,9 +367,8 @@ async def delete_position(position_id: str, token_data: Dict = Depends(verify_to
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
-async def trigger_analysis(request: AnalyzeRequest, token_data: Dict = Depends(verify_token)):
+async def trigger_analysis(request: AnalyzeRequest, clerk_user_id: str = Depends(get_current_user_id)):
     """Trigger portfolio analysis"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get user
@@ -510,9 +414,8 @@ async def trigger_analysis(request: AnalyzeRequest, token_data: Dict = Depends(v
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/jobs/{job_id}")
-async def get_job_status(job_id: str, token_data: Dict = Depends(verify_token)):
+async def get_job_status(job_id: str, clerk_user_id: str = Depends(get_current_user_id)):
     """Get job status and results"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get job
@@ -534,9 +437,8 @@ async def get_job_status(job_id: str, token_data: Dict = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/jobs")
-async def list_jobs(token_data: Dict = Depends(verify_token)):
+async def list_jobs(clerk_user_id: str = Depends(get_current_user_id)):
     """List user's analysis jobs"""
-    clerk_user_id = token_data.get('sub')
 
     try:
         # Get user

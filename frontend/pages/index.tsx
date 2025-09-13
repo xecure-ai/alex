@@ -1,4 +1,5 @@
-import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -10,16 +11,28 @@ export default function Home() {
             Alex <span className="text-primary">AI Financial Advisor</span>
           </div>
           <div className="flex gap-4">
-            <SignInButton mode="modal">
-              <button className="px-6 py-2 text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors">
-                Sign In
-              </button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <button className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors">
-                Get Started
-              </button>
-            </SignUpButton>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="px-6 py-2 text-primary border border-primary rounded-lg hover:bg-primary hover:text-white transition-colors">
+                  Sign In
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors">
+                  Get Started
+                </button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <div className="flex items-center gap-4">
+                <Link href="/dashboard">
+                  <button className="px-6 py-2 bg-ai-accent text-white rounded-lg hover:bg-purple-700 transition-colors">
+                    Go to Dashboard
+                  </button>
+                </Link>
+                <UserButton afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
           </div>
         </div>
       </nav>
@@ -35,11 +48,20 @@ export default function Home() {
             plan your retirement, and optimize your investments.
           </p>
           <div className="flex gap-6 justify-center">
-            <SignUpButton mode="modal">
-              <button className="px-8 py-4 bg-ai-accent text-white text-lg rounded-lg hover:bg-purple-700 transition-colors shadow-lg">
-                Start Your Analysis
-              </button>
-            </SignUpButton>
+            <SignedOut>
+              <SignUpButton mode="modal">
+                <button className="px-8 py-4 bg-ai-accent text-white text-lg rounded-lg hover:bg-purple-700 transition-colors shadow-lg">
+                  Start Your Analysis
+                </button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <Link href="/dashboard">
+                <button className="px-8 py-4 bg-ai-accent text-white text-lg rounded-lg hover:bg-purple-700 transition-colors shadow-lg">
+                  Open Dashboard
+                </button>
+              </Link>
+            </SignedIn>
             <button className="px-8 py-4 border-2 border-primary text-primary text-lg rounded-lg hover:bg-primary hover:text-white transition-colors">
               Watch Demo
             </button>
