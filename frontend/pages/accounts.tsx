@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/nextjs";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Layout from "../components/Layout";
 
 interface Position {
@@ -25,11 +25,7 @@ export default function Accounts() {
   const [resettingAccounts, setResettingAccounts] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  useEffect(() => {
-    loadAccounts();
-  }, []);
-
-  const loadAccounts = async () => {
+  const loadAccounts = useCallback(async () => {
     try {
       const token = await getToken();
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/accounts`, {
@@ -40,24 +36,38 @@ export default function Accounts() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Accounts received from API:', data);
         // For each account, load positions
         const accountsWithPositions = await Promise.all(
           data.map(async (account: Account) => {
-            const positionsResponse = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/accounts/${account.id}/positions`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                },
-              }
-            );
-            if (positionsResponse.ok) {
-              const positions = await positionsResponse.json();
-              return { ...account, positions };
+            console.log('Processing account:', account.id, account.account_name);
+            // Skip if account has no ID
+            if (!account.id) {
+              console.warn('Account missing ID:', account);
+              return { ...account, positions: [] };
             }
-            return account;
+
+            try {
+              const positionsResponse = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/accounts/${account.id}/positions`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                  },
+                }
+              );
+              if (positionsResponse.ok) {
+                const positions = await positionsResponse.json();
+                console.log(`Loaded ${positions.length} positions for account ${account.id}`);
+                return { ...account, positions };
+              }
+            } catch (err) {
+              console.error(`Error loading positions for account ${account.id}:`, err);
+            }
+            return { ...account, positions: [] };
           })
         );
+        console.log('Final accounts with positions:', accountsWithPositions);
         setAccounts(accountsWithPositions);
       }
     } catch (error) {
@@ -66,7 +76,11 @@ export default function Accounts() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getToken]);
+
+  useEffect(() => {
+    loadAccounts();
+  }, [loadAccounts]);
 
   const populateTestData = async () => {
     setPopulatingData(true);
@@ -117,7 +131,10 @@ export default function Accounts() {
       if (response.ok) {
         const data = await response.json();
         setMessage({ type: 'success', text: data.message });
-        await loadAccounts(); // Reload accounts after reset
+        // Clear accounts immediately after successful reset
+        setAccounts([]);
+        // Then reload to confirm empty state
+        await loadAccounts();
       } else {
         setMessage({ type: 'error', text: 'Failed to reset accounts' });
       }
@@ -189,7 +206,7 @@ export default function Accounts() {
                 No accounts found
               </p>
               <p className="text-sm text-gray-600">
-                Click the "Populate Test Data" button above to create sample accounts with positions
+                Click the &quot;Populate Test Data&quot; button above to create sample accounts with positions
               </p>
             </div>
           ) : (

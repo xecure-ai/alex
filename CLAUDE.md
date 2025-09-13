@@ -812,3 +812,10 @@ Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python depen
 
 ### Solution: Docker-Based Packaging
 Use Docker with the official AWS Lambda Python runtime image to compile dependencies for the correct architecture. This ensures all binary packages are compatible with Lambda's runtime environment.
+
+## Claude Code Performance Warnings
+
+### 1. Hardcoding fallback URLs in React code
+**What happened:** When facing undefined environment variables, Claude Code added hardcoded URL fallbacks (`process.env.NEXT_PUBLIC_API_URL || 'https://hardcoded-url'`) directly in React components.
+**Why this is bad:** Next.js replaces environment variables at BUILD time not runtime, so the fallback never executes; hardcoding URLs breaks environment separation and requires code changes for different deployments.
+**Claude Code's commitment going forwards:** Always solve environment variable issues at the build/deployment configuration level, never hardcode URLs in application code, and recognize that build-time vs runtime resolution is fundamental to Next.js architecture. Most importantly: do not apply bandaids - consider the root cause.

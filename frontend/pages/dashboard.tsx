@@ -159,7 +159,13 @@ export default function Dashboard() {
           const instrumentsMap: Record<string, Instrument> = {};
 
           for (const account of accountsData) {
-            const positionsResponse = await fetch(`${API_URL}/api/accounts/${account.account_id}/positions`, {
+            // Skip if account has no ID
+            if (!account.id) {
+              console.warn('Account missing ID in dashboard:', account);
+              continue;
+            }
+
+            const positionsResponse = await fetch(`${API_URL}/api/accounts/${account.id}/positions`, {
               headers: {
                 "Authorization": `Bearer ${token}`,
               },
@@ -167,7 +173,8 @@ export default function Dashboard() {
 
             if (positionsResponse.ok) {
               const positionsData = await positionsResponse.json();
-              positionsMap[account.account_id] = positionsData.positions || [];
+              // API returns positions array directly, not wrapped in object
+              positionsMap[account.id] = Array.isArray(positionsData) ? positionsData : [];
 
               // Store instrument data
               if (positionsData.instruments) {
