@@ -3,10 +3,12 @@
 Deploy the Alex Financial Advisor Part 7 infrastructure.
 This script:
 1. Packages the Lambda function
-2. Builds the NextJS frontend
-3. Deploys infrastructure with Terraform
+2. Deploys infrastructure with Terraform to get API URL
+3. Builds the NextJS frontend with production API URL
 4. Uploads frontend files to S3
 5. Invalidates CloudFront cache
+
+NOTE: This script uses .env.production for deployment and does NOT modify .env.local
 """
 
 import subprocess
@@ -17,18 +19,18 @@ import time
 from pathlib import Path
 
 
-def run_command(cmd, cwd=None, check=True, capture_output=False):
+def run_command(cmd, cwd=None, check=True, capture_output=False, env=None):
     """Run a command and optionally capture output."""
     print(f"Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
 
     if capture_output:
-        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, shell=isinstance(cmd, str))
+        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, shell=isinstance(cmd, str), env=env)
         if check and result.returncode != 0:
             print(f"Error: {result.stderr}")
             sys.exit(1)
         return result.stdout.strip()
     else:
-        result = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str))
+        result = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), env=env)
         if check and result.returncode != 0:
             sys.exit(1)
         return None
@@ -94,7 +96,7 @@ def package_lambda():
     print(f"  ✅ Lambda package created: {lambda_zip} ({size_mb:.2f} MB)")
 
 
-def build_frontend():
+def build_frontend(api_url=None):
     """Build the NextJS frontend."""
     print("\n🎨 Building frontend...")
 
@@ -110,9 +112,47 @@ def build_frontend():
         print("  Installing dependencies...")
         run_command(["npm", "install"], cwd=frontend_dir)
 
-    # Build the frontend
-    print("  Building NextJS app...")
-    run_command(["npm", "run", "build"], cwd=frontend_dir)
+    # If API URL is provided, create .env.production.local to override .env.local
+    if api_url:
+        print(f"  Creating .env.production.local with API URL: {api_url}")
+        env_prod_local = frontend_dir / ".env.production.local"
+
+        # Copy from .env.production as base
+        env_prod = frontend_dir / ".env.production"
+        if env_prod.exists():
+            with open(env_prod, "r") as f:
+                lines = f.readlines()
+        else:
+            # Fallback to .env.local if .env.production doesn't exist
+            env_local = frontend_dir / ".env.local"
+            if env_local.exists():
+                with open(env_local, "r") as f:
+                    lines = f.readlines()
+            else:
+                lines = []
+
+        # Update the API URL
+        api_line_found = False
+        for i, line in enumerate(lines):
+            if line.startswith("NEXT_PUBLIC_API_URL="):
+                lines[i] = f"NEXT_PUBLIC_API_URL={api_url}\n"
+                api_line_found = True
+                break
+
+        if not api_line_found:
+            lines.append(f"\nNEXT_PUBLIC_API_URL={api_url}\n")
+
+        # Write to .env.production.local (highest priority for production builds)
+        with open(env_prod_local, "w") as f:
+            f.writelines(lines)
+        print("  ✅ Created .env.production.local with API URL")
+
+    # Build the frontend - NextJS will automatically use .env.production for production builds
+    print("  Building NextJS app for production...")
+    # Set NODE_ENV to production to ensure .env.production is used
+    build_env = os.environ.copy()
+    build_env["NODE_ENV"] = "production"
+    run_command(["npm", "run", "build"], cwd=frontend_dir, env=build_env)
 
     # Verify the build
     out_dir = frontend_dir / "out"
@@ -271,40 +311,19 @@ def upload_frontend(bucket_name, cloudfront_id):
     print(f"  ✅ CloudFront invalidation created")
 
 
-def update_env_files(outputs):
-    """Update .env files with deployment outputs."""
-    print("\n📝 Updating environment files...")
+def display_deployment_info(outputs):
+    """Display deployment information without modifying local env files."""
+    print("\n📝 Deployment Information")
 
     # Extract values from outputs
     api_url = outputs["api_gateway_url"]["value"]
     cloudfront_url = outputs["cloudfront_url"]["value"]
 
-    # Update frontend/.env.local
-    frontend_env = Path(__file__).parent.parent / "frontend" / ".env.local"
-
-    if frontend_env.exists():
-        with open(frontend_env, "r") as f:
-            lines = f.readlines()
-
-        # Add or update API URL
-        api_line_found = False
-        for i, line in enumerate(lines):
-            if line.startswith("NEXT_PUBLIC_API_URL="):
-                lines[i] = f"NEXT_PUBLIC_API_URL={api_url}\n"
-                api_line_found = True
-                break
-
-        if not api_line_found:
-            lines.append(f"\n# Deployment configuration\n")
-            lines.append(f"NEXT_PUBLIC_API_URL={api_url}\n")
-
-        with open(frontend_env, "w") as f:
-            f.writelines(lines)
-
-        print(f"  ✅ Updated {frontend_env}")
-
+    print(f"\n  ✅ Deployment successful!")
     print(f"\n  CloudFront URL: {cloudfront_url}")
     print(f"  API Gateway URL: {api_url}")
+    print(f"\n  Note: Your local .env.local file remains unchanged.")
+    print(f"  The production build uses .env.production with the AWS API URL.")
 
 
 def main():
@@ -318,11 +337,14 @@ def main():
     # Package Lambda
     package_lambda()
 
-    # Build frontend
-    build_frontend()
-
-    # Deploy infrastructure
+    # Deploy infrastructure first to get the API URL
     outputs = deploy_terraform()
+
+    # Get the API URL from terraform outputs
+    api_url = outputs["api_gateway_url"]["value"]
+
+    # Build frontend with the production API URL
+    build_frontend(api_url)
 
     # Extract CloudFront distribution ID
     cloudfront_url = outputs["cloudfront_url"]["value"]
@@ -353,8 +375,8 @@ def main():
             "--delete"
         ])
 
-    # Update env files
-    update_env_files(outputs)
+    # Display deployment info (no longer modifies .env.local)
+    display_deployment_info(outputs)
 
     print("\n" + "=" * 50)
     print("✅ Deployment complete!")

@@ -248,6 +248,36 @@ async def update_account(account_id: str, account_update: AccountUpdate, clerk_u
         logger.error(f"Error updating account: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.delete("/api/accounts/{account_id}")
+async def delete_account(account_id: str, clerk_user_id: str = Depends(get_current_user_id)):
+    """Delete an account and all its positions"""
+
+    try:
+        # Verify account belongs to user
+        account = db.accounts.find_by_id(account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        # Verify ownership - accounts table stores clerk_user_id directly
+        if account.get('clerk_user_id') != clerk_user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        # Delete all positions first (due to foreign key constraint)
+        positions = db.positions.find_by_account(account_id)
+        for position in positions:
+            db.positions.delete(position['id'])
+
+        # Delete the account
+        db.accounts.delete(account_id)
+
+        return {"message": "Account deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting account: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/accounts/{account_id}/positions")
 async def list_positions(account_id: str, clerk_user_id: str = Depends(get_current_user_id)):
     """Get positions for account"""
@@ -285,10 +315,39 @@ async def create_position(position: PositionCreate, clerk_user_id: str = Depends
         if account.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
+        # Check if instrument exists, if not create it
+        instrument = db.instruments.find_by_symbol(position.symbol.upper())
+        if not instrument:
+            logger.info(f"Creating new instrument: {position.symbol.upper()}")
+            # Create a basic instrument entry with default allocations
+            # Import the schema from database
+            from src.schemas import InstrumentCreate
+
+            # Determine type based on common patterns
+            symbol_upper = position.symbol.upper()
+            if len(symbol_upper) <= 5 and symbol_upper.isalpha():
+                instrument_type = "stock"
+            else:
+                instrument_type = "etf"
+
+            # Create instrument with basic default allocations
+            # These can be updated later by the tagger agent
+            new_instrument = InstrumentCreate(
+                symbol=symbol_upper,
+                name=f"{symbol_upper} - User Added",  # Basic name, can be updated later
+                instrument_type=instrument_type,
+                current_price=Decimal("0.00"),  # Price will be updated by background processes
+                allocation_regions={"north_america": 100.0},  # Default to 100% NA
+                allocation_sectors={"other": 100.0},  # Default to 100% other
+                allocation_asset_class={"equity": 100.0} if instrument_type == "stock" else {"fixed_income": 100.0}
+            )
+
+            db.instruments.create_instrument(new_instrument)
+
         # Add position
         position_id = db.positions.add_position(
             account_id=position.account_id,
-            symbol=position.symbol,
+            symbol=position.symbol.upper(),
             quantity=position.quantity
         )
 
@@ -359,6 +418,26 @@ async def delete_position(position_id: str, clerk_user_id: str = Depends(get_cur
         raise
     except Exception as e:
         logger.error(f"Error deleting position: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/instruments")
+async def list_instruments(clerk_user_id: str = Depends(get_current_user_id)):
+    """Get all available instruments for autocomplete"""
+
+    try:
+        instruments = db.instruments.find_all()
+        # Return simplified list for autocomplete
+        return [
+            {
+                "symbol": inst["symbol"],
+                "name": inst["name"],
+                "instrument_type": inst["instrument_type"],
+                "current_price": float(inst["current_price"]) if inst.get("current_price") else None
+            }
+            for inst in instruments
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching instruments: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)

@@ -281,22 +281,22 @@ export default function Dashboard() {
 
         {/* Portfolio Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Total Portfolio Value</h3>
-            <p className="text-2xl font-bold text-dark">
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Total Portfolio Value</h3>
+            <p className="text-3xl font-bold text-primary">
               ${totalValue % 1 === 0
                 ? totalValue.toLocaleString('en-US')
                 : totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Number of Accounts</h3>
-            <p className="text-2xl font-bold text-dark">{accounts.length}</p>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Number of Accounts</h3>
+            <p className="text-3xl font-bold text-dark">{accounts.length}</p>
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Asset Allocation</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-2 text-center">Asset Allocation</h3>
             {pieChartData.length > 0 ? (
               <div className="h-24">
                 <ResponsiveContainer width="100%" height="100%">
@@ -323,9 +323,9 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Last Analysis</h3>
-            <p className="text-2xl font-bold text-dark">
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <h3 className="text-sm font-medium text-gray-500 mb-3">Last Analysis</h3>
+            <p className="text-3xl font-bold text-dark">
               {lastAnalysisDate ? new Date(lastAnalysisDate).toLocaleDateString() : "Never"}
             </p>
           </div>

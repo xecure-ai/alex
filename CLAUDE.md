@@ -1,35 +1,17 @@
 # Alex Financial Planner SaaS - Development Gameplan
 
-**INTERNAL DOCUMENT - For you (Claude Code) and me (the user, Ed) only - Students will refer to the numbered guides in the guides folder**
+8 part project to build Alex, the Agentic AI Financial Planner, to be used in a course on deploying AI.
+Students will follow the guides in the guides folder to deploy this.
 
-The Alex project will be deployed by students on the course AI in Production. The code and Terraform scripts are being built by you and me now.
-
-This document covers our plan for building the Alex Financial Planner SaaS platform.
-
-## Current Status
-
-- Parts 1-6: complete and guides written in guides directory
-- Part 7 Step 1: ✅ COMPLETE - Landing page, Clerk auth, dashboard, API backend all working. User sync tested successfully.
-- Part 7 Step 2: ✅ COMPLETE - Terraform infrastructure, deployment scripts, Lambda packaging all ready. CORS properly configured.
-
-ADDITIONAL NOTE:
-
-The BEDROCK_MODEL_ID is in the .env as my preferred model:
-BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0 when local, amazon.nova-pro-v1:0 on lambda
-BEDROCK_REGION=us-west-2 local us-east-1 on lambda
-
-The Nova model (us.amazon.nova-pro-v1:0) required special handling:
-- Local environment: Uses cross-region inference profile with us. prefix
-- Lambda environment: Uses direct model ID amazon.nova-pro-v1:0 with bedrock_region set to us-east-1
-- This was due to LiteLLM handling the model ID differently in Lambda vs local environments
+Parts 1-6 are complete; Part 7 is in progress.
 
 ## VERY IMPORTANT - debugging process
 
-When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause and prove it first.
+When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS consider the root cause and prove it.
 
 1. You often jump to conclusions. Don't!
-2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
-3. Follow a methodical process: Reproduce, prove the problem, consider the bigger picture, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
+2. BE THOUGHTFUL - identify the root cause.
+3. Follow a methodical process: Reproduce, prove the problem, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
 4. Do not declare victory unless you have evidence.
 5. Do not be dismissive of issues and call them "expected". Pay attention to every error!
 
@@ -113,15 +95,10 @@ alex/
 │   │   └── tests/
 │   │
 │   ├── planner/            # Orchestrator (Guide 6) - uv project
-│   │
 │   ├── tagger/             # Instrument tagger (Guide 6) - uv project
-│   │
 │   ├── reporter/           # Report agent (Guide 6) - uv project
-│   │
 │   ├── charter/            # Chart agent (Guide 6) - uv project
-│   │
 │   ├── retirement/         # Retirement agent (Guide 6) - uv project
-│   │
 │   └── api/               # Backend API (Guide 7) - uv project
 │
 ├── frontend/              # NextJS React SPA (Guide 7)
@@ -138,11 +115,11 @@ alex/
 We use OpenAI Agents SDK.
 Each Agent has a directory under backend, with a uv project, lambda function, agent.py, templates.py.
 
-The correct package to install is `openai-agents`  
+Correct packages:
 `uv add openai-agents`  
 `uv add "openai-agents[litellm]"`  
 
-This code shows idiomatic use with appropriate parameters and use of Tools. Only use Tools where they make sense. We will not use Tools and Structured Outputs together due to Bedrock limitations.
+This code shows idiomatic use with Tools. Only use Tools where they make sense. We will not use Tools and Structured Outputs together due to Bedrock limitations.
 Use OpenAI Agents SDK correctly. DO NOT invent arguments like passing in additional parameters to trace().
 
 ```python
@@ -175,9 +152,7 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 ### Deliverables
 - Working Aurora database with Data API
 - Shared database package using Data API client
-- Database reset script with defaults
 - Populated instruments table (20+ ETFs)
-- Test data for development
 
 ## Part 6: Agent Orchestra - Core Services (COMPLETE)
 
@@ -189,6 +164,14 @@ The OpenAI Agents SDK doesn't support using both tools AND structured outputs si
 - **All agents use tools only** (except tagger which uses structured outputs only)
 - **Charter agent simplified** - Returns JSON directly without tools
 - **Model changed** - From OpenAI OSS to Amazon Nova Pro (us.amazon.nova-pro-v1:0) for better reliability
+
+### Bedrock usage:
+
+Locally
+BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0 (cross region inference) BEDROCK_REGION=us-west-2
+
+On Lambda:
+BEDROCK_MODEL_ID=amazon.nova-pro-v1:0 when local (direct model ID), BEDROCK_REGION=us-east-1
 
 ### Agent structure
 
@@ -213,7 +196,6 @@ test_full.py # the remote test
    - Delegates to other agents via Lambda invocations
    - Has S3 Vectors access for market knowledge
    - Updates job status in database at end
-   - ✅ **Test**: Local invocation, SQS message processing
 
 2. **Build tagger Agent** (Lambda)
    - Simple agent for populating missing instrument reference data
@@ -221,19 +203,16 @@ test_full.py # the remote test
    - Populates: asset_class, regions, sectors allocations
    - Called by orchestrator when instruments lack data
    - Future enhancement: Add Polygon API tool for real-time data
-   - ✅ **Test**: Tag various ETFs and stocks, verify allocations sum to 100
 
 3. **Build reporter Agent** (Lambda)
    - Analyzes portfolio data
    - Generates markdown reports
    - Stores in database
-   - ✅ **Test**: Invoke with test portfolio, verify markdown output
 
 4. **Build charter Agent** (Lambda)
    - Creates JSON data for charts
    - Calculates allocations by asset class, region, sector, with autonomy to decide
    - Formats for Recharts
-   - ✅ **Test**: Verify JSON structure matches Recharts schema
 
 5. **Build retirment Agent** (Lambda)
    - Projects retirement income
@@ -244,7 +223,6 @@ test_full.py # the remote test
 6. **Integration Testing**
    - Orchestrator calls all agents including InstrumentTagger
    - Complete portfolio analysis flow
-   - ✅ **Test**: End-to-end analysis generates full report with charts
 
 ### Agent Communication Flow
 ```
@@ -261,19 +239,19 @@ User Request → API → SQS → Planner (Lambda)
                              Job marked complete
 ```
 
-**Key Implementation Notes**: 
-- Tagger is called automatically by Python code before the agent runs (not as an agent tool)
+**Implementation Notes**: 
+- Tagger called with code before the agent runs (not as tool)
 - Tagger is the ONLY agent that uses Structured Outputs (no tools needed)
 - Charter agent returns JSON directly without using tools
 - All other agents use tools with RunContextWrapper pattern for clean access to job_id
 
 ### Testing Strategy for Part 6
 
-Each of the 5 agents has the following in their directory:
+Each agent has the following in their directory:
 - `test_simple.py` - Local testing with mock data
 - `test_full.py` - Remote testing with deployed Lambda
 
-The backend parent directory has overall test scripts:
+The backend directory has:
 - `test_simple.py` - Tests all agents locally
 - `test_full.py` - Tests via SQS/Lambda
 - `test_multiple_accounts.py` - Tests multi-account scenarios
@@ -382,19 +360,19 @@ The landing page and dashboard have established excellent patterns that should b
    - `jobs` table: Stores `clerk_user_id` directly, NOT `user_id`
    - **NEVER write**: `user['id']`, `account['user_id'] != user['id']`, `job['user_id'] != user['id']`
    - **ALWAYS write**: `clerk_user_id`, `account.get('clerk_user_id') != clerk_user_id`, `job.get('clerk_user_id') != clerk_user_id`
-   - This is the THIRD time this exact error was made. Before ANY user/account/job authorization check, remember: there is no user['id'], only clerk_user_id!
 
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
+
+IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not do it yourself.
 
 ### Steps
 
 - [x] **Step 0: Review and Planning** ✅ COMPLETE
    - The folder reference/ has projects from earlier in the course and would be helpful reference:
-     - The saas app in reference/saas is a working app with a NextJS frontend, using Clerk for user_id. Use the same secrets EXACTLY for minimal setup for the student. This project was called "saas" from week1, and they will have a "saas" repo
-     - The files day3.md and day3.part2.md were the instructions for when we set up this Clerk approach in week1 and may help explain the setup
+     - The saas app in reference/saas is a working app with a NextJS frontend, using Clerk for user_id
+     - The files day3.md and day3.part2.md were the instructions for when we set up this Clerk approach in week1
      - The file reference/twin_main.tf is the terraform file from our big project in week2 (the "twin") in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution - very similar to this project
-     - The folder twin/scripts contains the mac and PC scripts that we used to deploy and destroy the infrastructure for twin. We used terraform workspaces for dev, test, prod, and for this project we won't do that - only 1 environment. This contains shell scripts, but for this project we will "uv run" python scripts.
    - Color scheme (and all shades of these)
      - primary color (boring): #209DD7 
      - primary color (anything to do with AI or Agents, like kicking off the planner): #753991
@@ -565,9 +543,6 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
   - AWS Console verification steps
   - Rollback instructions if needed
 
-IMPORTANT: ask me to run `uv run deploy.py` rather than yourself, so that I can watch and wait for it to complete. Same for `uv run run_local.py` - it gets messy if you try to run this yourself.
-IMPORTANT: keep `uv run run_local.py` working in addition to the deployed version where possible, so we can test locally as well as deployed.
-
 ### Step 3: Dashboard with Account Management
 **3a. Navigation and layout components**
 - [x] Create components/Layout.tsx with nav bar:
@@ -592,47 +567,44 @@ IMPORTANT: keep `uv run run_local.py` working in addition to the deployed versio
   - Last analysis date
 
 **3c. Database population script for testing**
-- [ ] Add a small button to the Accounts page to 'populate test data'
-- [ ] Create an endpoint that this calls which sets up test data:
+- [x] Add a small button to the Accounts page to 'populate test data'
+- [x] Create an endpoint that this calls which sets up test data:
   - 3 accounts: "401k Long-term", "Roth IRA", "Brokerage Account"
   - ETF positions in 401K: SPY, VTI, BND, QQQ, IWM with varied quantities
   - An interesting mix of other funds in Roth IRA
   - Stock positions in brokerage account: TSLA, AAPL, AMZN, NVDA
   - Realistic allocations across accounts
-- [ ] Text-based summary of the Account details on the Accounts page, to be replaced in Step 4
-- [ ] Reset Accounts button to delete all accounts associated with a user
+- [x] Text-based summary of the Account details on the Accounts page, to be replaced in Step 4
+- [x] Reset Accounts button to delete all accounts associated with a user
 
 **3d. Dashboard testing & documentation**
-- [ ] Have the user (Ed) test local and remote and check the data is created
+- [x] Have the user (Ed) test local and remote and check the data is created
 
 ### Step 4: Account Details Page
 **4a. Accounts list page (pages/accounts.tsx)**
-- [ ] Table showing all accounts:
+- [x] Table showing all accounts:
   - Account name, type, total value
   - Number of positions
   - Cash balance
   - Edit/View buttons
-- [ ] "Add Account" button → modal
+- [x] Add account
+- [x] Remove account
 
 **4b. Account detail/edit page (pages/accounts/[id].tsx)**
-- [ ] Account information (editable):
+- [x] Account information (editable):
   - Name, purpose, cash balance
-- [ ] Positions table:
+- [x] Positions table:
   - Symbol, name, quantity, current price, total value
   - Inline edit for quantities
   - Delete position button
-- [ ] Add position form:
+- [x] Add position form:
   - Symbol autocomplete (from instruments table)
+  - Or enter new instrument not in instruments table (created automatically by backend)
   - Quantity input
   - Add button → POST /api/positions
 
-**4c. Real-time price updates**
-- [ ] Fetch current prices from database
-- [ ] Calculate total values client-side
-- [ ] Show allocation breakdowns per account
-
-**4d. Accounts testing & documentation**
-- [ ] Create `ed_test_step4.md` with:
+**4c. Accounts testing & documentation**
+- [x] Create `ed_test_step4.md` with:
   - Test checklist:
     1. View all accounts in list
     2. Click through to account details
@@ -805,17 +777,31 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 
 This will be built out but will include security, monitoring, observability and guardrails.
 
-## Lambda Deployment Technique for Binary Compatibility
+## Docker image must be built for x86_64
 
-### The Architecture Issue
-Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python dependencies on macOS (ARM64) or Windows, binary packages like `pydantic_core` are compiled for the wrong architecture, causing runtime failures.
+When packaging Python dependencies, binary packages like `pydantic_core` are compiled for the wrong architecture, causing runtime failures.
+Solution: Use Docker with the official AWS Lambda Python runtime image.
 
-### Solution: Docker-Based Packaging
-Use Docker with the official AWS Lambda Python runtime image to compile dependencies for the correct architecture. This ensures all binary packages are compatible with Lambda's runtime environment.
+## Critical API Architecture Understanding
 
-## Claude Code Performance Warnings
+### Local vs Deployed Environment Configuration
+**Local Setup:**
+- Frontend on `localhost:3000` backend API on `localhost:8000`
+- Frontend `.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:8000` for local development
+- Backend reads from root `.env` file
 
-### 1. Hardcoding fallback URLs in React code
-**What happened:** When facing undefined environment variables, Claude Code added hardcoded URL fallbacks (`process.env.NEXT_PUBLIC_API_URL || 'https://hardcoded-url'`) directly in React components.
-**Why this is bad:** Next.js replaces environment variables at BUILD time not runtime, so the fallback never executes; hardcoding URLs breaks environment separation and requires code changes for different deployments.
-**Claude Code's commitment going forwards:** Always solve environment variable issues at the build/deployment configuration level, never hardcode URLs in application code, and recognize that build-time vs runtime resolution is fundamental to Next.js architecture. Most importantly: do not apply bandaids - consider the root cause.
+**Deployed Setup:**
+- Frontend served from CloudFront
+- Backend API on API Gateway → Lambda
+- Frontend uses `.env.production` with AWS API URL (build-time replacement)
+- Lambda receives environment variables from Terraform
+
+**Deployment Process (deploy.py) - FIXED:**
+1. **Packages Lambda** (`package_docker.py`)
+2. **Deploys Infrastructure** via Terraform to get API Gateway URL
+3. **Updates `.env.production`** with API URL (`.env.local` remains unchanged!)
+4. **Builds Frontend** using `.env.production` for production
+5. **Uploads Frontend to S3**
+6. **Displays deployment info** without modifying local files
+
+**Key Fix:** The deploy script now uses separate `.env.production` file and never modifies `.env.local`, preventing the recurring issue of local environment pointing to AWS.
