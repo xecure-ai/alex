@@ -566,15 +566,15 @@ IMPORTANT: keep `uv run run_local.py` working in addition to the deployed versio
 - [x] Footer with disclaimer: "This AI-generated advice has not been vetted by a qualified financial advisor and should not be used for trading decisions. For informational purposes only."
 
 **3b. Dashboard page (pages/dashboard.tsx)**
-- [ ] On page load:
+- [x] On page load:
   - Call GET /api/user (this auto-creates user if first time)
   - Load user data and accounts
-- [ ] User settings section:
+- [x] User settings section:
   - Display name (editable)
   - Years until retirement (slider 0-50)
   - Target allocations (pie chart + inputs)
   - Save button → PUT /api/user
-- [ ] Portfolio summary cards:
+- [x] Portfolio summary cards:
   - Total portfolio value
   - Number of accounts
   - Asset allocation overview (mini pie chart)

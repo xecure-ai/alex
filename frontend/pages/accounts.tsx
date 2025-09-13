@@ -15,7 +15,7 @@ export default function Accounts() {
               Your accounts will appear here
             </p>
             <p className="text-sm text-gray-600 mt-2">
-              You'll be able to add and manage your 401(k), IRA, and brokerage accounts.
+              You&apos;ll be able to add and manage your 401(k), IRA, and brokerage accounts.
             </p>
           </div>
         </div>

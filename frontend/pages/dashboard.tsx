@@ -67,7 +67,7 @@ export default function Dashboard() {
   // Calculate portfolio summary
   const calculatePortfolioSummary = () => {
     let totalValue = 0;
-    let assetClassBreakdown: Record<string, number> = {
+    const assetClassBreakdown: Record<string, number> = {
       equity: 0,
       fixed_income: 0,
       alternatives: 0,
@@ -81,7 +81,7 @@ export default function Dashboard() {
     });
 
     // Add position values
-    Object.entries(positions).forEach(([accountId, accountPositions]) => {
+    Object.entries(positions).forEach(([, accountPositions]) => {
       accountPositions.forEach(position => {
         const instrument = instruments[position.symbol];
         if (instrument?.current_price) {
@@ -257,7 +257,7 @@ export default function Dashboard() {
 
   // Prepare data for pie chart
   const pieChartData = Object.entries(assetClassBreakdown)
-    .filter(([_, value]) => value > 0)
+    .filter(([, value]) => value > 0)
     .map(([key, value]) => ({
       name: key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' '),
       value: Math.round(value),
