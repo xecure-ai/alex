@@ -191,7 +191,9 @@ def create_agent(job_id: str, portfolio_data: Dict[str, Any], user_data: Dict[st
     model_id = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
     # Set region for LiteLLM Bedrock calls
     bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
+    logger.info(f"DEBUG: BEDROCK_REGION from env = {bedrock_region}")
     os.environ["AWS_REGION_NAME"] = bedrock_region
+    logger.info(f"DEBUG: Set AWS_REGION_NAME to {bedrock_region}")
 
     model = LitellmModel(model=f"bedrock/{model_id}")
 

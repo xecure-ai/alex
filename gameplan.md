@@ -10,8 +10,7 @@ This document covers our plan for building the Alex Financial Planner SaaS platf
 
 - Parts 1-5: complete, tested and guides written in guides directory
 - New approach for Terraform implemented: storing state locally instead of on S3, and having a separate terraform subdirectory for each guide
-- Part 6: coded but there are issues that need to be fixed
-- We need to resolve the issues with Part 6
+- Part 6: coded, being tested
 
 ## Explaining the issue with Part 6
 
@@ -22,11 +21,13 @@ This document covers our plan for building the Alex Financial Planner SaaS platf
 ADDITIONAL NOTE:
 
 The BEDROCK_MODEL_ID is in the .env as my preferred model:
-BEDROCK_MODEL_ID=openai.gpt-oss-120b-1:0
-BEDROCK_REGION=us-west-2
-I have access to this in us-west-2, and it reliably calls tools and has high rate limits.
-The actual model name needed to be passed in to LiteLLM is:
-bedrock/openai.gpt-oss-120b-1:0
+BEDROCK_MODEL_ID=openai.gpt-oss-120b-1:0 CHANGED to us.amazon.nova-pro-v1:0 for stability
+BEDROCK_REGION=us-west-2 locally us-east-1 in deployment
+
+The Nova model (us.amazon.nova-pro-v1:0) required special handling:
+- Local environment: Uses cross-region inference profile with us. prefix
+- Lambda environment: Uses direct model ID amazon.nova-pro-v1:0 with bedrock_region set to us-east-1
+- This was due to LiteLLM handling the model ID differently in Lambda vs local environments
 
 ## IMPORTANT - Methodical debugging with the root cause in mind
 
@@ -124,35 +125,16 @@ alex/
 │   │   └── tests/
 │   │
 │   ├── planner/            # Orchestrator (Guide 6) - uv project
-│   │   ├── pyproject.toml
-│   │   ├── lambda_handler.py  # Lambda with SQS trigger
-│   │   ├── package.py
-│   │   └── tests/          # Integration tests live here
 │   │
 │   ├── tagger/             # Instrument tagger (Guide 6) - uv project
-│   │   ├── pyproject.toml
-│   │   ├── lambda_handler.py  # Populates missing instrument data
-│   │   └── package.py
 │   │
 │   ├── reporter/           # Report agent (Guide 6) - uv project
-│   │   ├── pyproject.toml
-│   │   ├── lambda_handler.py
-│   │   └── package.py
 │   │
 │   ├── charter/            # Chart agent (Guide 6) - uv project
-│   │   ├── pyproject.toml
-│   │   ├── lambda_handler.py
-│   │   └── package.py
 │   │
 │   ├── retirement/         # Retirement agent (Guide 6) - uv project
-│   │   ├── pyproject.toml
-│   │   ├── lambda_handler.py
-│   │   └── package.py
 │   │
 │   └── api/               # Backend API (Guide 7) - uv project
-│       ├── pyproject.toml
-│       ├── lambda_handler.py  # Lambda + API Gateway
-│       └── package.py
 │
 ├── frontend/              # NextJS React SPA (Guide 7)
 │
@@ -165,7 +147,7 @@ alex/
 
 ## IMPORTANT - Read this - Agent design
 
-For Agents, we will be using OpenAI Agents SDK. This is the name of the production release of what used to be called Swarm.
+For Agents, we will be using OpenAI Agents SDK.
 Each Agent is in its own directory under backend, with its own uv project, lambda function, agent.py, templates.py.
 
 The correct package to install is `openai-agents`  
@@ -209,40 +191,6 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 - Populated instruments table (20+ ETFs)
 - Test data for development
 
-### Acceptance Criteria for Part 5
-
-#### Infrastructure
-- [x] Aurora Serverless v2 cluster is running with Data API enabled
-- [x] Database credentials stored in Secrets Manager
-- [x] Data API endpoint accessible via AWS CLI
-- [x] No VPC or networking configuration required
-
-#### Database Schema
-- [x] All tables created successfully (users, instruments, accounts, positions, jobs)
-- [x] Foreign key constraints working properly
-- [x] JSONB columns functioning for flexible data
-
-#### Database Package
-- [x] Package installable via `uv add --editable ../database`
-- [x] Data API client wrapper handles all operations with automatic type casting
-- [x] Pydantic schemas validate all data before database insertion
-- [x] Connection uses IAM authentication (no passwords in code)
-
-#### Data Population
-- [x] 22 instruments loaded with complete allocation data
-- [x] All allocation percentages sum to 100 (validated by Pydantic)
-- [x] Test user created with sample portfolio when requested
-- [x] Reset script is idempotent (can run multiple times safely)
-
-#### Testing
-- [x] Can query database via AWS CLI:
-  ```bash
-  aws rds-data execute-statement --resource-arn $AURORA_CLUSTER_ARN --secret-arn $AURORA_SECRET_ARN --database alex --sql "SELECT COUNT(*) FROM instruments"
-  ```
-- [x] Python package can perform CRUD operations
-- [x] Reset script completes without errors (`uv run reset_db.py --with-test-data`)
-- [x] All tests pass in database package (`uv run test_db.py`)
-
 ## Part 6: Agent Orchestra - Core Services (BUILT AND BEING TESTED)
 
 ### Objective
@@ -270,7 +218,7 @@ test_full.py # the remote test
    - Automatically tags missing instruments via Python code (not agent tool)
    - Delegates to other agents via Lambda invocations
    - Has S3 Vectors access for market knowledge
-   - Updates job status in database
+   - Updates job status in database at end
    - ✅ **Test**: Local invocation, SQS message processing
 
 2. **Build tagger Agent** (Lambda)
@@ -329,54 +277,6 @@ For remote testing: test_full.py
 The backend parent directory has the overall scripts:
 For testing everything locally: test_simple.py
 For testing remotely: test_full.py
-
-### Acceptance Criteria for Part 6
-
-#### Lambda Infrastructure
-- [ ] All 5 Lambda functions deployed (Planner, Tagger, Reporter, Charter, Retirement)
-- [ ] SQS queue created with proper dead letter queue
-- [ ] Orchestrator has 15-minute timeout configured
-- [ ] All Lambdas have IAM roles with correct permissions
-- [ ] Environment variable for BEDROCK_MODEL_ID set
-
-#### Orchestrator Functionality
-- [ ] Receives messages from SQS successfully
-- [ ] Updates job status in database (pending → running → completed/failed)
-- [ ] Invokes other Lambda functions via boto3
-- [ ] Handles failures gracefully with error messages
-- [ ] Completes full analysis in under 3 minutes
-
-#### Tagger Agent
-- [ ] Identifies instruments missing allocation data
-- [ ] Successfully calls Bedrock OpenAI OSS model
-- [ ] Returns structured JSON with allocations
-- [ ] All percentages sum to 100
-- [ ] Updates database with new data
-
-#### Report Writer Agent  
-- [ ] Generates markdown analysis report
-- [ ] Includes portfolio summary and recommendations
-- [ ] Properly formatted for frontend display
-- [ ] Saves analysis results to jobs table
-
-#### Chart Maker Agent
-- [ ] Calculates portfolio allocations correctly
-- [ ] Returns JSON formatted for Recharts
-- [ ] Includes asset class, region, and sector breakdowns
-- [ ] All chart data percentages sum to 100
-
-#### Retirement Specialist Agent
-- [ ] Projects retirement income based on portfolio
-- [ ] Generates projection chart data
-- [ ] Considers years until retirement
-- [ ] Saves projections to jobs table results
-
-#### Integration Testing
-- [ ] End-to-end test: Send SQS message → Receive complete analysis
-- [ ] Test with portfolio containing unknown instruments
-- [ ] Verify all agents called and data stored
-- [ ] Job status correctly updated throughout
-- [ ] Can handle concurrent job requests
 
 ## Part 7: Frontend & Authentication
 

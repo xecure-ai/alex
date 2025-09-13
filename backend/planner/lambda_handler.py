@@ -45,15 +45,16 @@ async def run_orchestrator(job_id: str) -> None:
         # Handle missing instruments first (non-agent pre-processing)
         await asyncio.to_thread(handle_missing_instruments, job_id, db)
         
-        # Load portfolio data
-        portfolio_data = await asyncio.to_thread(load_portfolio_summary, job_id, db)
+        # Load portfolio summary (just statistics, not full data)
+        portfolio_summary = await asyncio.to_thread(load_portfolio_summary, job_id, db)
         
         # Create agent with tools and context
-        model, tools, task = create_agent(job_id, portfolio_data, db)
+        model, tools, task, context = create_agent(job_id, portfolio_summary, db)
         
         # Run the orchestrator
         with trace("Planner Orchestrator"):
-            agent = Agent(
+            from agent import PlannerContext
+            agent = Agent[PlannerContext](
                 name="Financial Planner",
                 instructions=ORCHESTRATOR_INSTRUCTIONS,
                 model=model,
@@ -63,10 +64,13 @@ async def run_orchestrator(job_id: str) -> None:
             result = await Runner.run(
                 agent,
                 input=task,
+                context=context,
                 max_turns=20
             )
             
-            logger.info(f"Planner: Orchestration completed for job {job_id}")
+            # Mark job as completed after all agents finish
+            db.jobs.update_status(job_id, "completed")
+            logger.info(f"Planner: Job {job_id} completed successfully")
             
     except Exception as e:
         logger.error(f"Planner: Error in orchestration: {e}", exc_info=True)

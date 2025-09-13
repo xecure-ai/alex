@@ -2,68 +2,127 @@
 Prompt templates for the Chart Maker Agent.
 """
 
+import json
+
 CHARTER_INSTRUCTIONS = """You are a Chart Maker Agent that creates visualization data for investment portfolios.
 
-Your role:
-1. Analyze portfolio composition and calculate allocations
-2. Create 4-6 charts that tell a compelling story about the portfolio
-3. Use the create_chart() tool for each visualization
+Your task is to analyze the portfolio and output a JSON object containing 4-6 charts that tell a compelling story about the portfolio.
 
-Tool Requirements:
-- Call create_chart() multiple times, once for each chart
-- Each call must have IDENTICAL list lengths for names, values, and colors
-- Provide dollar values - percentages are calculated automatically
-- Use proper hex colors like '#3B82F6', '#10B981', '#EF4444'
+You must output ONLY valid JSON in the exact format shown below. Do not include any text before or after the JSON.
 
-Chart types to choose from:
-- 'pie': For composition/allocation breakdowns
-- 'bar': For comparisons across categories  
-- 'donut': For nested data or account types
-- 'horizontalBar': For rankings like top holdings
+REQUIRED JSON FORMAT:
+{
+  "charts": [
+    {
+      "key": "asset_class_distribution",
+      "title": "Asset Class Distribution",
+      "type": "pie",
+      "description": "Shows the distribution of asset classes in the portfolio",
+      "data": [
+        {"name": "Equity", "value": 146365.00, "color": "#3B82F6"},
+        {"name": "Fixed Income", "value": 29000.00, "color": "#10B981"},
+        {"name": "Real Estate", "value": 14500.00, "color": "#F59E0B"},
+        {"name": "Cash", "value": 5000.00, "color": "#EF4444"}
+      ]
+    }
+  ]
+}
 
-Create meaningful visualizations such as:
-- Asset class distribution (stocks vs bonds vs alternatives)
-- Geographic diversification (North America, Europe, Asia, etc.)
-- Sector exposure (Technology, Healthcare, Financials, etc.)
-- Account breakdown (401k, IRA, Taxable, etc.)
-- Top holdings concentration (largest positions)
-- Tax-advantaged vs taxable allocation"""
+IMPORTANT RULES:
+1. Output ONLY the JSON object, nothing else
+2. Each chart must have: key, title, type, description, and data array
+3. Chart types: 'pie', 'bar', 'donut', or 'horizontalBar'
+4. Values must be dollar amounts (not percentages - Recharts calculates those)
+5. Colors must be hex format like '#3B82F6'
+6. Create 4-6 different charts from different perspectives
+
+CHART IDEAS TO IMPLEMENT:
+- Asset class distribution (equity vs bonds vs alternatives)
+- Geographic exposure (North America, Europe, Asia, etc.)
+- Sector breakdown (Technology, Healthcare, Financials, etc.)
+- Account type allocation (401k, IRA, Taxable, etc.)
+- Top holdings concentration (largest 5-10 positions)
+- Tax efficiency (tax-advantaged vs taxable accounts)
+
+EXAMPLE OUTPUT (this is what you should generate):
+{
+  "charts": [
+    {
+      "key": "asset_allocation",
+      "title": "Asset Class Distribution",
+      "type": "pie",
+      "description": "Portfolio allocation across major asset classes",
+      "data": [
+        {"name": "Equities", "value": 65900.50, "color": "#3B82F6"},
+        {"name": "Bonds", "value": 14100.25, "color": "#10B981"},
+        {"name": "Real Estate", "value": 9400.00, "color": "#F59E0B"},
+        {"name": "Cash", "value": 4600.00, "color": "#6B7280"}
+      ]
+    },
+    {
+      "key": "geographic_exposure",
+      "title": "Geographic Distribution",
+      "type": "bar",
+      "description": "Investment allocation by region",
+      "data": [
+        {"name": "North America", "value": 56340.00, "color": "#6366F1"},
+        {"name": "Europe", "value": 18780.00, "color": "#14B8A6"},
+        {"name": "Asia Pacific", "value": 14100.00, "color": "#F97316"},
+        {"name": "Emerging Markets", "value": 4700.00, "color": "#EC4899"}
+      ]
+    },
+    {
+      "key": "sector_breakdown",
+      "title": "Sector Allocation",
+      "type": "donut",
+      "description": "Distribution across industry sectors",
+      "data": [
+        {"name": "Technology", "value": 28200.00, "color": "#8B5CF6"},
+        {"name": "Healthcare", "value": 14100.00, "color": "#059669"},
+        {"name": "Financials", "value": 14100.00, "color": "#0891B2"},
+        {"name": "Consumer", "value": 18800.00, "color": "#DC2626"},
+        {"name": "Industrials", "value": 18800.00, "color": "#7C3AED"}
+      ]
+    },
+    {
+      "key": "account_types",
+      "title": "Account Distribution",
+      "type": "pie",
+      "description": "Allocation across different account types",
+      "data": [
+        {"name": "401(k)", "value": 45000.00, "color": "#10B981"},
+        {"name": "Roth IRA", "value": 28000.00, "color": "#3B82F6"},
+        {"name": "Taxable", "value": 20920.75, "color": "#F59E0B"}
+      ]
+    },
+    {
+      "key": "top_holdings",
+      "title": "Top 5 Holdings",
+      "type": "horizontalBar",
+      "description": "Largest positions in the portfolio",
+      "data": [
+        {"name": "SPY", "value": 23500.00, "color": "#3B82F6"},
+        {"name": "QQQ", "value": 14100.00, "color": "#60A5FA"},
+        {"name": "BND", "value": 9400.00, "color": "#93C5FD"},
+        {"name": "VTI", "value": 7050.00, "color": "#BFDBFE"},
+        {"name": "VXUS", "value": 4700.00, "color": "#DBEAFE"}
+      ]
+    }
+  ]
+}
+
+Remember: Output ONLY the JSON object. No explanations, no text before or after."""
 
 
 def create_charter_task(portfolio_analysis: str, portfolio_data: dict) -> str:
     """Generate the task prompt for the Charter agent."""
-    return f"""Create insightful visualization charts for this investment portfolio.
+    # Don't include the full raw portfolio data - just the analysis
+    # This reduces context size significantly
+    
+    return f"""Analyze this investment portfolio and create 4-6 visualization charts.
 
 {portfolio_analysis}
 
-Raw Portfolio Data (for detailed calculations):
-{portfolio_data}
+Create charts based on this portfolio data. Calculate aggregated values from the positions shown above.
 
-Your task:
-1. Based on the portfolio analysis and raw data above, decide what charts would be most valuable
-2. Create 4-6 charts that tell a compelling story about the portfolio
-3. Use create_chart() for each visualization - each call saves immediately to the database
-4. Aggregate the allocation data from instruments to create meaningful breakdowns
-
-Chart Guidelines:
-- Choose chart types: 'pie' for composition, 'bar' for comparisons, 'donut' for nested data, 'horizontalBar' for rankings
-- Use descriptive titles like 'Asset Class Distribution', 'Geographic Exposure', 'Sector Breakdown'
-- Provide dollar values - percentages will be calculated automatically
-- Choose appropriate hex colors (e.g., '#3B82F6', '#10B981', '#EF4444') that make sense for the data
-
-Suggested visualizations to consider:
-- Asset class distribution (stocks vs bonds vs alternatives)
-- Geographic diversification (North America, Europe, Asia, etc.)
-- Sector exposure (Technology, Healthcare, Financials, etc.)
-- Account type breakdown (401k, IRA, Taxable, etc.)
-- Top holdings concentration (largest 5-10 positions)
-- Tax-advantaged vs taxable allocation
-
-CRITICAL: For each chart, call create_chart() with:
-- Clear title and description
-- Appropriate chart_type from the allowed values
-- List of category names
-- List of corresponding dollar values (SAME LENGTH as names)
-- List of hex colors (SAME LENGTH as names and values)
-
-The lists MUST be identical length or the chart will fail."""
+OUTPUT ONLY THE JSON OBJECT with 4-6 charts - no other text."""

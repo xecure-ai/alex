@@ -22,7 +22,7 @@ except ImportError:
 from src import Database
 
 from templates import CHARTER_INSTRUCTIONS
-from agent import create_agent, CharterContext
+from agent import create_agent
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -36,77 +36,91 @@ logger.setLevel(logging.INFO)
 async def run_charter_agent(job_id: str, portfolio_data: Dict[str, Any], db=None) -> Dict[str, Any]:
     """Run the charter agent to generate visualization data."""
     
-    # Create agent with tools and context
-    model, tools, task, context = create_agent(job_id, portfolio_data, db)
+    # Create agent without tools - will output JSON
+    model, task = create_agent(job_id, portfolio_data, db)
     
-    # Run agent with context
+    # Run agent - no tools, no context
     with trace("Charter Agent"):
-        agent = Agent[CharterContext](  # Specify the context type
+        agent = Agent(
             name="Chart Maker",
             instructions=CHARTER_INSTRUCTIONS,
-            model=model,
-            tools=tools
+            model=model
         )
         
         result = await Runner.run(
             agent,
             input=task,
-            context=context,  # Pass the context
-            max_turns=20  # Increased from 8 to potentially resolve Lambda execution issues
+            max_turns=5  # Reduced since we expect one-shot JSON response
         )
         
-        # COMPREHENSIVE DIAGNOSTIC LOGGING - Debug Step 1
-        logger.info(f"===== CHARTER RUNNER RESULT DIAGNOSTICS =====")
-        logger.info(f"Charter: Runner result type: {type(result)}")
-        logger.info(f"Charter: Runner result attributes: {[attr for attr in dir(result) if not attr.startswith('_')]}")
+        # Extract and parse JSON from the output
+        output = result.final_output
+        logger.info(f"Charter: Agent completed, output length: {len(output) if output else 0}")
         
-        # Log messages if available
-        if hasattr(result, 'messages'):
-            logger.info(f"Charter: Number of turns taken: {len(result.messages)}")
-            for i, msg in enumerate(result.messages):
-                msg_str = str(msg)[:500]  # First 500 chars
-                logger.info(f"Charter: Turn {i}: {msg_str}")
-                # Also log if the message contains tool calls
-                if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                    logger.info(f"Charter: Turn {i} has {len(msg.tool_calls)} tool calls")
-                    for j, tool_call in enumerate(msg.tool_calls):
-                        logger.info(f"Charter: Turn {i} Tool {j}: {tool_call}")
+        # Log the actual output for debugging
+        if output:
+            logger.info(f"Charter: Output preview (first 1000 chars): {output[:1000]}")
         else:
-            logger.info(f"Charter: Result has no 'messages' attribute")
+            logger.warning("Charter: Agent returned empty output!")
+            # Check if there were any messages
+            if hasattr(result, 'messages') and result.messages:
+                logger.info(f"Charter: Number of messages: {len(result.messages)}")
+                for i, msg in enumerate(result.messages):
+                    logger.info(f"Charter: Message {i}: {str(msg)[:500]}")
         
-        # Log final output details
-        logger.info(f"Charter: Has final_output: {hasattr(result, 'final_output')}")
-        if hasattr(result, 'final_output'):
-            logger.info(f"Charter: Final output type: {type(result.final_output)}")
-            logger.info(f"Charter: Final output length: {len(result.final_output) if result.final_output else 0}")
-            logger.info(f"Charter: Final output preview: {result.final_output[:200] if result.final_output else 'None'}")
+        # Parse the JSON output
+        charts_data = None
+        charts_saved = False
         
-        # Log the conversation flow
-        if hasattr(result, 'to_input_list'):
-            input_list = result.to_input_list()
-            logger.info(f"Charter: Conversation turns: {len(input_list)}")
-            for i, msg in enumerate(input_list[:5]):  # First 5 messages
-                logger.info(f"Charter: Message {i} - Role: {msg.get('role', 'unknown')}, Content length: {len(str(msg.get('content', '')))}")
-                if msg.get('tool_calls'):
-                    logger.info(f"Charter: Message {i} has {len(msg['tool_calls'])} tool calls")
-        
-        # Log raw responses to see what the model actually returned
-        if hasattr(result, 'raw_responses'):
-            logger.info(f"Charter: Number of raw responses: {len(result.raw_responses) if result.raw_responses else 0}")
-            if result.raw_responses:
-                for i, response in enumerate(result.raw_responses[:3]):  # First 3 responses
-                    logger.info(f"Charter: Raw response {i} preview: {str(response)[:500]}")
-        
-        # Log context state after execution
-        logger.info(f"Charter: Context charts after execution: {len(context.charts)} charts")
-        logger.info(f"Charter: Chart keys: {list(context.charts.keys())}")
+        if output:
+            # Try to find JSON in the output
+            # Look for the opening and closing braces of the JSON object
+            start_idx = output.find('{')
+            end_idx = output.rfind('}')
+            
+            if start_idx >= 0 and end_idx > start_idx:
+                json_str = output[start_idx:end_idx + 1]
+                logger.info(f"Charter: Extracted JSON substring, length: {len(json_str)}")
+                
+                try:
+                    parsed_data = json.loads(json_str)
+                    charts = parsed_data.get('charts', [])
+                    logger.info(f"Charter: Successfully parsed JSON, found {len(charts)} charts")
+                    
+                    if charts:
+                        # Build the charts_payload with chart keys as top-level keys
+                        charts_data = {}
+                        for chart in charts:
+                            chart_key = chart.get('key', f"chart_{len(charts_data) + 1}")
+                            # Remove the 'key' from the chart data since it's now the dict key
+                            chart_copy = {k: v for k, v in chart.items() if k != 'key'}
+                            charts_data[chart_key] = chart_copy
+                        
+                        logger.info(f"Charter: Created charts_data with keys: {list(charts_data.keys())}")
+                        
+                        # Save to database
+                        if db and charts_data:
+                            try:
+                                success = db.jobs.update_charts(job_id, charts_data)
+                                charts_saved = bool(success)
+                                logger.info(f"Charter: Database update returned: {success}")
+                            except Exception as e:
+                                logger.error(f"Charter: Database error: {e}")
+                    else:
+                        logger.warning("Charter: No charts found in parsed JSON")
+                        
+                except json.JSONDecodeError as e:
+                    logger.error(f"Charter: Failed to parse JSON: {e}")
+                    logger.error(f"Charter: JSON string attempted: {json_str[:500]}...")
+            else:
+                logger.error(f"Charter: No JSON structure found in output")
+                logger.error(f"Charter: Output preview: {output[:500]}...")
         
         return {
-            'success': True,
-            'message': 'Charts generated successfully',
-            'final_output': result.final_output,
-            'charts_generated': len(context.charts),
-            'chart_keys': list(context.charts.keys())
+            'success': charts_saved,
+            'message': f'Generated {len(charts_data) if charts_data else 0} charts' if charts_saved else 'Failed to generate charts',
+            'charts_generated': len(charts_data) if charts_data else 0,
+            'chart_keys': list(charts_data.keys()) if charts_data else []
         }
 
 def lambda_handler(event, context):
@@ -120,7 +134,7 @@ def lambda_handler(event, context):
     }
     """
     try:
-        logger.info(f"Charter Lambda invoked with event: {json.dumps(event)[:500]}")
+        logger.info(f"Charter Lambda invoked with event keys: {list(event.keys()) if isinstance(event, dict) else 'not a dict'}")
         
         # Parse event
         if isinstance(event, str):
@@ -140,13 +154,15 @@ def lambda_handler(event, context):
                 'body': json.dumps({'error': 'portfolio_data is required'})
             }
         
+        logger.info(f"Charter: Processing job {job_id}")
+        
         # Initialize database
         db = Database()
         
         # Run the agent
         result = asyncio.run(run_charter_agent(job_id, portfolio_data, db))
         
-        logger.info(f"Charter completed for job {job_id}")
+        logger.info(f"Charter completed for job {job_id}: {result}")
         
         return {
             'statusCode': 200,
@@ -184,17 +200,6 @@ if __name__ == "__main__":
                                 "allocation_asset_class": {"equity": 100},
                                 "allocation_regions": {"north_america": 100},
                                 "allocation_sectors": {"technology": 30, "healthcare": 15, "financials": 15, "consumer_discretionary": 20, "industrials": 20}
-                            }
-                        },
-                        {
-                            "symbol": "BND",
-                            "quantity": 50,
-                            "instrument": {
-                                "name": "Vanguard Total Bond Market ETF",
-                                "current_price": 80,
-                                "allocation_asset_class": {"fixed_income": 100},
-                                "allocation_regions": {"north_america": 100},
-                                "allocation_sectors": {"treasury": 60, "corporate": 40}
                             }
                         }
                     ]
