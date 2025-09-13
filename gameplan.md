@@ -295,12 +295,22 @@ All tests confirmed working with Nova Pro model.
 
 ## Part 7: Frontend & Authentication
 
+### Context & Decisions Made
+This section implements the user-facing frontend for the Alex Financial Advisor platform. Key architectural decisions:
+- **Authentication**: Using Clerk with the EXACT same credentials from week1 SaaS project (students already have these)
+- **Frontend**: NextJS with Pages Router (not App Router due to Clerk compatibility), static export for S3/CloudFront
+- **Backend**: Single Lambda function with FastAPI handling all API routes, JWT validation via Clerk
+- **User Sync**: Auto-create users on first sign-in with sensible defaults (20 years to retirement, 70/30 equity/fixed income)
+- **Agent Display**: Show 4 visible agents (Planner, Reporter, Charter, Retirement) - Tagger runs invisibly
+- **Testing**: Comprehensive test documents (ed_test_*.md) at each milestone for coordination
+- **Styling**: Enterprise look with edgy AI accents (primary #209DD7, AI/agent #753991, accent #FFB707, dark #062147)
+
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
 
 ### Steps
 
-0. Review everything and make a detailed plan (in this document) for how we will approach this, replacing steps 1-7 below with the fleshed out versions that are complete and detailed and cover everything. Do not replace this section.
+- [x] **Step 0: Review and Planning** ✅ COMPLETE
    - Start by looking in the folder reference/ for some projects from earlier in the course (that worked) and would be helpful reference for you:
      - The saas app in reference/saas is a working app with a NextJS frontend like we want, using Clerk for user_id (and subscriptions, which we won't use). If this is OK, I'd like to use the same secrets EXACTLY - like the same secret key and public key - for minimal setup for the student. This project was called "saas" from week1, and they will have a "saas" repo
      - The files day3.md and day3.part2.md were the instructions for when we set up this Clerk approach in week1 and may help explain the setup
@@ -316,35 +326,369 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
      - Overall light mode, not dark mode.
    - After reviewing these references, reflect on the task ahead, and flesh out the sections below, adding details and substance to each section. DO NOT PROCEED TO WORK ON THE SECTIONS - just flesh out the instructions
 
-1. Foundations
-  1a. Create a NextJS app in the frontend folder. Use TS, use Pages Router, do not have a separate src directory, ensure a static output will be possible, use Tailwind, use latest versions of everything (September 2025). No SSR/ISR - pure client-side
-  1b. Create a simple landing page to give the users name, and 1-2 fields from the database for the user
-  1c. Create a FastAPI app (uv) in backend/api with some routes related to the user
-  1d. Set up the Clerk details based on the SaaS app from week1
-  1e. Make any updates to the pages; set up the necessary frontend / api / db hookup so that signing in users are added to the db with the right id
-  1f. Be able to deploy and see this locally
+### Step 1: Foundations
+**1a. Create NextJS app with Pages Router**
+- [ ] Initialize NextJS in `frontend/` using Pages Router (not App Router) with TypeScript
+- [ ] Configure for static export with `output: 'export'` in next.config.ts
+- [ ] Use Tailwind CSS with custom color scheme (primary #209DD7, AI/agent #753991, accent #FFB707, dark #062147)
+- [ ] Install dependencies: @clerk/nextjs, react-markdown, remark-gfm, remark-breaks, recharts, @microsoft/fetch-event-source
+- [ ] Set up proper TypeScript types for API responses
 
-2. Deploy
-  2a. Make the terraform directory, and put the skeleton terraform for the api backend and static site frontend with cloudfront distribution; handle CORS, preflight, etc
-  2b. make the lambda deploy uv script
-  2c. Anything else needed around JWT and use of the user_id so that we have row-level security?
-  2d. Deploy and test the frontend and backend with the basic dashboard screen
-   
-3. Build out dashboard to show accounts (frontend + backend including deployment)
-   - Add main nav: Dashboard / Account details / Advisor Team / Financial Analysis
-   - Add a disclaimer to every single page in the footer that highlights appropriate legal disclaimer (along the lines: this advice has not been vetted by a qualified financial consultant and should not be used for trading decisions, but concisely and in a way that ensures no liability!)
-   - Script to populate the database for a given user_id
-   - Update dashboard so that you can set name, retirement years, any other high level data, with an update button
-   - Update dashboard to show account summary - just names of accounts and some summary details in a nicely formatted table
+**1b. Create landing page with Clerk integration**
+- [ ] Copy Clerk environment variables from reference/saas/.env to frontend/.env.local
+- [ ] Wrap app with ClerkProvider in _app.tsx
+- [ ] Create index.tsx as public landing page with:
+  - [ ] Marketing hero section about AI Financial Advisors
+  - [ ] Sign In / Sign Up buttons using Clerk's SignInButton component
+  - [ ] Features showcase (autonomous agents, personalized advice, etc.)
+- [ ] Add middleware.ts to protect routes (dashboard, accounts, etc.) - redirect to sign-in if not authenticated
+- [ ] After sign-in, redirect to /dashboard
 
-4. Account details screen with position/instrument entry (frontend + backend including deployment)
+**1c. Create FastAPI backend in backend/api**
+- [ ] Initialize uv project with pyproject.toml
+- [ ] Install: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum (for Lambda)
+- [ ] Create main.py with routes:
+  - [ ] GET /api/user - Get/create user profile (THIS IS WHERE USER SYNC HAPPENS)
+  - [ ] PUT /api/user - Update user settings
+  - [ ] GET /api/accounts - List user accounts
+  - [ ] POST /api/accounts - Create account
+  - [ ] GET /api/positions - Get positions for account
+  - [ ] POST /api/positions - Add/update position
+  - [ ] POST /api/analyze - Trigger analysis (creates job, sends to SQS)
+  - [ ] GET /api/jobs/{job_id} - Get job status/results
+- [ ] JWT validation using fastapi-clerk-auth with CLERK_JWKS_URL on ALL routes
+- [ ] Database operations using backend/database package
 
-5. Advisor Team screen - see a list of prior financial analysis, the ability to switch to view the financial analysis, the ability to kick off a new financial analysis, and the progress of an analysis if it's happening.
-Allow the user to click to kick off a run, which puts it on SQS and then polls to show updates of what's going on in a really cool way that gives the strong impression that mutliple Agents are working on the case; this shows when the analysis is complete. This needs to have real wow factor - this is the moment students see it come together! When it's complete, the screen should flip immediately to the Analysis screen
+**1d. User sync implementation in GET /api/user**
+- [ ] Extract clerk_user_id from JWT token (via fastapi-clerk-auth)
+- [ ] Check if user exists in database
+- [ ] If NOT exists (first-time user):
+  - [ ] Auto-create with defaults:
+    - clerk_user_id from token
+    - display_name from token (or "New User")
+    - years_until_retirement: 20
+    - target_retirement_income: 100000
+    - asset_class_targets: {"equity": 70, "fixed_income": 30}
+    - region_targets: {"north_america": 50, "international": 50}
+  - [ ] Return created user
+- [ ] If exists: return existing user data
+- [ ] Frontend calls this on every dashboard load to ensure user exists
 
-6. Analysis screen - show the results from the reporter, the retirement, and of course.. the Charts!! The reports should appear in full markdown formatted glory. See the implementation in SaaS - we spend ages getting this to look ok - we needed to set the h1/h2/etc styles because Tailwind removes them by default.
+**1e. Local testing setup & documentation**
+- [ ] Create scripts/run_local.py to start both frontend and backend
+- [ ] Create `ed_test_step1.md` with:
+  - Prerequisites checklist (npm installed, database running, .env files in place)
+  - Commands to run:
+    ```bash
+    cd frontend && npm install
+    cd ../backend/api && uv sync
+    cd ../.. && uv run scripts/run_local.py
+    ```
+  - Test checklist:
+    1. Visit http://localhost:3000 - see landing page
+    2. Click Sign In - redirected to Clerk
+    3. Sign in with Google/GitHub - redirected to /dashboard
+    4. Check browser DevTools Network tab - see GET /api/user call
+    5. Check database - confirm user was created with clerk_user_id
+    6. Edit user settings - confirm PUT /api/user works
+    7. Sign out and sign in again - confirm user is loaded (not recreated)
+  - SQL queries to verify:
+    ```sql
+    SELECT * FROM users WHERE clerk_user_id LIKE '%your-id%';
+    ```
+  - Troubleshooting common issues (CORS, JWT validation, etc.)
+  - Expected outcomes with screenshots placeholders
 
-7. Finishing up and bulletproofing - iterate on look and feel; add favicon and titles; add error handling; other little things that make it polished; any stuff to ensure JWT security and everything is protected. Finally, make guide 7 for the students!
+### Step 2: Deploy Infrastructure
+**2a. Terraform configuration in terraform/7_frontend/**
+- [ ] Create main.tf with:
+  - S3 bucket for static frontend (with website configuration)
+  - CloudFront distribution with:
+    - S3 origin for frontend
+    - API Gateway origin for /api/* paths
+    - Custom error pages for SPA routing
+  - API Gateway HTTP API with JWT authorizer using Clerk JWKS
+  - Lambda function for API backend
+  - IAM roles with permissions for:
+    - Aurora Data API access
+    - SQS send message
+    - Lambda invoke (for direct agent testing)
+    - Secrets Manager read
+- [ ] CORS configuration:
+  - Allow origins: CloudFront domain + http://localhost:3000
+  - Allow headers: Authorization, Content-Type
+  - Handle preflight OPTIONS requests
+- [ ] Environment variables for Lambda from existing infrastructure
+
+**2b. Lambda packaging script (scripts/package_api.py)**
+- [ ] Use Docker with AWS Lambda Python 3.12 image
+- [ ] Install dependencies for correct architecture
+- [ ] Package FastAPI app as Lambda handler using mangum
+- [ ] Create deployment zip with all dependencies
+
+**2c. Deployment scripts (scripts/deploy.py, scripts/destroy.py)**
+- [ ] Python scripts using subprocess to run terraform/aws/npm commands
+- [ ] Deploy flow:
+  1. Package Lambda with Docker
+  2. Build NextJS static site
+  3. Deploy infrastructure with Terraform
+  4. Upload frontend files to S3
+  5. Invalidate CloudFront cache
+  6. Output CloudFront URL
+- [ ] Destroy flow: reverse order with confirmation
+
+**2d. Deployment testing & documentation**
+- [ ] Create `ed_test_step2.md` with:
+  - Prerequisites (AWS credentials, Docker running, terraform installed)
+  - Deployment commands:
+    ```bash
+    uv run scripts/deploy.py
+    ```
+  - Test checklist:
+    1. CloudFront URL is accessible
+    2. Sign in works with Clerk
+    3. API Gateway routes respond
+    4. User creation in RDS works
+    5. CloudWatch logs show Lambda execution
+  - AWS Console verification steps
+  - Rollback instructions if needed
+
+### Step 3: Dashboard with Account Management
+**3a. Navigation and layout components**
+- [ ] Create components/Layout.tsx with nav bar:
+  - Logo/brand: "Alex AI Financial Advisor"
+  - Navigation: Dashboard | Accounts | Advisor Team | Analysis
+  - User button (Clerk) in top right
+- [ ] Footer with disclaimer: "This AI-generated advice has not been vetted by a qualified financial advisor and should not be used for trading decisions. For informational purposes only."
+
+**3b. Dashboard page (pages/dashboard.tsx)**
+- [ ] On page load:
+  - Call GET /api/user (this auto-creates user if first time)
+  - Load user data and accounts
+- [ ] User settings section:
+  - Display name (editable)
+  - Years until retirement (slider 0-50)
+  - Target allocations (pie chart + inputs)
+  - Save button → PUT /api/user
+- [ ] Portfolio summary cards:
+  - Total portfolio value
+  - Number of accounts
+  - Asset allocation overview (mini pie chart)
+  - Last analysis date
+
+**3c. Database population script (scripts/populate_demo.py)**
+- [ ] Creates demo data for a given clerk_user_id:
+  - 3 accounts: "401k Vanguard", "Roth IRA Fidelity", "Taxable Brokerage"
+  - ETF positions: SPY, VTI, BND, QQQ, IWM with varied quantities
+  - Stock positions: TSLA, AAPL, AMZN, NVDA
+  - Realistic allocations across accounts
+
+**3d. Dashboard testing & documentation**
+- [ ] Create `ed_test_step3.md` with:
+  - Setup commands:
+    ```bash
+    uv run scripts/populate_demo.py --user-id YOUR_CLERK_ID
+    uv run scripts/deploy.py  # redeploy with new pages
+    ```
+  - Test checklist:
+    1. Dashboard shows user settings
+    2. Portfolio summary cards display correctly
+    3. Edit user settings and save
+    4. Verify accounts appear from demo data
+    5. Navigation between pages works
+  - Visual regression checks (layout, colors, responsiveness)
+
+### Step 4: Account Details Page
+**4a. Accounts list page (pages/accounts.tsx)**
+- [ ] Table showing all accounts:
+  - Account name, type, total value
+  - Number of positions
+  - Cash balance
+  - Edit/View buttons
+- [ ] "Add Account" button → modal
+
+**4b. Account detail/edit page (pages/accounts/[id].tsx)**
+- [ ] Account information (editable):
+  - Name, purpose, cash balance
+- [ ] Positions table:
+  - Symbol, name, quantity, current price, total value
+  - Inline edit for quantities
+  - Delete position button
+- [ ] Add position form:
+  - Symbol autocomplete (from instruments table)
+  - Quantity input
+  - Add button → POST /api/positions
+
+**4c. Real-time price updates**
+- [ ] Fetch current prices from database
+- [ ] Calculate total values client-side
+- [ ] Show allocation breakdowns per account
+
+**4d. Accounts testing & documentation**
+- [ ] Create `ed_test_step4.md` with:
+  - Test checklist:
+    1. View all accounts in list
+    2. Click through to account details
+    3. Add new position (test symbol autocomplete)
+    4. Edit position quantities
+    5. Delete a position
+    6. Verify calculations are correct
+    7. Create new account
+  - Database verification queries
+  - Edge cases to test (invalid symbols, negative quantities, etc.)
+
+### Step 5: Advisor Team & Analysis Trigger
+**5a. Advisor Team page (pages/advisor-team.tsx)**
+- [ ] Agent cards in grid layout (4 visible agents):
+  - 🎯 Financial Planner (orchestrator) - purple accent - "Coordinates your financial analysis"
+  - 📊 Portfolio Analyst (reporter) - blue - "Analyzes your holdings and performance"
+  - 📈 Chart Specialist (charter) - green - "Visualizes your portfolio composition"  
+  - 🎯 Retirement Planner (retirement) - orange - "Projects your retirement readiness"
+- [ ] Note: Market Researcher (tagger) runs invisibly in background when needed
+- [ ] Previous analyses list:
+  - Job ID, date, status, view button
+  - Click to load analysis on Analysis page
+- [ ] "Start New Analysis" button (prominent, purple #753991)
+
+**5b. Analysis progress visualization**
+- [ ] After clicking "Start New Analysis":
+  - Create job → POST /api/analyze
+  - Show progress panel with 4 agent avatars
+  - Poll /api/jobs/{job_id} every 2 seconds
+  - Progress stages:
+    1. Financial Planner lights up first: "Coordinating analysis..."
+    2. Three agents light up simultaneously: "Agents working in parallel..."
+    3. All complete: "Analysis complete!"
+  - Show status messages based on job updates
+  - Animated pulse/glow effect on active agents
+  - Small progress bar or spinner for overall progress
+  - Upon completion: auto-navigate to Analysis page
+
+**5c. Error handling**
+- [ ] If job fails: show error panel with details
+- [ ] Retry button to trigger new analysis
+- [ ] Show last successful analysis if available
+
+**5d. Analysis trigger testing & documentation**
+- [ ] Create `ed_test_step5.md` with:
+  - Prerequisites (ensure agents are deployed from Part 6)
+  - Test checklist:
+    1. View Advisor Team page with agent cards
+    2. Click "Start New Analysis" 
+    3. Watch progress visualization (agents lighting up)
+    4. Verify SQS message sent
+    5. Monitor job progress (2-3 minutes)
+    6. Auto-redirect to Analysis page on completion
+    7. Test error scenario (if possible)
+  - AWS Console checks:
+    - SQS messages
+    - Lambda invocations
+    - CloudWatch logs for each agent
+  - Database queries to check job status
+
+### Step 6: Analysis Results Page
+**6a. Analysis page structure (pages/analysis.tsx)**
+- [ ] Load from job results (markdown + JSON)
+- [ ] Hero section with completion timestamp
+- [ ] Tabbed interface:
+  - Overview (reporter output)
+  - Charts (charter output)
+  - Retirement Projection (retirement output)
+  - Recommendations
+
+**6b. Markdown rendering with styling**
+- [ ] Use ReactMarkdown with remark-gfm and remark-breaks
+- [ ] Custom CSS for financial reports:
+  ```css
+  /* Restore heading styles that Tailwind removes */
+  .prose h1 { @apply text-3xl font-bold mb-4 text-gray-900; }
+  .prose h2 { @apply text-2xl font-semibold mb-3 text-gray-800; }
+  .prose h3 { @apply text-xl font-medium mb-2 text-gray-700; }
+  .prose ul { @apply list-disc ml-6 mb-4; }
+  .prose ol { @apply list-decimal ml-6 mb-4; }
+  .prose table { @apply w-full border-collapse mb-4; }
+  .prose th { @apply bg-gray-100 p-2 text-left font-semibold; }
+  .prose td { @apply border p-2; }
+  ```
+
+**6c. Interactive charts using Recharts**
+- [ ] Render charter agent's JSON output as:
+  - Pie charts for allocations (asset class, region, sector)
+  - Bar charts for account comparisons
+  - Line charts for retirement projections
+- [ ] Color-coded with our palette
+- [ ] Hover tooltips with details
+- [ ] Responsive sizing
+
+**6d. Analysis results testing & documentation**
+- [ ] Create `ed_test_step6.md` with:
+  - Test checklist:
+    1. View completed analysis
+    2. Switch between tabs (Overview, Charts, Retirement)
+    3. Verify markdown rendering (headers, lists, tables)
+    4. Interact with charts (hover, tooltips)
+    5. Check responsive design on mobile view
+    6. Print preview looks reasonable
+  - Visual checks for professional appearance
+  - Performance metrics (page load time)
+
+### Step 7: Polish & Production Readiness
+**7a. UI/UX refinements**
+- [ ] Loading states with skeletons
+- [ ] Smooth transitions between pages
+- [ ] Toast notifications for actions
+- [ ] Responsive design for mobile
+- [ ] Favicon and page titles
+- [ ] 404 and error pages
+
+**7b. Performance optimizations**
+- [ ] Image optimization (NextJS Image component where applicable)
+- [ ] Code splitting
+- [ ] Minimize bundle size
+- [ ] CloudFront caching headers
+- [ ] API response caching where appropriate
+
+**7c. Security hardening**
+- [ ] JWT expiry handling → redirect to sign-in
+- [ ] API rate limiting (100 req/min) via API Gateway
+- [ ] Input validation on all forms
+- [ ] XSS protection via Content Security Policy
+- [ ] Secrets in AWS Secrets Manager (not env vars)
+
+**7d. Error handling & monitoring**
+- [ ] Global error boundary in React
+- [ ] API error responses with user-friendly messages
+- [ ] Detailed errors in expandable sections
+- [ ] CloudWatch logs for Lambda
+- [ ] Frontend error tracking (console.error with context)
+
+**7e. Guide 7 documentation**
+- [ ] Step-by-step setup instructions
+- [ ] Architecture diagram
+- [ ] Troubleshooting section
+- [ ] Cost considerations
+- [ ] Deployment checklist
+
+**7f. Final comprehensive testing & documentation**
+- [ ] Create `ed_test_final.md` with:
+  - End-to-end test scenario:
+    1. Fresh deployment from scratch
+    2. New user sign-up flow
+    3. Populate demo data
+    4. Navigate all pages
+    5. Trigger full analysis
+    6. View results
+    7. Sign out and sign in
+  - Performance benchmarks:
+    - Page load times
+    - API response times
+    - Analysis completion time
+  - Security checklist:
+    - JWT validation working
+    - Can't access other users' data
+    - API rate limiting active
+  - Production readiness checklist
+  - Cost monitoring setup verification
 
 ## Part 8: Observability, Monitoring & Security (NOT STARTED)
 
