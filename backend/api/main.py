@@ -232,9 +232,8 @@ async def update_account(account_id: str, account_update: AccountUpdate, clerk_u
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
 
-        # Get user to verify ownership
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user or account['user_id'] != user['id']:
+        # Verify ownership - accounts table stores clerk_user_id directly
+        if account.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
         # Update account
@@ -261,9 +260,8 @@ async def list_positions(account_id: str, clerk_user_id: str = Depends(get_curre
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
 
-        # Get user to verify ownership
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user or account['user_id'] != user['id']:
+        # Verify ownership - accounts table stores clerk_user_id directly
+        if account.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
         positions = db.positions.find_by_account(account_id)
@@ -285,9 +283,8 @@ async def create_position(position: PositionCreate, clerk_user_id: str = Depends
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
 
-        # Get user to verify ownership
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user or account['user_id'] != user['id']:
+        # Verify ownership - accounts table stores clerk_user_id directly
+        if account.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
         # Add position
@@ -321,9 +318,8 @@ async def update_position(position_id: str, position_update: PositionUpdate, cle
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
 
-        # Get user to verify ownership
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user or account['user_id'] != user['id']:
+        # Verify ownership - accounts table stores clerk_user_id directly
+        if account.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
         # Update position
@@ -354,9 +350,8 @@ async def delete_position(position_id: str, clerk_user_id: str = Depends(get_cur
         if not account:
             raise HTTPException(status_code=404, detail="Account not found")
 
-        # Get user to verify ownership
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user or account['user_id'] != user['id']:
+        # Verify ownership - accounts table stores clerk_user_id directly
+        if account.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
         db.positions.delete(position_id)
@@ -393,7 +388,7 @@ async def trigger_analysis(request: AnalyzeRequest, clerk_user_id: str = Depends
         if SQS_QUEUE_URL:
             message = {
                 'job_id': str(job_id),
-                'user_id': user['id'],
+                'clerk_user_id': clerk_user_id,
                 'analysis_type': request.analysis_type,
                 'options': request.options
             }
@@ -425,9 +420,8 @@ async def get_job_status(job_id: str, clerk_user_id: str = Depends(get_current_u
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        # Verify job belongs to user
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user or job['user_id'] != user['id']:
+        # Verify job belongs to user - jobs table stores clerk_user_id directly
+        if job.get('clerk_user_id') != clerk_user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
         return job
@@ -443,18 +437,203 @@ async def list_jobs(clerk_user_id: str = Depends(get_current_user_id)):
     """List user's analysis jobs"""
 
     try:
-        # Get user
-        user = db.users.find_by_clerk_id(clerk_user_id)
-        if not user:
-            return []
-
-        # Get jobs for user
-        jobs = db.jobs.find_all()  # We'll need to filter by user_id
-        user_jobs = [job for job in jobs if job.get('user_id') == user['id']]
+        # Get all jobs and filter by clerk_user_id
+        jobs = db.jobs.find_all()
+        user_jobs = [job for job in jobs if job.get('clerk_user_id') == clerk_user_id]
         return user_jobs
 
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/reset-accounts")
+async def reset_accounts(clerk_user_id: str = Depends(get_current_user_id)):
+    """Delete all accounts for the current user"""
+
+    try:
+        # Get user
+        user = db.users.find_by_clerk_id(clerk_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get all accounts for user
+        accounts = db.accounts.find_by_user(clerk_user_id)
+
+        # Delete each account (positions will cascade delete)
+        deleted_count = 0
+        for account in accounts:
+            try:
+                # Positions are deleted automatically via CASCADE
+                db.accounts.delete(account['id'])
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Could not delete account {account['id']}: {e}")
+
+        return {
+            "message": f"Deleted {deleted_count} account(s)",
+            "accounts_deleted": deleted_count
+        }
+
+    except Exception as e:
+        logger.error(f"Error resetting accounts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/populate-test-data")
+async def populate_test_data(clerk_user_id: str = Depends(get_current_user_id)):
+    """Populate test data for the current user"""
+
+    try:
+        # Get user
+        user = db.users.find_by_clerk_id(clerk_user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Define missing instruments that might not be in the database
+        missing_instruments = {
+            "AAPL": {
+                "name": "Apple Inc.",
+                "type": "stock",
+                "current_price": 195.89,
+                "allocation_regions": {"north_america": 100},
+                "allocation_sectors": {"technology": 100},
+                "allocation_asset_class": {"equity": 100}
+            },
+            "AMZN": {
+                "name": "Amazon.com Inc.",
+                "type": "stock",
+                "current_price": 178.35,
+                "allocation_regions": {"north_america": 100},
+                "allocation_sectors": {"consumer_discretionary": 100},
+                "allocation_asset_class": {"equity": 100}
+            },
+            "NVDA": {
+                "name": "NVIDIA Corporation",
+                "type": "stock",
+                "current_price": 522.74,
+                "allocation_regions": {"north_america": 100},
+                "allocation_sectors": {"technology": 100},
+                "allocation_asset_class": {"equity": 100}
+            },
+            "MSFT": {
+                "name": "Microsoft Corporation",
+                "type": "stock",
+                "current_price": 430.82,
+                "allocation_regions": {"north_america": 100},
+                "allocation_sectors": {"technology": 100},
+                "allocation_asset_class": {"equity": 100}
+            },
+            "GOOGL": {
+                "name": "Alphabet Inc. Class A",
+                "type": "stock",
+                "current_price": 173.69,
+                "allocation_regions": {"north_america": 100},
+                "allocation_sectors": {"technology": 100},
+                "allocation_asset_class": {"equity": 100}
+            },
+        }
+
+        # Check and add missing instruments
+        for symbol, info in missing_instruments.items():
+            existing = db.instruments.find_by_symbol(symbol)
+            if not existing:
+                try:
+                    from src.schemas import InstrumentCreate
+
+                    instrument_data = InstrumentCreate(
+                        symbol=symbol,
+                        name=info["name"],
+                        instrument_type=info["type"],
+                        current_price=Decimal(str(info["current_price"])),
+                        allocation_regions=info["allocation_regions"],
+                        allocation_sectors=info["allocation_sectors"],
+                        allocation_asset_class=info["allocation_asset_class"]
+                    )
+                    db.instruments.create_instrument(instrument_data)
+                    logger.info(f"Added missing instrument: {symbol}")
+                except Exception as e:
+                    logger.warning(f"Could not add instrument {symbol}: {e}")
+
+        # Create accounts with test data
+        accounts_data = [
+            {
+                "name": "401k Long-term",
+                "purpose": "Primary retirement savings account with employer match",
+                "cash": 5000.00,
+                "positions": [
+                    ("SPY", 150),   # S&P 500 ETF
+                    ("VTI", 100),   # Total Stock Market ETF
+                    ("BND", 200),   # Bond ETF
+                    ("QQQ", 75),    # Nasdaq ETF
+                    ("IWM", 50),    # Small Cap ETF
+                ]
+            },
+            {
+                "name": "Roth IRA",
+                "purpose": "Tax-free retirement growth account",
+                "cash": 2500.00,
+                "positions": [
+                    ("VTI", 80),    # Total Stock Market ETF
+                    ("VXUS", 60),   # International Stock ETF
+                    ("VNQ", 40),    # Real Estate ETF
+                    ("GLD", 25),    # Gold ETF
+                    ("TLT", 30),    # Long-term Treasury ETF
+                    ("VIG", 45),    # Dividend Growth ETF
+                ]
+            },
+            {
+                "name": "Brokerage Account",
+                "purpose": "Taxable investment account for individual stocks",
+                "cash": 10000.00,
+                "positions": [
+                    ("TSLA", 15),   # Tesla
+                    ("AAPL", 50),   # Apple
+                    ("AMZN", 10),   # Amazon
+                    ("NVDA", 25),   # Nvidia
+                    ("MSFT", 30),   # Microsoft
+                    ("GOOGL", 20),  # Google
+                ]
+            }
+        ]
+
+        created_accounts = []
+        for account_data in accounts_data:
+            # Create account
+            account_id = db.accounts.create_account(
+                clerk_user_id=clerk_user_id,
+                account_name=account_data["name"],
+                account_purpose=account_data["purpose"],
+                cash_balance=Decimal(str(account_data["cash"]))
+            )
+
+            # Add positions
+            for symbol, quantity in account_data["positions"]:
+                try:
+                    db.positions.add_position(
+                        account_id=account_id,
+                        symbol=symbol,
+                        quantity=Decimal(str(quantity))
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not add position {symbol}: {e}")
+
+            created_accounts.append(account_id)
+
+        # Get all accounts with their positions for summary
+        all_accounts = []
+        for account_id in created_accounts:
+            account = db.accounts.find_by_id(account_id)
+            positions = db.positions.find_by_account(account_id)
+            account['positions'] = positions
+            all_accounts.append(account)
+
+        return {
+            "message": "Test data populated successfully",
+            "accounts_created": len(created_accounts),
+            "accounts": all_accounts
+        }
+
+    except Exception as e:
+        logger.error(f"Error populating test data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Lambda handler

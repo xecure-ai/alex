@@ -372,6 +372,17 @@ The landing page and dashboard have established excellent patterns that should b
 1. CORS Configuration Pattern: API Gateway uses `allow_origins = ["*"]` and `allow_credentials = false`. Lambda handles auth, not API Gateway.
 2. **ALWAYS CHECK REFERENCE IMPLEMENTATIONS FIRST** - You failed to review the saas reference and chose a complex JWT authorizer approach when the reference used simple fastapi-clerk-auth. You invented "alex-api" as an audience value without any basis. This behavior MUST stop.
 3. **FOCUS ON SIMPLE AND CONSISTENT CODE** - The saas reference worked perfectly with fastapi-clerk-auth. Instead of using it, you chose python-jose manual validation which was unnecessarily complex. ALWAYS prefer proven, simple solutions from working references.
+4. **Database Primary Keys**: The users table uses `clerk_user_id` as the primary key, NOT `id`. When updating users, use the database client directly with clerk_user_id. Other tables (accounts, positions) use UUID `id` fields.
+5. **API Response Structure**: The GET /api/user endpoint returns `{user: {...}, created: boolean}`, not the user object directly. Frontend must extract the user from response.user. Always check endpoints to make sure you are using them properly.
+6. **Number Formatting**: Always use `toLocaleString('en-US')` for displaying currency and large numbers. For input fields handling currency, use type="text" and strip commas before parsing.
+7. **Avoid UI Flicker**: Don't set default values in frontend state - start with empty/zero and let database values populate. All defaults should be set in the database during user creation.
+8. **CRITICAL CLERK AUTH PATTERN - STOP MAKING THIS ERROR**: The Alex database schema has NO `user.id` field!
+   - `users` table: Primary key is `clerk_user_id` (string), NO separate `id` field exists
+   - `accounts` table: Stores `clerk_user_id` directly, NOT `user_id`
+   - `jobs` table: Stores `clerk_user_id` directly, NOT `user_id`
+   - **NEVER write**: `user['id']`, `account['user_id'] != user['id']`, `job['user_id'] != user['id']`
+   - **ALWAYS write**: `clerk_user_id`, `account.get('clerk_user_id') != clerk_user_id`, `job.get('clerk_user_id') != clerk_user_id`
+   - This is the THIRD time this exact error was made. Before ANY user/account/job authorization check, remember: there is no user['id'], only clerk_user_id!
 
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
@@ -554,7 +565,7 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
   - AWS Console verification steps
   - Rollback instructions if needed
 
-IMPORTANT: ask me to run `uv run deploy.py` rather than yourself, so that I can watch and wait for it to complete.
+IMPORTANT: ask me to run `uv run deploy.py` rather than yourself, so that I can watch and wait for it to complete. Same for `uv run run_local.py` - it gets messy if you try to run this yourself.
 IMPORTANT: keep `uv run run_local.py` working in addition to the deployed version where possible, so we can test locally as well as deployed.
 
 ### Step 3: Dashboard with Account Management
@@ -580,27 +591,19 @@ IMPORTANT: keep `uv run run_local.py` working in addition to the deployed versio
   - Asset allocation overview (mini pie chart)
   - Last analysis date
 
-**3c. Database population script (scripts/populate_demo.py)**
-- [ ] Creates demo data for a given clerk_user_id:
-  - 3 accounts: "401k Vanguard", "Roth IRA Fidelity", "Taxable Brokerage"
-  - ETF positions: SPY, VTI, BND, QQQ, IWM with varied quantities
-  - Stock positions: TSLA, AAPL, AMZN, NVDA
+**3c. Database population script for testing**
+- [ ] Add a small button to the Accounts page to 'populate test data'
+- [ ] Create an endpoint that this calls which sets up test data:
+  - 3 accounts: "401k Long-term", "Roth IRA", "Brokerage Account"
+  - ETF positions in 401K: SPY, VTI, BND, QQQ, IWM with varied quantities
+  - An interesting mix of other funds in Roth IRA
+  - Stock positions in brokerage account: TSLA, AAPL, AMZN, NVDA
   - Realistic allocations across accounts
+- [ ] Text-based summary of the Account details on the Accounts page, to be replaced in Step 4
+- [ ] Reset Accounts button to delete all accounts associated with a user
 
 **3d. Dashboard testing & documentation**
-- [ ] Create `ed_test_step3.md` with:
-  - Setup commands:
-    ```bash
-    uv run scripts/populate_demo.py --user-id YOUR_CLERK_ID
-    uv run scripts/deploy.py  # redeploy with new pages
-    ```
-  - Test checklist:
-    1. Dashboard shows user settings
-    2. Portfolio summary cards display correctly
-    3. Edit user settings and save
-    4. Verify accounts appear from demo data
-    5. Navigation between pages works
-  - Visual regression checks (layout, colors, responsiveness)
+- [ ] Have the user (Ed) test local and remote and check the data is created
 
 ### Step 4: Account Details Page
 **4a. Accounts list page (pages/accounts.tsx)**

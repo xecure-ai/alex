@@ -76,8 +76,9 @@ export default function Dashboard() {
 
     // Add cash balances
     accounts.forEach(account => {
-      totalValue += account.cash_balance;
-      assetClassBreakdown.cash += account.cash_balance;
+      const cashBalance = Number(account.cash_balance);
+      totalValue += cashBalance;
+      assetClassBreakdown.cash += cashBalance;
     });
 
     // Add position values
@@ -85,7 +86,7 @@ export default function Dashboard() {
       accountPositions.forEach(position => {
         const instrument = instruments[position.symbol];
         if (instrument?.current_price) {
-          const positionValue = position.quantity * instrument.current_price;
+          const positionValue = Number(position.quantity) * Number(instrument.current_price);
           totalValue += positionValue;
 
           // Add to asset class breakdown
