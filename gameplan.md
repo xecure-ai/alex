@@ -191,10 +191,16 @@ Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable datab
 - Populated instruments table (20+ ETFs)
 - Test data for development
 
-## Part 6: Agent Orchestra - Core Services (BUILT AND BEING TESTED)
+## Part 6: Agent Orchestra - Core Services (COMPLETE)
 
 ### Objective
 Build the AI agent ecosystem where a main orchestrator delegates to specialized agents.
+
+### Key Technical Decision
+The OpenAI Agents SDK doesn't support using both tools AND structured outputs simultaneously. Solution:
+- **All agents use tools only** (except InstrumentTagger which uses structured outputs only)
+- **Charter agent simplified** - Returns JSON directly without tools
+- **Model changed** - From OpenAI OSS to Amazon Nova Pro (us.amazon.nova-pro-v1:0) for better reliability
 
 ### Agent structure
 
@@ -267,239 +273,80 @@ User Request → API → SQS → Planner (Lambda)
                              Job marked complete
 ```
 
-**Simplification Note**: tagger is still a Lambda function but is now called automatically by Python code before the agent runs, removing this decision from the agent's workflow. This makes the agent's task simpler and more reliable. This is the ONLY task that is OK to use Structured Outputs, as it doesn't use any tools.
+**Key Implementation Notes**: 
+- Tagger is called automatically by Python code before the agent runs (not as an agent tool)
+- Tagger is the ONLY agent that uses Structured Outputs (no tools needed)
+- Charter agent returns JSON directly without using tools (simplified from earlier design)
+- All other agents use tools with RunContextWrapper pattern for clean access to job_id
 
-### Testing strategy for Part 6
+### Testing Strategy for Part 6
 
 Each of the 5 agents has the following in their directory:
-For local testing: test_simple.py
-For remote testing: test_full.py
-The backend parent directory has the overall scripts:
-For testing everything locally: test_simple.py
-For testing remotely: test_full.py
+- `test_simple.py` - Local testing with mock data
+- `test_full.py` - Remote testing with deployed Lambda
+
+The backend parent directory has overall test scripts:
+- `test_simple.py` - Tests all agents locally
+- `test_full.py` - Tests via SQS/Lambda
+- `test_multiple_accounts.py` - Tests multi-account scenarios
+- `test_scale.py` - Tests concurrent processing for 5 users
+
+All tests confirmed working with Nova Pro model.
 
 ## Part 7: Frontend & Authentication
 
 ### Objective
-Build a pure client-side React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
+Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
 
 ### Steps
 
-1. **Deploy API Lambda**
-   - Lambda function with API Gateway trigger
-   - CORS configuration for browser access (restrict to your domain)
-   - JWT validation for Clerk tokens using PyJWT and JWKS
-   - Every endpoint verifies the JWT signature with Clerk's public key
-   - Extract user_id from validated JWT for row-level security
-   - Database operations for portfolios
-   - Trigger analysis jobs via SQS
-   - ✅ **Test**: API endpoints reject invalid tokens, accept valid ones
+0. Review everything and make a detailed plan (in this document) for how we will approach this, replacing steps 1-7 below with the fleshed out versions that are complete and detailed and cover everything. Do not replace this section.
+   - Start by looking in the folder reference/ for some projects from earlier in the course (that worked) and would be helpful reference for you:
+     - The saas app in reference/saas is a working app with a NextJS frontend like we want, using Clerk for user_id (and subscriptions, which we won't use). If this is OK, I'd like to use the same secrets EXACTLY - like the same secret key and public key - for minimal setup for the student. This project was called "saas" from week1, and they will have a "saas" repo
+     - The files day3.md and day3.part2.md were the instructions for when we set up this Clerk approach in week1 and may help explain the setup
+     - The file reference/twin_main.tf is the terraform file from our big project in week2 (the "twin") in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution - very similar to what we will do now
+     - The folder twin/scripts contains the mac and PC scripts that we used to deploy and destroy the infrastructure for twin. We used terraform workspaces for dev, test, prod, and for this project we won't do that - only 1 environment. Also we used powershell and shell scripts, but for this project I'd prefer to have python scripts obviously, in a uv project. But you should follow similar patterns.
+   - Color scheme (and all shades of these)
+     - primary color (boring): #209DD7 
+     - primary color (anything to do with AI or Agents, like kicking off the planner): #753991
+     - accent color (anything bright or exciting): #FFB707
+     - dark color: #062147
+     - And usual red and green variations for good and bad things
+     - Overall look and feel should be relatively "enterprise" since this is all about Production Deployment, but with an edgy, exciting feel to it given this is autonomous agents.
+     - Overall light mode, not dark mode.
+   - After reviewing these references, reflect on the task ahead, and flesh out the sections below, adding details and substance to each section. DO NOT PROCEED TO WORK ON THE SECTIONS - just flesh out the instructions
 
-2. **Set Up Clerk**
-   - Create Clerk application
-   - Configure OAuth providers (Google, GitHub)
-   - Set up webhook Lambda for user sync to Aurora
-   - Get publishable key for frontend
-   - Configure allowed origins for CORS
-   - ✅ **Test**: Clerk dashboard shows test sign-ups
+1. Foundations
+  1a. Create a NextJS app in the frontend folder. Use TS, use Pages Router, do not have a separate src directory, ensure a static output will be possible, use Tailwind, use latest versions of everything (September 2025). No SSR/ISR - pure client-side
+  1b. Create a simple landing page to give the users name, and 1-2 fields from the database for the user
+  1c. Create a FastAPI app (uv) in backend/api with some routes related to the user
+  1d. Set up the Clerk details based on the SaaS app from week1
+  1e. Make any updates to the pages; set up the necessary frontend / api / db hookup so that signing in users are added to the db with the right id
+  1f. Be able to deploy and see this locally
 
-3. **Build Static React App**
-   - Create React app with NextJS typescript and Pages Router (compatible with Clerk) for static output
-   - TypeScript for type safety
-   - Clerk React SDK for auth
-   - No SSR/ISR - pure client-side
-   - ✅ **Test**: Dev server runs, auth works locally
-
-4. **Connect Frontend to API**
-   - Configure API Gateway endpoint as environment variable
-   - Clerk automatically adds JWT to requests
-   - Implement API client with fetch
-   - Handle CORS preflight requests
-   - ✅ **Test**: Browser can call API with auth
-
-5. **Build UI Components**
-   - Portfolio input forms
-   - Position management
-   - Chart components (Recharts) - **See Chart Data Format below**
-   - Markdown viewer for reports
-   - Loading states and error handling
-   - ✅ **Test**: All features work in dev mode
+2. Deploy
+  2a. Make the terraform directory, and put the skeleton terraform for the api backend and static site frontend with cloudfront distribution; handle CORS, preflight, etc
+  2b. make the lambda deploy uv script
+  2c. Anything else needed around JWT and use of the user_id so that we have row-level security?
+  2d. Deploy and test the frontend and backend with the basic dashboard screen
    
-   **IMPORTANT - Chart Data Format (Part 6 Update):**
-   - Charts are stored in `jobs.charts_payload` as a flexible JSON object
-   - The Charter agent creates 4-6 charts with agent-chosen keys
-   - Chart keys are meaningful names like: `asset_allocation`, `geographic_exposure`, `sector_breakdown`, `top_holdings`, etc.
-   - Each chart object has this structure:
-   ```json
-   {
-     "title": "Asset Class Distribution",
-     "description": "Brief description of the chart",
-     "type": "pie|bar|donut|horizontalBar",
-     "data": [
-       {
-         "name": "Stocks",
-         "value": 65900,
-         "percentage": 70.2,
-         "color": "#3B82F6"
-       }
-     ]
-   }
-   ```
-   - Frontend must iterate over all keys in `charts_payload` (not assume fixed keys)
-   - Frontend should render charts dynamically based on the `type` field
-   - All percentages in a chart's data array sum to 100%
-   
-   **Example of Complete charts_payload:**
-   ```json
-   {
-     "asset_allocation": {
-       "title": "Asset Class Distribution",
-       "description": "Portfolio allocation across major asset classes",
-       "type": "pie",
-       "data": [
-         {"name": "Equities", "value": 65900, "percentage": 70.2, "color": "#3B82F6"},
-         {"name": "Bonds", "value": 14100, "percentage": 15.0, "color": "#10B981"},
-         {"name": "Real Estate", "value": 9400, "percentage": 10.0, "color": "#F59E0B"},
-         {"name": "Cash", "value": 4600, "percentage": 4.8, "color": "#EF4444"}
-       ]
-     },
-     "geographic_exposure": {
-       "title": "Geographic Distribution",
-       "description": "Investment allocation by region",
-       "type": "bar",
-       "data": [
-         {"name": "North America", "value": 56340, "percentage": 60.0, "color": "#6366F1"},
-         {"name": "Europe", "value": 18780, "percentage": 20.0, "color": "#14B8A6"},
-         {"name": "Asia Pacific", "value": 14100, "percentage": 15.0, "color": "#F97316"},
-         {"name": "Emerging Markets", "value": 4700, "percentage": 5.0, "color": "#EC4899"}
-       ]
-     },
-     "tax_efficiency": {
-       "title": "Tax-Advantaged vs Taxable",
-       "description": "Distribution between tax-advantaged and taxable accounts",
-       "type": "donut",
-       "data": [
-         {"name": "401(k)", "value": 45000, "percentage": 47.9, "color": "#10B981"},
-         {"name": "IRA", "value": 28000, "percentage": 29.8, "color": "#3B82F6"},
-         {"name": "Taxable", "value": 20900, "percentage": 22.3, "color": "#F59E0B"}
-       ]
-     },
-     "top_holdings": {
-       "title": "Top 5 Holdings",
-       "description": "Largest positions in the portfolio",
-       "type": "horizontalBar",
-       "data": [
-         {"name": "SPY", "value": 23500, "percentage": 25.0, "color": "#3B82F6"},
-         {"name": "QQQ", "value": 14100, "percentage": 15.0, "color": "#60A5FA"},
-         {"name": "BND", "value": 9400, "percentage": 10.0, "color": "#93C5FD"},
-         {"name": "VTI", "value": 7050, "percentage": 7.5, "color": "#BFDBFE"},
-         {"name": "VXUS", "value": 4700, "percentage": 5.0, "color": "#DBEAFE"}
-       ]
-     }
-   }
-   ```
-   
-   **Frontend Implementation Notes:**
-   ```javascript
-   // Example React component approach
-   const ChartsDisplay = ({ chartsPayload }) => {
-     return Object.entries(chartsPayload).map(([key, chart]) => (
-       <ChartComponent
-         key={key}
-         title={chart.title}
-         description={chart.description}
-         type={chart.type}
-         data={chart.data}
-       />
-     ));
-   };
-   ```
+3. Build out dashboard to show accounts (frontend + backend including deployment)
+   - Add main nav: Dashboard / Account details / Advisor Team / Financial Analysis
+   - Add a disclaimer to every single page in the footer that highlights appropriate legal disclaimer (along the lines: this advice has not been vetted by a qualified financial consultant and should not be used for trading decisions, but concisely and in a way that ensures no liability!)
+   - Script to populate the database for a given user_id
+   - Update dashboard so that you can set name, retirement years, any other high level data, with an update button
+   - Update dashboard to show account summary - just names of accounts and some summary details in a nicely formatted table
 
-6. **Deploy Static Site to S3/CloudFront**
-   - Build production bundle with NextJS
-   - Upload to S3 bucket (static website hosting)
-   - Configure CloudFront distribution
-   - Set index.html as default and error document (for SPA routing)
-   - ✅ **Test**: Production URL works, auth flows work
+4. Account details screen with position/instrument entry (frontend + backend including deployment)
 
-### Frontend Pages
-- `/` - Landing page
-- `/dashboard` - User dashboard
-- `/portfolio` - Portfolio management
-- `/reports` - View analysis reports
-- `/settings` - User preferences
+5. Advisor Team screen - see a list of prior financial analysis, the ability to switch to view the financial analysis, the ability to kick off a new financial analysis, and the progress of an analysis if it's happening.
+Allow the user to click to kick off a run, which puts it on SQS and then polls to show updates of what's going on in a really cool way that gives the strong impression that mutliple Agents are working on the case; this shows when the analysis is complete. This needs to have real wow factor - this is the moment students see it come together! When it's complete, the screen should flip immediately to the Analysis screen
 
-### Deliverables
-- API Lambda with API Gateway endpoints + CORS
-- Clerk webhook Lambda for user sync
-- Pure static React SPA with Clerk auth
-- Deployed to S3/CloudFront
-- Full CRUD for portfolios
-- Agent analysis triggering
+6. Analysis screen - show the results from the reporter, the retirement, and of course.. the Charts!! The reports should appear in full markdown formatted glory. See the implementation in SaaS - we spend ages getting this to look ok - we needed to set the h1/h2/etc styles because Tailwind removes them by default.
 
-### Acceptance Criteria for Part 7
+7. Finishing up and bulletproofing - iterate on look and feel; add favicon and titles; add error handling; other little things that make it polished; any stuff to ensure JWT security and everything is protected. Finally, make guide 7 for the students!
 
-#### API Gateway & CORS Configuration
-- [ ] API Gateway REST API deployed with all endpoints
-- [ ] CORS headers properly configured:
-  - `Access-Control-Allow-Origin`: Your CloudFront domain (NOT *)
-  - `Access-Control-Allow-Headers`: Authorization, Content-Type
-  - `Access-Control-Allow-Methods`: GET, POST, PUT, DELETE, OPTIONS
-- [ ] OPTIONS preflight requests return 200 immediately
-- [ ] Test CORS with browser DevTools - no CORS errors
-- [ ] API rejects requests from unauthorized origins
-
-#### JWT Authentication
-- [ ] Every Lambda validates JWT using Clerk's public keys
-- [ ] Invalid tokens return 401 Unauthorized
-- [ ] Expired tokens are rejected
-- [ ] User ID extracted from token for row-level security
-- [ ] Test with curl using invalid token - should fail:
-  ```bash
-  curl -H "Authorization: Bearer invalid_token" \
-    https://api.gateway.url/portfolio
-  # Should return 401
-  ```
-
-#### Clerk Integration
-- [ ] Webhook Lambda processes Clerk user events
-- [ ] New users automatically added to database
-- [ ] User updates sync to database
-- [ ] Frontend gets token via `clerk.session.getToken()`
-- [ ] Sign in/out flow works smoothly
-
-#### Frontend Functionality
-- [ ] React app builds without errors
-- [ ] Routing works for all pages (/dashboard, /portfolio, /reports)
-- [ ] API calls include Authorization header automatically
-- [ ] Loading states shown during API calls
-- [ ] Error states handle API failures gracefully
-- [ ] Charts render dynamically based on `charts_payload` keys (variable number)
-- [ ] Reports display markdown from `report_payload`
-- [ ] Retirement projections shown from `retirement_payload`
-
-#### Portfolio Management
-- [ ] Create new portfolio positions
-- [ ] Update existing positions
-- [ ] Delete positions
-- [ ] View all accounts and positions
-- [ ] Trigger analysis job and get job ID
-
-#### Static Deployment
-- [ ] S3 bucket configured for static website hosting
-- [ ] CloudFront distribution pointing to S3
-- [ ] index.html set as default and error document
-- [ ] Cache headers configured appropriately
-- [ ] HTTPS enforced via CloudFront
-
-#### End-to-End Testing
-- [ ] Sign up new user → User appears in database
-- [ ] Add portfolio position → Position saved to database
-- [ ] Trigger analysis → Job ID returned → Poll status → Get results
-- [ ] Sign out → API calls fail with 401
-- [ ] Test from different browser → CORS works correctly
-
-## Part 8: Observability, Monitoring & Security
+## Part 8: Observability, Monitoring & Security (NOT STARTED)
 
 ### Objective
 Implement comprehensive observability with LangFuse, monitoring with CloudWatch, and security best practices.
