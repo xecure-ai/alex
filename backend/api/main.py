@@ -455,7 +455,7 @@ async def trigger_analysis(request: AnalyzeRequest, clerk_user_id: str = Depends
         job_id = db.jobs.create_job(
             clerk_user_id=clerk_user_id,
             job_type="portfolio_analysis",
-            payload=request.model_dump()
+            request_payload=request.model_dump()
         )
 
         # Get the created job
@@ -517,7 +517,9 @@ async def list_jobs(clerk_user_id: str = Depends(get_current_user_id)):
         # Get all jobs and filter by clerk_user_id
         jobs = db.jobs.find_all()
         user_jobs = [job for job in jobs if job.get('clerk_user_id') == clerk_user_id]
-        return user_jobs
+        # Sort by created_at descending (most recent first)
+        user_jobs.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return {"jobs": user_jobs}
 
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")

@@ -364,15 +364,15 @@ The landing page and dashboard have established excellent patterns that should b
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
 
-IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not do it yourself.
+IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not do it yourself.
 
 ### Steps
 
 - [x] **Step 0: Review and Planning** ✅ COMPLETE
    - The folder reference/ has projects from earlier in the course and would be helpful reference:
-     - The saas app in reference/saas is a working app with a NextJS frontend, using Clerk for user_id
-     - The files day3.md and day3.part2.md were the instructions for when we set up this Clerk approach in week1
-     - The file reference/twin_main.tf is the terraform file from our big project in week2 (the "twin") in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution - very similar to this project
+     - The saas app in reference/saas is a working app with a NextJS frontend, using Clerk
+     - The files day3.md and day3.part2.md were instructions for when we set up this saas app
+     - The file reference/twin_main.tf is from our big project in week2 called twin in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution
    - Color scheme (and all shades of these)
      - primary color (boring): #209DD7 
      - primary color (anything to do with AI or Agents, like kicking off the planner): #753991
@@ -387,24 +387,21 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [x] Configure for static export with `output: 'export'` in next.config.ts
 - [x] Use Tailwind CSS with custom color scheme (primary #209DD7, AI/agent #753991, accent #FFB707, dark #062147)
 - [x] Install dependencies: @clerk/nextjs, react-markdown, remark-gfm, remark-breaks, recharts, @microsoft/fetch-event-source
-- [x] Set up proper TypeScript types for API responses
+- [x] TypeScript types
 
 **1b. Create landing page with Clerk integration**
-- [x] Copy Clerk environment variables from reference/saas/.env to frontend/.env.local
+- [x] Copy Clerk environment variables
 - [x] Wrap app with ClerkProvider in _app.tsx
-- [x] Create index.tsx as public landing page with:
-  - [x] Marketing hero section about AI Financial Advisors
-  - [x] Sign In / Sign Up buttons using Clerk's SignInButton component
-  - [x] Features showcase (autonomous agents, personalized advice, etc.)
+- [x] Create index.tsx as public landing page
 - [x] ~~Add middleware.ts to protect routes~~ Use client-side <Protect> component instead (static export limitation)
 - [x] After sign-in, redirect to /dashboard
-- [x] Create basic dashboard.tsx with user info display
+- [x] Create basic dashboard.tsx
 
-**1c. Create FastAPI backend in backend/api**
-- [x] Initialize uv project with pyproject.toml using the documented approach from prior sections
-- [x] uv add: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum (NOW using fastapi-clerk-auth like saas reference)
+**1c. Create FastAPI backend in backend/api** ✅ COMPLETE
+- [x] Initialize uv project
+- [x] uv add: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum
 - [x] Create main.py with routes:
-  - [x] GET /api/user - Get/create user profile (THIS IS WHERE USER SYNC HAPPENS)
+  - [x] GET /api/user - Get/create user profile
   - [x] PUT /api/user - Update user settings
   - [x] GET /api/accounts - List user accounts
   - [x] POST /api/accounts - Create account
@@ -412,21 +409,13 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
   - [x] POST /api/positions - Add/update position
   - [x] POST /api/analyze - Trigger analysis (creates job, sends to SQS)
   - [x] GET /api/jobs/{job_id} - Get job status/results
-- [x] JWT validation using fastapi-clerk-auth (CORRECTED - initially used complex python-jose, now matches saas)
+- [x] JWT validation using fastapi-clerk-auth
 - [x] Database operations using backend/database package
 
 **1d. User sync implementation in GET /api/user** ✅ COMPLETE
 - [x] Extract clerk_user_id from JWT token (NOW using fastapi-clerk-auth like saas)
 - [x] Check if user exists in database
-- [x] If NOT exists (first-time user):
-  - [x] Auto-create with defaults:
-    - clerk_user_id from token
-    - display_name from token (or "New User")
-    - years_until_retirement: 20
-    - target_retirement_income: 100000
-    - asset_class_targets: {"equity": 70, "fixed_income": 30}
-    - region_targets: {"north_america": 50, "international": 50}
-  - [x] Return created user
+- [x] If NOT exists (first-time user) - auto-create with defaults and return it
 - [x] If exists: return existing user data
 - [x] Frontend calls this on every dashboard load to ensure user exists
 
@@ -460,28 +449,7 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [x] Verify no middleware warnings with static export
 - [x] Create scripts/run_local.py to start both frontend and backend
 - [x] ~~Create `ed_test_step1.md`~~ Tested successfully and removed
-- [x] **Successfully tested**:
-  - Prerequisites checklist (npm installed, database running, .env files in place)
-  - Commands to run:
-    ```bash
-    cd frontend && npm install
-    cd ../backend/api && uv sync
-    cd ../.. && uv run scripts/run_local.py
-    ```
-  - Test checklist:
-    1. Visit http://localhost:3000 - see landing page
-    2. Click Sign In - redirected to Clerk
-    3. Sign in with Google/GitHub - redirected to /dashboard
-    4. Check browser DevTools Network tab - see GET /api/user call
-    5. Check database - confirm user was created with clerk_user_id
-    6. Edit user settings - confirm PUT /api/user works
-    7. Sign out and sign in again - confirm user is loaded (not recreated)
-  - SQL queries to verify:
-    ```sql
-    SELECT * FROM users WHERE clerk_user_id LIKE '%your-id%';
-    ```
-  - Troubleshooting common issues (CORS, JWT validation, etc.)
-  - Expected outcomes with screenshots placeholders
+- [x] **Successfully tested**
 
 ### Step 2: Deploy Infrastructure ✅ COMPLETE
 **2a. Terraform configuration in terraform/7_frontend/**
@@ -501,10 +469,7 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [x] CORS configuration:
   - **IMPORTANT**: API Gateway uses `allow_origins = ["*"]` with `allow_credentials = false`
   - NO JWT authorizer at API Gateway level (auth handled in Lambda)
-  - **LESSON LEARNED**: Initially tried to add API Gateway JWT authorizer, which was:
-    - Unnecessarily complex
-    - Not present in the working saas/twin references
-    - Led to inventing "alex-api" audience value (completely made up)
+  - **LESSON LEARNED**: Initially tried to add API Gateway JWT authorizer, which was complex and bad
   - **CORRECT APPROACH**: Use fastapi-clerk-auth in Lambda exactly like saas reference
 - [x] Environment variables for Lambda from existing infrastructure
 
@@ -517,31 +482,9 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
 
 **2c. Deployment scripts (scripts/deploy.py, scripts/destroy.py)** ✅ COMPLETE
 - [x] Python scripts using subprocess to run terraform/aws/npm commands
-- [x] Deploy flow:
-  1. Package Lambda with Docker
-  2. Build NextJS static site
-  3. Deploy infrastructure with Terraform
-  4. Upload frontend files to S3
-  5. Invalidate CloudFront cache
-  6. Output CloudFront URL
+- [x] Deploy flow
 - [x] Destroy flow: reverse order with confirmation
 - [x] **NOTE**: Run from scripts directory: `cd scripts && uv run deploy.py`
-
-**2d. Deployment testing & documentation** ✅ COMPLETE
-- [x] Create `ed_test_step2.md` with:
-  - Prerequisites (AWS credentials, Docker running, terraform installed)
-  - Deployment commands:
-    ```bash
-    cd scripts && uv run deploy.py
-    ```
-  - Test checklist:
-    1. CloudFront URL is accessible
-    2. Sign in works with Clerk
-    3. API Gateway routes respond
-    4. User creation in RDS works
-    5. CloudWatch logs show Lambda execution
-  - AWS Console verification steps
-  - Rollback instructions if needed
 
 ### Step 3: Dashboard with Account Management
 **3a. Navigation and layout components**
@@ -568,12 +511,7 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
 
 **3c. Database population script for testing**
 - [x] Add a small button to the Accounts page to 'populate test data'
-- [x] Create an endpoint that this calls which sets up test data:
-  - 3 accounts: "401k Long-term", "Roth IRA", "Brokerage Account"
-  - ETF positions in 401K: SPY, VTI, BND, QQQ, IWM with varied quantities
-  - An interesting mix of other funds in Roth IRA
-  - Stock positions in brokerage account: TSLA, AAPL, AMZN, NVDA
-  - Realistic allocations across accounts
+- [x] Create an endpoint that this calls which sets up test data
 - [x] Text-based summary of the Account details on the Accounts page, to be replaced in Step 4
 - [x] Reset Accounts button to delete all accounts associated with a user
 
@@ -602,19 +540,6 @@ IMPORTANT: ask User to run `uv run deploy.py` or `uv run run_local.py`, do not d
   - Or enter new instrument not in instruments table (created automatically by backend)
   - Quantity input
   - Add button → POST /api/positions
-
-**4c. Accounts testing & documentation**
-- [x] Create `ed_test_step4.md` with:
-  - Test checklist:
-    1. View all accounts in list
-    2. Click through to account details
-    3. Add new position (test symbol autocomplete)
-    4. Edit position quantities
-    5. Delete a position
-    6. Verify calculations are correct
-    7. Create new account
-  - Database verification queries
-  - Edge cases to test (invalid symbols, negative quantities, etc.)
 
 ### Step 5: Advisor Team & Analysis Trigger
 **5a. Advisor Team page (pages/advisor-team.tsx)**
@@ -790,18 +715,15 @@ Solution: Use Docker with the official AWS Lambda Python runtime image.
 - Frontend `.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:8000` for local development
 - Backend reads from root `.env` file
 
-**Deployed Setup:**
-- Frontend served from CloudFront
-- Backend API on API Gateway → Lambda
-- Frontend uses `.env.production` with AWS API URL (build-time replacement)
-- Lambda receives environment variables from Terraform
-
-**Deployment Process (deploy.py) - FIXED:**
+**Deployment Process (deploy.py) - FIXED v2:**
 1. **Packages Lambda** (`package_docker.py`)
 2. **Deploys Infrastructure** via Terraform to get API Gateway URL
-3. **Updates `.env.production`** with API URL (`.env.local` remains unchanged!)
-4. **Builds Frontend** using `.env.production` for production
+3. **Creates `.env.production.local`** with API URL (highest priority for prod builds)
+4. **Builds Frontend** with `NODE_ENV=production` (uses `.env.production.local`)
 5. **Uploads Frontend to S3**
-6. **Displays deployment info** without modifying local files
+6. **Displays deployment info** without modifying `.env.local`
 
-**Key Fix:** The deploy script now uses separate `.env.production` file and never modifies `.env.local`, preventing the recurring issue of local environment pointing to AWS.
+**Key Fix:**
+- Local dev (`npm run dev`): Uses `.env.local` → `localhost:8000`
+- Deploy build: Creates `.env.production.local` → AWS API URL
+- No interference: `.env.production.local` only loaded when `NODE_ENV=production`
