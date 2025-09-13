@@ -8,43 +8,34 @@ This document covers our plan for building the Alex Financial Planner SaaS platf
 
 ## Current Status
 
-- Parts 1-5: complete, tested and guides written in guides directory
-- New approach for Terraform implemented: storing state locally instead of on S3, and having a separate terraform subdirectory for each guide
-- Part 6: coded, being tested
-
-## Explaining the issue with Part 6
-
-- The planner was repeatedly failing with strange errors
-- Root cause: tools + structured outputs are not supported at the same time with Bedrock
-- We made a plan to rebuild Part 6 without using Structured Outputs, documented in guides/actionplan.md and in progress
+- Parts 1-6: complete and guides written in guides directory
+- Part 7 Step 1: ✅ COMPLETE - Landing page, Clerk auth, dashboard, API backend all working. User sync tested successfully.
 
 ADDITIONAL NOTE:
 
 The BEDROCK_MODEL_ID is in the .env as my preferred model:
-BEDROCK_MODEL_ID=openai.gpt-oss-120b-1:0 CHANGED to us.amazon.nova-pro-v1:0 for stability
-BEDROCK_REGION=us-west-2 locally us-east-1 in deployment
+BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0 when local, amazon.nova-pro-v1:0 on lambda
+BEDROCK_REGION=us-west-2 local us-east-1 on lambda
 
 The Nova model (us.amazon.nova-pro-v1:0) required special handling:
 - Local environment: Uses cross-region inference profile with us. prefix
 - Lambda environment: Uses direct model ID amazon.nova-pro-v1:0 with bedrock_region set to us-east-1
 - This was due to LiteLLM handling the model ID differently in Lambda vs local environments
 
-## IMPORTANT - Methodical debugging with the root cause in mind
+## VERY IMPORTANT - debugging process
 
-When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause. ALWAYS prove the root cause.
+When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS think about the root cause and prove it first.
 
-Approach:
-
-1. When hitting a bug, BE AWARE that you have a tendency to jump to conclusions. Don't!
+1. You often jump to conclusions. Don't!
 2. BE THOUGHTFUL - identify the root cause, not the immediate problem.
-3. Follow a methodical process: Reproduce the problem, prove the problem, consider the bigger picture, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
-4. Do not prematurely declare victory. Prove that the issue is fully fixed.
-5. Beware: you have a tendancy to be dismissive of issues and call them "expected". Pay attention to every error!
+3. Follow a methodical process: Reproduce, prove the problem, consider the bigger picture, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
+4. Do not declare victory unless you have evidence.
+5. Do not be dismissive of issues and call them "expected". Pay attention to every error!
 
 ## Infrastructure Management Strategy (Terraform)
 
 ### Why Separate Terraform Directories?
-For this educational project, we use a simple approach:
+For this educational project:
 - **Each guide has its own Terraform directory** (e.g., `terraform/2_sagemaker`, `terraform/3_ingestion`)
 - **Local state files** instead of remote S3 state
 - **Independent deployments** - each part can be deployed without affecting others
@@ -56,6 +47,7 @@ For this educational project, we use a simple approach:
 - This enables independent Lambda packaging and service-specific dependencies
 - The `backend/database/` package is shared across all services as an editable dependency
 - The top level `backend/` is also a uv project for utility scripts
+- So is `scripts/` for deployment scripts (Part 7)
 
 ### Setup Process for Each Project
 ```bash
@@ -66,20 +58,15 @@ uv add --editable ../database  # Add shared database package (for services that 
 ```
 
 ### Cross-Platform Approach
-- **Always use Python scripts** instead of shell/PowerShell scripts
+- **Always use Python scripts via uv** instead of shell/PowerShell scripts
 - IMPORTANT: Scripts are called with `uv run script_name.py` (works on Mac/Linux/Windows) not `uv python run script_name.py`
 - Examples: `package_docker.py` for Lambda packaging using docker so that AWS architecture is supported, `deploy.py` for deployments, `migrate.py` for database migrations
-- This ensures consistent behavior across all operating systems
 
-## Current State (Parts 1-5 Complete)
+## Current State (Parts 1-6 Complete)
 
-### Existing Infrastructure
-- ✅ SageMaker Serverless endpoint (embeddings)
-- ✅ S3 Vectors for knowledge storage
-- ✅ Lambda ingest pipeline
-- ✅ App Runner researcher service
-- ✅ EventBridge scheduler (optional)
-- ✅ API Gateway with API key auth
+### Parts 1-5
+
+This is a data ingest pipeline that is distinct from Part 6 on. It involves Researcher and Ingest with SageMarker Serverless, S3 Vectors, Lambda, App Runner, EventBridge scheduler, API Gateway with API key auth.
 
 ## Database Architecture Summary
 
@@ -145,17 +132,17 @@ alex/
     └── 8_observability.md
 ```
 
-## IMPORTANT - Read this - Agent design
+## IMPORTANT - Agent design
 
-For Agents, we will be using OpenAI Agents SDK.
-Each Agent is in its own directory under backend, with its own uv project, lambda function, agent.py, templates.py.
+We use OpenAI Agents SDK.
+Each Agent has a directory under backend, with a uv project, lambda function, agent.py, templates.py.
 
 The correct package to install is `openai-agents`  
 `uv add openai-agents`  
 `uv add "openai-agents[litellm]"`  
 
 This code shows idiomatic use with appropriate parameters and use of Tools. Only use Tools where they make sense. We will not use Tools and Structured Outputs together due to Bedrock limitations.
-BE CAREFUL to consult up to date docs on OpenAI Agents SDK. DO NOT invent arguments like passing in additional parameters to trace().
+Use OpenAI Agents SDK correctly. DO NOT invent arguments like passing in additional parameters to trace().
 
 ```python
 from pydantic import BaseModel, Field
@@ -179,7 +166,7 @@ async def run_agent():
     return result.final_output
 ```
 
-## Part 5: Database & Shared Infrastructure (DONE)
+## Part 5: Database & Shared Infrastructure (COMPLETE)
 
 ### Objective
 Set up Aurora Serverless v2 PostgreSQL with Data API and create a reusable database library that all agents can use.
@@ -198,7 +185,7 @@ Build the AI agent ecosystem where a main orchestrator delegates to specialized 
 
 ### Key Technical Decision
 The OpenAI Agents SDK doesn't support using both tools AND structured outputs simultaneously. Solution:
-- **All agents use tools only** (except InstrumentTagger which uses structured outputs only)
+- **All agents use tools only** (except tagger which uses structured outputs only)
 - **Charter agent simplified** - Returns JSON directly without tools
 - **Model changed** - From OpenAI OSS to Amazon Nova Pro (us.amazon.nova-pro-v1:0) for better reliability
 
@@ -276,7 +263,7 @@ User Request → API → SQS → Planner (Lambda)
 **Key Implementation Notes**: 
 - Tagger is called automatically by Python code before the agent runs (not as an agent tool)
 - Tagger is the ONLY agent that uses Structured Outputs (no tools needed)
-- Charter agent returns JSON directly without using tools (simplified from earlier design)
+- Charter agent returns JSON directly without using tools
 - All other agents use tools with RunContextWrapper pattern for clean access to job_id
 
 ### Testing Strategy for Part 6
@@ -305,78 +292,177 @@ This section implements the user-facing frontend for the Alex Financial Advisor 
 - **Testing**: Comprehensive test documents (ed_test_*.md) at each milestone for coordination
 - **Styling**: Enterprise look with edgy AI accents (primary #209DD7, AI/agent #753991, accent #FFB707, dark #062147)
 
+### NextJS 15 & Tailwind CSS 4 - Critical Changes (September 2025)
+**NextJS 15 Breaking Changes:**
+- **No default caching**: GET Route Handlers and Client Router Cache are now uncached by default
+- **Async APIs**: cookies(), headers(), and params now require `await`
+- **ESLint 9**: New flat config format (eslint.config.mjs instead of .eslintrc)
+- **Removed APIs**: geo and ip properties removed from NextRequest
+- **Static Export Limitations**: With `output: 'export'`:
+  - NO middleware.ts support
+  - NO API routes (pages/api)
+  - All auth must be client-side
+
+**Tailwind CSS 4 Revolutionary Changes:**
+- **NO tailwind.config.js/ts file**: Configuration now lives in CSS via @theme directive
+- **Single import**: Just `@import "tailwindcss"` in globals.css - no more @tailwind directives
+- **CSS-first configuration**: Custom colors/themes defined in CSS with @theme block
+- **PostCSS plugin**: Uses `@tailwindcss/postcss` instead of traditional config
+- **Performance**: 5x faster full builds, 100x faster incremental builds
+- **New color format**: OKLCH recommended for better color manipulation
+
+**Key Implementation Notes:**
+- Custom colors go in @theme block with --color- prefix (e.g., --color-primary: #209DD7)
+- No Sass/SCSS compatibility - pure CSS only
+- Size utilities changed: use `size-10` instead of `w-10 h-10`
+- Dark mode via CSS variables and media queries, not config file
+
+**Critical Discovery - Static Export & Authentication:**
+- Must use Clerk's `<Protect>` component for client-side route protection
+- No middleware.ts allowed with static export
+- Pattern: Wrap protected content in `<Protect fallback={<Loading />}>` 
+- All API calls must go to external backend (Lambda/API Gateway)
+
+## Frontend Style Guidelines for Consistency
+
+### Design System Established in Step 1
+The landing page and dashboard have established excellent patterns that should be maintained throughout:
+
+**Layout Structure:**
+- Min-height screens with bg-gray-50 or gradient backgrounds
+- White content cards with shadow and rounded-lg
+- Consistent padding: px-4 sm:px-6 lg:px-8 for responsive containers
+- max-w-7xl mx-auto for content width
+- Navigation: white bg with shadow-sm border-b, h-16 height
+
+**Typography Hierarchy:**
+- Brand: "Alex" in dark + "AI Financial Advisor" in primary color
+- Page titles: text-2xl to text-5xl font-bold text-dark
+- Section headers: text-xl to text-2xl font-semibold
+- Body text: text-gray-600
+- Small/meta text: text-sm text-gray-500
+
+**Color Usage:**
+- Primary actions: bg-primary hover:bg-blue-600
+- AI/Agent features: bg-ai-accent hover:bg-purple-700
+- Success states: text-green-600
+- Error states: text-red-500
+- Info boxes: bg-ai-accent/10 border-ai-accent/20
+- Subtle backgrounds: bg-gray-50
+
+**Component Patterns:**
+- Buttons: px-6 py-2 (standard) or px-8 py-4 (large), rounded-lg, transition-colors
+- Cards: bg-white rounded-lg shadow p-6
+- Info panels: colored bg with /10 opacity, matching border with /20 opacity
+- Status messages: Inline colored text with icons (✅, 🎯, etc.)
+
+**Interactive Elements:**
+- Hover states with transition-colors
+- Modal-based auth (SignInButton/SignUpButton with mode="modal")
+- Loading states: "Syncing..." text patterns
+- Error handling: Inline error messages in red
+
+**VERY IMPORTANT - You MUST follow these 3 crucial rules**
+1. During your ongoing work, you MUST use absolute paths when changing directories. The project root on this machine is at `/Users/ed/projects/alex` and if you try relative directory changes you often make mistakes. ALWAYS use absolute paths when you `cd` to be reliable.
+2. You MUST pay attention to uv. Never use python directly. Always `uv run my_module.py` NEVER `uv run python xx` and NEVER `python xx`. If you want to run python code directly, the format is `uv run python -c 'print("hello")'`. Installing a package is `uv add xx` not `uv pip install xx`.
+3. NEVER guess arguments because you are ALWAYS wrong. For example, you tried to create a User in the database and invented parameters. Always check the code!
+
+
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
 
 ### Steps
 
 - [x] **Step 0: Review and Planning** ✅ COMPLETE
-   - Start by looking in the folder reference/ for some projects from earlier in the course (that worked) and would be helpful reference for you:
-     - The saas app in reference/saas is a working app with a NextJS frontend like we want, using Clerk for user_id (and subscriptions, which we won't use). If this is OK, I'd like to use the same secrets EXACTLY - like the same secret key and public key - for minimal setup for the student. This project was called "saas" from week1, and they will have a "saas" repo
+   - The folder reference/ has projects from earlier in the course and would be helpful reference:
+     - The saas app in reference/saas is a working app with a NextJS frontend, using Clerk for user_id. Use the same secrets EXACTLY for minimal setup for the student. This project was called "saas" from week1, and they will have a "saas" repo
      - The files day3.md and day3.part2.md were the instructions for when we set up this Clerk approach in week1 and may help explain the setup
-     - The file reference/twin_main.tf is the terraform file from our big project in week2 (the "twin") in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution - very similar to what we will do now
-     - The folder twin/scripts contains the mac and PC scripts that we used to deploy and destroy the infrastructure for twin. We used terraform workspaces for dev, test, prod, and for this project we won't do that - only 1 environment. Also we used powershell and shell scripts, but for this project I'd prefer to have python scripts obviously, in a uv project. But you should follow similar patterns.
+     - The file reference/twin_main.tf is the terraform file from our big project in week2 (the "twin") in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution - very similar to this project
+     - The folder twin/scripts contains the mac and PC scripts that we used to deploy and destroy the infrastructure for twin. We used terraform workspaces for dev, test, prod, and for this project we won't do that - only 1 environment. This contains shell scripts, but for this project we will "uv run" python scripts.
    - Color scheme (and all shades of these)
      - primary color (boring): #209DD7 
      - primary color (anything to do with AI or Agents, like kicking off the planner): #753991
      - accent color (anything bright or exciting): #FFB707
      - dark color: #062147
      - And usual red and green variations for good and bad things
-     - Overall look and feel should be relatively "enterprise" since this is all about Production Deployment, but with an edgy, exciting feel to it given this is autonomous agents.
-     - Overall light mode, not dark mode.
-   - After reviewing these references, reflect on the task ahead, and flesh out the sections below, adding details and substance to each section. DO NOT PROCEED TO WORK ON THE SECTIONS - just flesh out the instructions
+     - Look and feel should be relatively "enterprise" since this is all about Production Deployment, but with an edgy, exciting feel to it given this is autonomous agents. Light mode.
 
 ### Step 1: Foundations
 **1a. Create NextJS app with Pages Router**
-- [ ] Initialize NextJS in `frontend/` using Pages Router (not App Router) with TypeScript
-- [ ] Configure for static export with `output: 'export'` in next.config.ts
-- [ ] Use Tailwind CSS with custom color scheme (primary #209DD7, AI/agent #753991, accent #FFB707, dark #062147)
-- [ ] Install dependencies: @clerk/nextjs, react-markdown, remark-gfm, remark-breaks, recharts, @microsoft/fetch-event-source
-- [ ] Set up proper TypeScript types for API responses
+- [x] Initialize NextJS in `frontend/` using Pages Router (not App Router) with TypeScript
+- [x] Configure for static export with `output: 'export'` in next.config.ts
+- [x] Use Tailwind CSS with custom color scheme (primary #209DD7, AI/agent #753991, accent #FFB707, dark #062147)
+- [x] Install dependencies: @clerk/nextjs, react-markdown, remark-gfm, remark-breaks, recharts, @microsoft/fetch-event-source
+- [x] Set up proper TypeScript types for API responses
 
 **1b. Create landing page with Clerk integration**
-- [ ] Copy Clerk environment variables from reference/saas/.env to frontend/.env.local
-- [ ] Wrap app with ClerkProvider in _app.tsx
-- [ ] Create index.tsx as public landing page with:
-  - [ ] Marketing hero section about AI Financial Advisors
-  - [ ] Sign In / Sign Up buttons using Clerk's SignInButton component
-  - [ ] Features showcase (autonomous agents, personalized advice, etc.)
-- [ ] Add middleware.ts to protect routes (dashboard, accounts, etc.) - redirect to sign-in if not authenticated
-- [ ] After sign-in, redirect to /dashboard
+- [x] Copy Clerk environment variables from reference/saas/.env to frontend/.env.local
+- [x] Wrap app with ClerkProvider in _app.tsx
+- [x] Create index.tsx as public landing page with:
+  - [x] Marketing hero section about AI Financial Advisors
+  - [x] Sign In / Sign Up buttons using Clerk's SignInButton component
+  - [x] Features showcase (autonomous agents, personalized advice, etc.)
+- [x] ~~Add middleware.ts to protect routes~~ Use client-side <Protect> component instead (static export limitation)
+- [x] After sign-in, redirect to /dashboard
+- [x] Create basic dashboard.tsx with user info display
 
 **1c. Create FastAPI backend in backend/api**
-- [ ] Initialize uv project with pyproject.toml
-- [ ] Install: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum (for Lambda)
-- [ ] Create main.py with routes:
-  - [ ] GET /api/user - Get/create user profile (THIS IS WHERE USER SYNC HAPPENS)
-  - [ ] PUT /api/user - Update user settings
-  - [ ] GET /api/accounts - List user accounts
-  - [ ] POST /api/accounts - Create account
-  - [ ] GET /api/positions - Get positions for account
-  - [ ] POST /api/positions - Add/update position
-  - [ ] POST /api/analyze - Trigger analysis (creates job, sends to SQS)
-  - [ ] GET /api/jobs/{job_id} - Get job status/results
-- [ ] JWT validation using fastapi-clerk-auth with CLERK_JWKS_URL on ALL routes
-- [ ] Database operations using backend/database package
+- [x] Initialize uv project with pyproject.toml using the documented approach from prior sections
+- [x] ~~uv add: fastapi, fastapi-clerk-auth, boto3, uvicorn, mangum~~ Used python-jose instead of fastapi-clerk-auth
+- [x] Create main.py with routes:
+  - [x] GET /api/user - Get/create user profile (THIS IS WHERE USER SYNC HAPPENS)
+  - [x] PUT /api/user - Update user settings
+  - [x] GET /api/accounts - List user accounts
+  - [x] POST /api/accounts - Create account
+  - [x] GET /api/accounts/{account_id}/positions - Get positions for account
+  - [x] POST /api/positions - Add/update position
+  - [x] POST /api/analyze - Trigger analysis (creates job, sends to SQS)
+  - [x] GET /api/jobs/{job_id} - Get job status/results
+- [x] JWT validation using python-jose with CLERK_JWKS_URL on ALL routes (manual implementation)
+- [x] Database operations using backend/database package
 
-**1d. User sync implementation in GET /api/user**
-- [ ] Extract clerk_user_id from JWT token (via fastapi-clerk-auth)
-- [ ] Check if user exists in database
-- [ ] If NOT exists (first-time user):
-  - [ ] Auto-create with defaults:
+**1d. User sync implementation in GET /api/user** ✅ COMPLETE
+- [x] Extract clerk_user_id from JWT token (using python-jose, not fastapi-clerk-auth)
+- [x] Check if user exists in database
+- [x] If NOT exists (first-time user):
+  - [x] Auto-create with defaults:
     - clerk_user_id from token
     - display_name from token (or "New User")
     - years_until_retirement: 20
     - target_retirement_income: 100000
     - asset_class_targets: {"equity": 70, "fixed_income": 30}
     - region_targets: {"north_america": 50, "international": 50}
-  - [ ] Return created user
-- [ ] If exists: return existing user data
-- [ ] Frontend calls this on every dashboard load to ensure user exists
+  - [x] Return created user
+- [x] If exists: return existing user data
+- [x] Frontend calls this on every dashboard load to ensure user exists
 
-**1e. Local testing setup & documentation**
-- [ ] Create scripts/run_local.py to start both frontend and backend
-- [ ] Create `ed_test_step1.md` with:
+**Important Backend Notes for Next Steps:**
+- **Database Import Pattern**: Import as `from src import Database` not `from alex_database`
+- **Database Usage**: Use `db = Database()` then access via `db.users`, `db.accounts`, `db.positions`, `db.jobs`
+- **Clerk JWKS URL**: Derived from instance name in publishable key (e.g., engaging-feline-80.clerk.accounts.dev)
+- **JWT Validation**: Manual implementation with python-jose, caching JWKS for 1 hour
+- **Missing Schemas**: Created UserUpdate, AccountUpdate, PositionUpdate as Pydantic models in API
+- **Database Methods**:
+  - Users: `db.users.find_by_clerk_id(clerk_user_id)`, `db.users.create_user(...)`
+  - Accounts: `db.accounts.find_by_user(clerk_user_id)`, `db.accounts.create_account(...)`
+  - Positions: `db.positions.find_by_account(account_id)`, `db.positions.add_position(...)`
+  - Jobs: `db.jobs.create_job(...)`, `db.jobs.update_status(...)`
+- **Lambda Packaging**: Use package_docker.py for binary compatibility
+
+**Critical Environment Variable Lessons:**
+- **ALWAYS check existing env vars first** - Before adding new variables, check what prior parts already defined (e.g., database uses AURORA_CLUSTER_ARN from Part 5, not a new DATABASE_ARN)
+- **Backend variables go in root .env** - All backend services use the single root .env file via `load_dotenv()`, avoiding nested .env files in subdirectories
+- **Reuse existing variables** - Part 7 API reuses AURORA_CLUSTER_ARN, AURORA_SECRET_ARN from Part 5 and DEFAULT_AWS_REGION from Part 1
+- **AWS_REGION is reserved** - Use DEFAULT_AWS_REGION instead, as AWS_REGION is reserved by AWS SDKs and can cause conflicts
+- **Keep .env.example updated** - The .env.example must match the actual .env template exactly to prevent student configuration errors
+- **Terraform follows same pattern** - Variables in .tfvars should also reuse existing values and avoid duplication
+
+**1e. Local testing setup & documentation** ✅ COMPLETE & TESTED
+- [x] Remove pages/api directory (incompatible with static export)
+- [x] Verify no middleware warnings with static export
+- [x] Create scripts/run_local.py to start both frontend and backend
+- [x] ~~Create `ed_test_step1.md`~~ Tested successfully and removed
+- [x] **Successfully tested**:
   - Prerequisites checklist (npm installed, database running, .env files in place)
   - Commands to run:
     ```bash
@@ -421,10 +507,11 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 - [ ] Environment variables for Lambda from existing infrastructure
 
 **2b. Lambda packaging script (scripts/package_api.py)**
-- [ ] Use Docker with AWS Lambda Python 3.12 image
-- [ ] Install dependencies for correct architecture
-- [ ] Package FastAPI app as Lambda handler using mangum
-- [ ] Create deployment zip with all dependencies
+- [ ] ~~Use Docker with AWS Lambda Python 3.12 image~~ Already created as backend/api/package_docker.py
+- [ ] ~~Install dependencies for correct architecture~~ Handled in package_docker.py
+- [ ] ~~Package FastAPI app as Lambda handler using mangum~~ Already done
+- [ ] ~~Create deployment zip with all dependencies~~ Creates api_lambda.zip
+- [ ] Note: May need to rename/move package_docker.py to scripts/package_api.py for consistency
 
 **2c. Deployment scripts (scripts/deploy.py, scripts/destroy.py)**
 - [ ] Python scripts using subprocess to run terraform/aws/npm commands
@@ -664,6 +751,7 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 
 **7e. Guide 7 documentation**
 - [ ] Step-by-step setup instructions
+- [ ] **Include mention of Swagger docs at http://localhost:8000/docs for API exploration**
 - [ ] Architecture diagram
 - [ ] Troubleshooting section
 - [ ] Cost considerations
@@ -842,13 +930,6 @@ Implement comprehensive observability with LangFuse, monitoring with CloudWatch,
 - [ ] Try accessing API without token - returns 401
 - [ ] Try accessing another user's data - returns 403
 
-#### Documentation
-- [ ] Runbook created for common issues
-- [ ] Architecture diagram up to date
-- [ ] API documentation complete
-- [ ] Cost breakdown documented
-- [ ] Security measures documented
-
 ## Lambda Deployment Technique for Binary Compatibility
 
 ### The Architecture Issue
@@ -858,116 +939,3 @@ Lambda runs on Amazon Linux 2 (x86_64 architecture). When packaging Python depen
 
 ### Solution: Docker-Based Packaging
 Use Docker with the official AWS Lambda Python runtime image to compile dependencies for the correct architecture. This ensures all binary packages are compatible with Lambda's runtime environment.
-
-## Notes for Implementation
-
-### LangFuse Implementation for Amazing Visualization
-
-Each agent should use OpenAI Agents SDK with LangFuse callback for automatic tracing:
-
-```python
-from langfuse.openai import OpenAI
-from agents import Agent
-
-# In Orchestrator (creates parent trace)
-def lambda_handler(event, context):
-    job_id = event['job_id']
-    
-    langfuse = Langfuse()
-    trace = langfuse.trace(
-        name="Portfolio Analysis Orchestration",
-        user_id=event['user_id'],
-        metadata={
-            "job_id": job_id,
-            "portfolio_value": calculate_total_value(),
-            "num_positions": len(positions),
-            "agents_to_invoke": ["tagger", "reporter", "charter", "retirement"]
-        }
-    )
-    
-    # Each agent call becomes a span
-    with trace.span(name="InstrumentTagger Decision"):
-        missing = find_missing_instruments()
-        if missing:
-            trace.event("Routing Decision", {"reason": "Missing instrument data", "symbols": missing})
-            invoke_tagger(missing, parent_trace_id=trace.id)
-
-# In each Agent (creates child trace)
-def agent_handler(event, context):
-    trace = langfuse.trace(
-        name="🏷️ InstrumentTagger Agent",
-        parent_trace_id=event.get('parent_trace_id'),
-        metadata={
-            "agent_role": "Classify and tag financial instruments",
-            "model": os.environ['BEDROCK_MODEL_ID']
-        }
-    )
-    
-    # Rich events for visualization
-    for symbol in symbols:
-        with trace.span(name=f"Tagging {symbol}"):
-            result = classify_instrument(symbol)
-            trace.event("Classification Complete", {
-                "symbol": symbol,
-                "asset_class": result['asset_class'],
-                "confidence": result['confidence']
-            })
-```
-
-Key Features for Impressive LangFuse Display:
-1. **Hierarchical traces** - Parent/child relationships show collaboration
-2. **Rich metadata** - Portfolio stats, decision points, results
-3. **Named spans** - Clear step-by-step within each agent
-4. **Events** - Key decisions and milestones
-5. **Emojis in trace names** - Visual distinction between agents
-6. **Parallel execution visible** - Shows agents running simultaneously
-7. **Cost tracking** - Token usage and dollar amounts per agent
-
-
-## Async Execution Pattern for Long-Running Analysis
-
-### The Challenge
-Portfolio analysis takes 2-3 minutes. We need async execution without holding HTTP connections.
-
-### Solution: Job Queue Pattern
-1. **Frontend** → POST to API Lambda → Returns job ID immediately
-2. **API Lambda** → Creates job record in DB → Sends message to SQS
-3. **Orchestrator Lambda** → Triggered by SQS → Runs analysis → Updates job status in DB
-4. **Frontend** → Polls job status via API → Shows progress/completion
-
-### Implementation Options
-
-**Our Chosen Approach: SQS + Lambda Orchestrator**
-```
-Frontend → API Gateway → API Lambda → SQS → Orchestrator Lambda (15 min timeout)
-                            ↓                           ↓
-                        Return Job ID            Runs full analysis
-                                                        ↓
-                                                 Updates job in DB
-```
-
-
-### Job Tracking
-The `jobs` table (already in schema) tracks async operations with status updates and results.
-
-### Frontend UX Pattern
-```typescript
-// 1. Trigger analysis
-const response = await fetch('/api/analyze', { method: 'POST' });
-const { jobId } = await response.json();
-
-// 2. Poll for completion
-const pollJob = async (jobId: string) => {
-  const res = await fetch(`/api/jobs/${jobId}`);
-  const job = await res.json();
-  
-  if (job.status === 'completed') {
-    // Show results
-  } else if (job.status === 'failed') {
-    // Show error
-  } else {
-    // Show progress, poll again in 5 seconds
-    setTimeout(() => pollJob(jobId), 5000);
-  }
-};
-```

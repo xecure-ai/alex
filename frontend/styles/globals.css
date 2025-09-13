@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  /* Custom colors for Alex Financial Advisor */
+  --color-primary: #209DD7;        /* Primary blue */
+  --color-ai-accent: #753991;      /* Purple for AI/agent features */
+  --color-accent: #FFB707;         /* Yellow/gold accent */
+  --color-dark: #062147;           /* Dark navy */
+  --color-success: #10b981;        /* Green for positive */
+  --color-error: #ef4444;          /* Red for errors */
+  
+  /* Preserve defaults */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Light mode only - no dark mode for enterprise look */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+}
