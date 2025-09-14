@@ -273,7 +273,7 @@ The backend directory has:
 
 All tests confirmed working with Nova Pro model.
 
-## Part 7: Frontend & Authentication
+## Part 7: Frontend & Authentication ✅ COMPLETE
 
 ### Context & Decisions Made
 This section implements the user-facing frontend for the Alex Financial Advisor platform. Key architectural decisions:
@@ -362,23 +362,12 @@ The landing page and dashboard have established excellent patterns that should b
 
 **Lessons learned**
 1. CORS Configuration Pattern: API Gateway uses `allow_origins = ["*"]` and `allow_credentials = false`. Lambda handles auth, not API Gateway.
-2. **ALWAYS CHECK REFERENCE IMPLEMENTATIONS FIRST** - You failed to review the saas reference and chose a complex JWT authorizer approach when the reference used simple fastapi-clerk-auth. You invented "alex-api" as an audience value without any basis. This behavior MUST stop.
-3. **FOCUS ON SIMPLE AND CONSISTENT CODE** - The saas reference worked perfectly with fastapi-clerk-auth. Instead of using it, you chose python-jose manual validation which was unnecessarily complex. ALWAYS prefer proven, simple solutions from working references.
-4. **Database Primary Keys**: The users table uses `clerk_user_id` as the primary key, NOT `id`. When updating users, use the database client directly with clerk_user_id. Other tables (accounts, positions) use UUID `id` fields.
-5. **API Response Structure**: The GET /api/user endpoint returns `{user: {...}, created: boolean}`, not the user object directly. Frontend must extract the user from response.user. Always check endpoints to make sure you are using them properly.
-6. **Number Formatting**: Always use `toLocaleString('en-US')` for displaying currency and large numbers. For input fields handling currency, use type="text" and strip commas before parsing.
-7. **Avoid UI Flicker**: Don't set default values in frontend state - start with empty/zero and let database values populate. All defaults should be set in the database during user creation.
-8. **CRITICAL CLERK AUTH PATTERN - STOP MAKING THIS ERROR**: The Alex database schema has NO `user.id` field!
-   - `users` table: Primary key is `clerk_user_id` (string), NO separate `id` field exists
-   - `accounts` table: Stores `clerk_user_id` directly, NOT `user_id`
-   - `jobs` table: Stores `clerk_user_id` directly, NOT `user_id`
-   - **NEVER write**: `user['id']`, `account['user_id'] != user['id']`, `job['user_id'] != user['id']`
-   - **ALWAYS write**: `clerk_user_id`, `account.get('clerk_user_id') != clerk_user_id`, `job.get('clerk_user_id') != clerk_user_id`
+2. **Database Primary Keys**: The users table uses `clerk_user_id` as the primary key, NOT `id`. When updating users, use the database client directly with clerk_user_id. Other tables (accounts, positions) use UUID `id` fields.
+3. **API Response Structure**: The GET /api/user endpoint returns `{user: {...}, created: boolean}`, not the user object directly. Frontend must extract the user from response.user. Always check endpoints to make sure you are using them properly.
+4. **Number Formatting**: Always use `toLocaleString('en-US')` for displaying currency and large numbers. For input fields handling currency, use type="text" and strip commas before parsing.
 
 ### Objective
 Build a pure client-side NextJS React app with Clerk authentication, deployed as a static site to S3/CloudFront, calling API Gateway directly.
-
-IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not do it yourself.
 
 ### Steps
 
@@ -450,13 +439,6 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
   - Jobs: `db.jobs.create_job(...)`, `db.jobs.update_status(...)`
 - **Lambda Packaging**: Use package_docker.py for binary compatibility
 
-**Critical Environment Variable Lessons:**
-- **ALWAYS check existing env vars first** - Before adding new variables, check what prior parts already defined (e.g., database uses AURORA_CLUSTER_ARN from Part 5, not a new DATABASE_ARN)
-- **Backend variables go in root .env** - All backend services use the single root .env file via `load_dotenv()`, avoiding nested .env files in subdirectories
-- **Reuse existing variables** - Part 7 API reuses AURORA_CLUSTER_ARN, AURORA_SECRET_ARN from Part 5 and DEFAULT_AWS_REGION from Part 1
-- **AWS_REGION is reserved** - Use DEFAULT_AWS_REGION instead, as AWS_REGION is reserved by AWS SDKs and can cause conflicts
-- **Keep .env.example updated** - The .env.example must match the actual .env template exactly to prevent student configuration errors
-- **Terraform follows same pattern** - Variables in .tfvars should also reuse existing values and avoid duplication
 
 **1e. Local testing setup & documentation** ✅ COMPLETE & TESTED
 - [x] Remove pages/api directory (incompatible with static export)
@@ -512,16 +494,8 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [x] On page load:
   - Call GET /api/user (this auto-creates user if first time)
   - Load user data and accounts
-- [x] User settings section:
-  - Display name (editable)
-  - Years until retirement (slider 0-50)
-  - Target allocations (pie chart + inputs)
-  - Save button → PUT /api/user
-- [x] Portfolio summary cards:
-  - Total portfolio value
-  - Number of accounts
-  - Asset allocation overview (mini pie chart)
-  - Last analysis date
+- [x] User settings section
+- [x] Portfolio summary cards
 
 **3c. Database population script for testing**
 - [x] Add a small button to the Accounts page to 'populate test data'
@@ -534,11 +508,7 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 
 ### Step 4: Account Details Page
 **4a. Accounts list page (pages/accounts.tsx)**
-- [x] Table showing all accounts:
-  - Account name, type, total value
-  - Number of positions
-  - Cash balance
-  - Edit/View buttons
+- [x] Table showing all accounts
 - [x] Add account
 - [x] Remove account
 
@@ -557,15 +527,9 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 
 ### Step 5: Advisor Team & Analysis Trigger
 **5a. Advisor Team page (pages/advisor-team.tsx)**
-- [x] Agent cards in grid layout (4 visible agents):
-  - 🎯 Financial Planner (orchestrator) - purple accent - "Coordinates your financial analysis"
-  - 📊 Portfolio Analyst (reporter) - blue - "Analyzes your holdings and performance"
-  - 📈 Chart Specialist (charter) - green - "Visualizes your portfolio composition"  
-  - 🎯 Retirement Planner (retirement) - orange - "Projects your retirement readiness"
+- [x] Agent cards in grid layout (4 visible agents)
 - [x] Note: Market Researcher (tagger) runs invisibly in background when needed
-- [x] Previous analyses list:
-  - Job ID, date, status, view button
-  - Click to load analysis on Analysis page
+- [x] Previous analyses list
 - [x] "Start New Analysis" button (prominent, purple #753991)
 
 **5b. Analysis progress visualization**
@@ -591,108 +555,47 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 **6a. Analysis page structure (pages/analysis.tsx)**
 - [x] Load from job results (markdown + JSON)
 - [x] Hero section with completion timestamp
-- [x] Tabbed interface:
-  - Overview (reporter output)
-  - Charts (charter output)
-  - Retirement Projection (retirement output)
-  - Recommendations
+- [x] Tabbed interface
 
 **6b. Markdown rendering with styling**
 - [x] Use ReactMarkdown with remark-gfm and remark-breaks
-- [x] Custom CSS for financial reports:
-  ```css
-  /* Restore heading styles that Tailwind removes */
-  .prose h1 { @apply text-3xl font-bold mb-4 text-gray-900; }
-  .prose h2 { @apply text-2xl font-semibold mb-3 text-gray-800; }
-  .prose h3 { @apply text-xl font-medium mb-2 text-gray-700; }
-  .prose ul { @apply list-disc ml-6 mb-4; }
-  .prose ol { @apply list-decimal ml-6 mb-4; }
-  .prose table { @apply w-full border-collapse mb-4; }
-  .prose th { @apply bg-gray-100 p-2 text-left font-semibold; }
-  .prose td { @apply border p-2; }
-  ```
+- [x] Custom CSS for financial reports
 
 **6c. Interactive charts using Recharts**
-- [x] Render charter agent's JSON output as:
-  - Pie charts for allocations (asset class, region, sector)
-  - Bar charts for account comparisons
-  - Line charts for retirement projections
+- [x] Render charter agent's JSON output
 
 **6d. Real-Time Market Data Integration**
 
 **Objective**: Update the Planner to fetch real-time stock prices using yfinance after the tagger runs, ensuring all agents work with current market data.
 
-- [x] **Add yfinance dependency** to planner (`uv add yfinance`)
-- [x] **Create market.py module** with price fetching logic
-  - Uses `yf.download()` for single batch API call
-  - Handles all tickers in one request (no chunking needed for <100 symbols)
-  - Includes 3 retry attempts with exponential backoff using tenacity
-  - Updates instruments table with current prices
-  - Falls back to default price of 1.0 if fetch fails
-- [x] **Integrate into planner workflow**
-  - Runs automatically after `handle_missing_instruments` (tagger)
-  - Updates prices before portfolio summary is loaded
-  - Non-blocking: continues analysis even if price fetch fails
-- [x] **Use set() for deduplication**
-  - Ensures each symbol is only fetched once even if in multiple accounts
-- [x] **Update package_docker.py**
-  - Added market.py to files copied into Lambda package
-  - yfinance and dependencies included via requirements export
-- [x] **Test locally**
-  - Successfully fetched prices for 14 symbols
-  - Verified database updates with real prices (e.g., AAPL: $234.07, MSFT: $509.90)
-
 **6e. CHANGE IN PLAN FOR MARKET DATA - switch to polygon.io**
 - yfinance is too unstable and the dependencies are too large. Different approach is needed
 - see reference implementation in backend/planner/market_new.py
-- [x] First, uv remove yfinance, and uv add polygon-api-client
-- [x] Next, see implementation in backend/planner/prices.py and check it carefully - this is taken from another project
-- [x] If it's OK, update the code in market.py to use prices.get_share_price()
-- [x] Test locally with test_market.py (I have populated the .env with the 2 secrets)
-- [x] Update the package_docker: remove the yfinance dependencies, include the polygon dependency (can we make this all binary again?) and include prices.py
-- [x] Tell me (the user, Ed) how I need to change the tfvars file in part 6 so that it has these 2 secrets, and make the change
-- [x] Tell me to deploy and test remotely
-- [x] When it's confirmed to be successful, we need to update the guide 6 to tell students to obtain a polygon key and make the changes in .env and tfvars, and we need to update .env.example and tfvars.example
-- [x] Fix the problem with portfolio values not updating, and with runs not refreshing after completing 
-- [x] Test and resolve the 1 remaining issue with Charts not displaying
+- [x] Implement polygon.io alternative
 
-### Step 7: Polish & Production Readiness - NEXT UP!
+### Step 7: Polish & Production Readiness - ✅ COMPLETE
 **7a. UI/UX refinements**
-- [ ] Loading states with skeletons
-- [ ] Smooth transitions between pages
-- [ ] Toast notifications for actions
-- [ ] Responsive design for mobile
-- [ ] Favicon and page titles
-- [ ] 404 and error pages
-- [ ] Do an `npm run build` and fix any build errors
+- [x] Loading states with skeletons
+- [x] Smooth transitions between pages
+- [x] Toast notifications for actions
+- [x] Responsive design for mobile
+- [x] Favicon and page titles
+- [x] 404 and error pages
 
 **7b. Security hardening**
-- [ ] JWT expiry handling → redirect to sign-in
-- [ ] API rate limiting (100 req/min) via API Gateway
-- [ ] Input validation on all forms
-- [ ] XSS protection via Content Security Policy
-- [ ] Secrets in AWS Secrets Manager (not env vars)
+- [x] JWT expiry handling → redirect to sign-in
+- [x] API rate limiting (100 req/min) via API Gateway
+- [x] Input validation on all forms
+- [x] XSS protection via Content Security Policy
+- [x] Secrets in AWS Secrets Manager (not env vars)
 
 **7c. Error handling & monitoring**
-- [ ] Global error boundary in React
-- [ ] API error responses with user-friendly messages
-- [ ] Do an `npm run build` and fix any build errors
+- [x] Global error boundary in React
+- [x] API error responses with user-friendly messages
+- [x] Do an `npm run build` and fix any build errors
 
 **8. Guide 7 documentation**
-- [ ] Review guides 5-6 for a refresher on the style
-- [ ] Write guide 7 as step-by-step setup instructions - test local then deploy then test remote
-- [ ] **Include mention of Swagger docs at http://localhost:8000/docs for API exploration**
-- [ ] Architecture diagram
-- [ ] Troubleshooting section
-- [ ] Cost considerations
-
-
-## Part 8: Observability, Monitoring & Security (NOT STARTED)
-
-### Objective
-Implement comprehensive observability with LangFuse, monitoring with CloudWatch, and security best practices.
-
-This will be built out but will include security, monitoring, observability and guardrails.
+- [x] Write guide 7
 
 ## Docker image must be built for x86_64
 
@@ -729,3 +632,45 @@ const response = await fetch(`${API_URL}/api/endpoint`, {
 3. **Build Frontend**: NextJS static export (uses `lib/config.ts`, no env vars needed)
 4. **Upload to S3**: Static files served via CloudFront
 5. **Result**: CloudFront serves frontend and proxies `/api/*` to API Gateway
+
+## Part 8: Enterprise Grade: Scalability, Security, APIs, Monitoring, Guardrails & Observability (NOT STARTED)
+
+### Objective
+Implement comprehensive observability with LangFuse, monitoring with CloudWatch, and security best practices.
+We may not need to terraform directory at all for this part - it might just be a guide, and some code changes activated by adding an env variable
+
+### Section 1: 
+- [ ] Start guide 8_enterprise.md to cover topics related to making our project enterprise strength
+- [ ] Write Section 1: Scalability. Explain to the student that the serverless architecture is already prepared to scale up. Show them the settings in terraform where we could ramp up our infrastructure if we wanted to
+
+## Section 2:
+- [ ] Write Section 2: Security. Point the student to the aspects of the Alex project that have security best practices:
+  - Our IAM controls, for example controlling what the Agents can do
+  - The API key for the API
+  - The JWT controls
+  - API gateway throttling etc
+  - CORS controls
+  - The XSS controls
+  - Point out other enterprise strength controls that we could add through tf configuration if we wished
+
+### Section 3: Add more on monitoring
+- [ ] First, check how much logging the agents do, and as necessary add more logging. Also ensure the API logs users logging in/out, kicking off runs, etc
+- [ ] Write Section 3: monitoring. Show how to build a dashboard from CloudWatch to see what is happening with our API and agents; log in, do a run, see everything in the logs
+- [ ] In Section 3, include any other AWS features (like SQS dashboard)
+
+### Section 4: Guardrails
+- [ ] Write Section 4: Guardrails. Give the student some code that they could add to Charter to validate that the output is well formed json, and if not, to refuse to write the charts and log an issue. (Don't actually make this code change in the repo; let the student do it themselves)
+
+### Section 5: Explainability
+- [ ] Write Section 5: Explainability. First, introduce the topic of Explainability. Make the case that this was a serious concern in the early days of Deep Learning (black box deep neural networks), but in many ways modern LLMs and Agentic systems help address the issue of explainable AI with Generative AI that explains its reasoning.
+- [ ] As an example, show the students how they can edit the structured outputs coming from the Tagger agent to include its rationale for why it gave the breakdowns it did. This rationale wouldn't get returned to the planner agent, but instead log it. Be sure that the rationale is the first field in the structured output, so the LLM needs to generate the rationale BEFORE it generates the answer. Don't make this code change in the repo; just tell the students how to do it.
+
+### Section 6: Observability
+- [ ] First, read this page fully: https://langfuse.com/integrations/frameworks/openai-agents
+- [ ] Make changes to the repo so that IF the langfuse cloud keys are set in the .env / tf, then each of the 5 main agents (reporter, planner, tagger, retirement, charter) will use langfuse for traces with openai agents sdk as documented. Make Langfuse look as awesome as possible - add all tracing so that this comes to life. If the keys are not set, then your code changes should have no effect. That way we can include this code in the repo, and it won't make any difference for students until they add the keys
+- [ ] Write Section 6: Observability. Tell the student to set up a free account with langfuse, then add the variable to Terraform (in the 6_agents folder?) then terraform apply. Then sign into LangFlow, and show them what to Observe
+- [ ] If possible, have this show LLM costs/tokens as well (if not, show them this in the AWS console)
+
+### Finale
+- [ ] End with a paragraph to congratulate them on the deployment of an enterprise grade agentic ai system!
+- [ ] Summarise with a bullet each: this system is scalable, secure, robust/monitored, has guardrails, is explainable and observable. Mission accomplished!

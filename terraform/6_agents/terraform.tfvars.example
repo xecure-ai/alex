@@ -16,8 +16,8 @@ aurora_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:alex-a
 vector_bucket = "alex-vectors-123456789012"
 
 # Bedrock model configuration
-# Using OpenAI OSS 120B model as specified in actionplan.md
-bedrock_model_id = "openai.gpt-oss-120b-1:0"
+# Using Amazon Nova Pro model for better reliability
+bedrock_model_id = "us.amazon.nova-pro-v1:0"
 
 # Bedrock region (us-west-2 has the most models available)
 # Note: This can be different from your Lambda region - cross-region calls work fine
@@ -27,7 +27,7 @@ bedrock_region = "us-west-2"
 # Default: alex-embedding-endpoint
 sagemaker_endpoint = "alex-embedding-endpoint"
 
-# Polygon.io API configuration for market data
-# Sign up for free at https://polygon.io
-polygon_api_key = "your-polygon-api-key"
-polygon_plan = "free"  # or "paid" if you have a paid plan
+# Polygon.io API configuration for real-time market prices
+# Sign up for free at https://polygon.io (no credit card required)
+polygon_api_key = "your_polygon_api_key_here"
+polygon_base_url = "https://api.polygon.io"

@@ -79,13 +79,41 @@ Our agents use Amazon's Nova Pro model for improved reliability. Let's ensure yo
 
 ## Step 1: Configure Environment Variables
 
-Our agents need several environment variables. Open your `.env` file in Cursor and add these lines:
+Our agents need several environment variables, including a Polygon API key for real-time market data.
+
+### 1.1 Get Polygon API Key (Free)
+
+The Planner agent fetches real-time stock prices using Polygon.io. Let's get a free API key:
+
+1. Go to [polygon.io](https://polygon.io)
+2. Click **Get your Free API Key**
+3. Sign up with email (no credit card required)
+4. Verify your email
+5. Copy your API key from the dashboard
+
+The free tier includes:
+- 5 API calls per minute
+- End-of-day price data
+- Perfect for development and testing
+
+**Optional**: For production use, consider the Basic plan ($29/month) for:
+- 100 API calls per minute
+- Real-time price data
+- WebSocket streaming
+
+### 1.2 Configure Agent Environment
+
+Open your `.env` file in Cursor and add these lines:
 
 ```bash
 # Part 6 - Agent Configuration
 BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0
 BEDROCK_REGION=us-west-2
 DEFAULT_AWS_REGION=us-east-1  # Or your preferred region
+
+# Polygon API for real-time prices
+POLYGON_API_KEY=your_polygon_api_key_here
+POLYGON_BASE_URL=https://api.polygon.io
 ```
 
 The `BEDROCK_MODEL_ID` uses Amazon's Nova Pro model which has excellent tool-calling capabilities and high rate limits.
@@ -288,9 +316,13 @@ bedrock_region = "us-west-2"
 
 # SageMaker endpoint name from Part 2
 sagemaker_endpoint = "alex-embedding-endpoint"
+
+# Polygon API configuration (for real-time prices)
+polygon_api_key = "your_polygon_api_key_here"  # From Step 1.1
+polygon_base_url = "https://api.polygon.io"
 ```
 
-**Note**: The Aurora ARNs can be left empty - Terraform will automatically find them using data sources. Make sure to update the `vector_bucket` with your actual AWS account ID.
+**Note**: The Aurora ARNs can be left empty - Terraform will automatically find them using data sources. Make sure to update the `vector_bucket` with your actual AWS account ID and add your Polygon API key.
 
 ## Step 6: Deploy Infrastructure
 
