@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useAuth } from '@clerk/nextjs';
 import Layout from '../components/Layout';
 import { API_URL } from '../lib/config';
+import { emitAnalysisCompleted, emitAnalysisFailed, emitAnalysisStarted } from '../lib/events';
 
 interface Agent {
   icon: string;
@@ -105,6 +106,12 @@ export default function AdvisorTeam() {
               setPollInterval(null);
             }
 
+            // Emit completion event so other components can refresh
+            emitAnalysisCompleted(jobId);
+
+            // Also refresh our own jobs list
+            fetchJobs();
+
             setTimeout(() => {
               router.push(`/analysis?job_id=${jobId}`);
             }, 1500);
@@ -120,6 +127,9 @@ export default function AdvisorTeam() {
               clearInterval(pollInterval);
               setPollInterval(null);
             }
+
+            // Emit failure event
+            emitAnalysisFailed(jobId, job.error);
 
             setIsAnalyzing(false);
             setCurrentJobId(null);
@@ -189,6 +199,9 @@ export default function AdvisorTeam() {
       if (response.ok) {
         const data = await response.json();
         setCurrentJobId(data.job_id);
+
+        // Emit start event
+        emitAnalysisStarted(data.job_id);
 
         setProgress({
           stage: 'planner',
@@ -267,18 +280,18 @@ export default function AdvisorTeam() {
                 }`}
               >
                 {isAgentActive(agent.name) && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-ai-accent/10 to-transparent animate-pulse" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-ai-accent/20 to-transparent animate-strong-pulse" />
                 )}
                 <div className="relative">
-                  <div className="text-5xl mb-4">{agent.icon}</div>
+                  <div className={`text-5xl mb-4 ${isAgentActive(agent.name) ? 'animate-strong-pulse' : ''}`}>{agent.icon}</div>
                   <h3 className={`text-xl font-semibold mb-1 ${agent.color}`}>
                     {agent.name}
                   </h3>
                   <p className="text-sm text-gray-500 mb-3">{agent.role}</p>
                   <p className="text-gray-600 text-sm">{agent.description}</p>
                   {isAgentActive(agent.name) && (
-                    <div className={`mt-4 inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-white ${agent.bgColor}`}>
-                      <span className="animate-pulse mr-2">●</span>
+                    <div className={`mt-4 inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold text-white ${agent.bgColor} animate-strong-pulse`}>
+                      <span className="mr-2">●</span>
                       Active
                     </div>
                   )}
@@ -309,9 +322,9 @@ export default function AdvisorTeam() {
                   <h3 className="text-lg font-semibold text-dark">Analysis Progress</h3>
                   {progress.stage !== 'error' && progress.stage !== 'complete' && (
                     <div className="flex space-x-2">
-                      <div className="w-2 h-2 bg-ai-accent rounded-full animate-pulse" />
-                      <div className="w-2 h-2 bg-ai-accent rounded-full animate-pulse delay-75" />
-                      <div className="w-2 h-2 bg-ai-accent rounded-full animate-pulse delay-150" />
+                      <div className="w-3 h-3 bg-ai-accent rounded-full animate-strong-pulse" />
+                      <div className="w-3 h-3 bg-ai-accent rounded-full animate-strong-pulse" style={{ animationDelay: '0.5s' }} />
+                      <div className="w-3 h-3 bg-ai-accent rounded-full animate-strong-pulse" style={{ animationDelay: '1s' }} />
                     </div>
                   )}
                 </div>

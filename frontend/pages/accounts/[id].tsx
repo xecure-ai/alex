@@ -93,8 +93,8 @@ export default function AccountDetail() {
       );
 
       if (positionsResponse.ok) {
-        const positionsData = await positionsResponse.json();
-        setPositions(positionsData);
+        const data = await positionsResponse.json();
+        setPositions(data.positions || []);
       }
 
       // Load instruments for autocomplete

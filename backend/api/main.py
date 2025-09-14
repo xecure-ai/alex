@@ -293,7 +293,18 @@ async def list_positions(account_id: str, clerk_user_id: str = Depends(get_curre
             raise HTTPException(status_code=403, detail="Not authorized")
 
         positions = db.positions.find_by_account(account_id)
-        return positions
+
+        # Format positions with instrument data for frontend
+        formatted_positions = []
+        for pos in positions:
+            # Get full instrument data
+            instrument = db.instruments.find_by_symbol(pos['symbol'])
+            formatted_positions.append({
+                **pos,
+                'instrument': instrument
+            })
+
+        return {"positions": formatted_positions}
 
     except HTTPException:
         raise
@@ -514,9 +525,8 @@ async def list_jobs(clerk_user_id: str = Depends(get_current_user_id)):
     """List user's analysis jobs"""
 
     try:
-        # Get all jobs and filter by clerk_user_id
-        jobs = db.jobs.find_all()
-        user_jobs = [job for job in jobs if job.get('clerk_user_id') == clerk_user_id]
+        # Get jobs for this user (with higher limit to avoid missing recent jobs)
+        user_jobs = db.jobs.find_by_user(clerk_user_id, limit=100)
         # Sort by created_at descending (most recent first)
         user_jobs.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return {"jobs": user_jobs}

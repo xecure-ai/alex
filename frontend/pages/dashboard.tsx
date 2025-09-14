@@ -1,5 +1,5 @@
 import { useUser, useAuth } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { API_URL } from "../lib/config";
 import Layout from "../components/Layout";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -65,7 +65,7 @@ export default function Dashboard() {
   const [internationalTarget, setInternationalTarget] = useState(0);
 
   // Calculate portfolio summary
-  const calculatePortfolioSummary = () => {
+  const calculatePortfolioSummary = useCallback(() => {
     let totalValue = 0;
     const assetClassBreakdown: Record<string, number> = {
       equity: 0,
@@ -100,7 +100,7 @@ export default function Dashboard() {
     });
 
     return { totalValue, assetClassBreakdown };
-  };
+  }, [accounts, positions, instruments]);
 
   // Load user data and accounts
   useEffect(() => {
@@ -173,14 +173,14 @@ export default function Dashboard() {
 
             if (positionsResponse.ok) {
               const positionsData = await positionsResponse.json();
-              // API returns positions array directly, not wrapped in object
-              positionsMap[account.id] = Array.isArray(positionsData) ? positionsData : [];
+              // API returns positions in a positions key
+              positionsMap[account.id] = positionsData.positions || [];
 
-              // Store instrument data
-              if (positionsData.instruments) {
-                Object.entries(positionsData.instruments).forEach(([symbol, instrument]) => {
-                  instrumentsMap[symbol] = instrument as Instrument;
-                });
+              // Store instrument data from each position
+              for (const position of positionsData.positions || []) {
+                if (position.instrument) {
+                  instrumentsMap[position.symbol] = position.instrument as Instrument;
+                }
               }
             }
           }
@@ -203,6 +203,73 @@ export default function Dashboard() {
 
     loadData();
   }, [userLoaded, user, getToken]);
+
+  // Listen for analysis completion events to refresh data
+  useEffect(() => {
+    if (!userLoaded || !user) return;
+
+    const handleAnalysisCompleted = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+
+        console.log('Analysis completed - refreshing dashboard data...');
+
+        // Refresh accounts to get latest prices
+        const accountsResponse = await fetch(`${API_URL}/api/accounts`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
+
+        if (accountsResponse.ok) {
+          const accountsData = await accountsResponse.json();
+          setAccounts(accountsData.accounts || []);
+
+          // Load positions for each account
+          const positionsData: Record<string, Position[]> = {};
+          const instrumentsData: Record<string, Instrument> = {};
+
+          for (const account of accountsData.accounts || []) {
+            const positionsResponse = await fetch(
+              `${API_URL}/api/accounts/${account.id}/positions`,
+              {
+                headers: {
+                  "Authorization": `Bearer ${token}`,
+                },
+              }
+            );
+
+            if (positionsResponse.ok) {
+              const data = await positionsResponse.json();
+              positionsData[account.id] = data.positions || [];
+
+              // Extract instruments from positions
+              for (const position of data.positions || []) {
+                if (position.instrument) {
+                  instrumentsData[position.symbol] = position.instrument;
+                }
+              }
+            }
+          }
+
+          setPositions(positionsData);
+          setInstruments(instrumentsData);
+
+          // Portfolio will be recalculated on render
+        }
+      } catch (err) {
+        console.error("Error refreshing dashboard data:", err);
+      }
+    };
+
+    // Listen for the completion event
+    window.addEventListener('analysis:completed', handleAnalysisCompleted);
+
+    return () => {
+      window.removeEventListener('analysis:completed', handleAnalysisCompleted);
+    };
+  }, [userLoaded, user, getToken, calculatePortfolioSummary]);
 
   // Save user settings
   const handleSaveSettings = async () => {

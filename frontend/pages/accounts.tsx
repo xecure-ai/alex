@@ -71,7 +71,8 @@ export default function Accounts() {
                 }
               );
               if (positionsResponse.ok) {
-                const positions = await positionsResponse.json();
+                const data = await positionsResponse.json();
+                const positions = data.positions || [];
                 console.log(`Loaded ${positions.length} positions for account ${account.id}`);
                 return { ...account, positions };
               }
@@ -94,6 +95,22 @@ export default function Accounts() {
 
   useEffect(() => {
     loadAccounts();
+  }, [loadAccounts]);
+
+  // Listen for analysis completion events to refresh data
+  useEffect(() => {
+    const handleAnalysisCompleted = () => {
+      // Refresh accounts to get updated prices after analysis
+      console.log('Analysis completed - refreshing accounts...');
+      loadAccounts();
+    };
+
+    // Listen for the completion event
+    window.addEventListener('analysis:completed', handleAnalysisCompleted);
+
+    return () => {
+      window.removeEventListener('analysis:completed', handleAnalysisCompleted);
+    };
   }, [loadAccounts]);
 
   const populateTestData = async () => {

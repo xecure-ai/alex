@@ -234,6 +234,8 @@ resource "aws_lambda_function" "planner" {
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
+      POLYGON_API_KEY    = var.polygon_api_key
+      POLYGON_PLAN       = var.polygon_plan
     }
   }
   

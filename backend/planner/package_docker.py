@@ -58,15 +58,17 @@ def package_lambda():
             "--entrypoint", "/bin/bash",
             "public.ecr.aws/lambda/python:3.12",
             "-c",
-            """cd /build && pip install --target ./package --platform manylinux2014_x86_64 --only-binary=:all: -r requirements.txt && pip install --target ./package --no-deps /database"""
+            """cd /build && pip install --target ./package -r requirements.txt && pip install --target ./package --no-deps /database"""
         ]
         
         run_command(docker_cmd)
         
-        # Copy Lambda handler, agent, and templates
+        # Copy Lambda handler and Python modules
         shutil.copy(planner_dir / "lambda_handler.py", package_dir)
         shutil.copy(planner_dir / "agent.py", package_dir)
         shutil.copy(planner_dir / "templates.py", package_dir)
+        shutil.copy(planner_dir / "market.py", package_dir)
+        shutil.copy(planner_dir / "prices.py", package_dir)
         
         # Create the zip file
         zip_path = planner_dir / "planner_lambda.zip"

@@ -77,7 +77,12 @@ class Users(BaseModel):
 class Instruments(BaseModel):
     """Instruments table operations"""
     table_name = 'instruments'
-    
+
+    def find_all(self, limit: int = None, offset: int = 0) -> List[Dict]:
+        """Find all instruments - no limit by default for autocomplete"""
+        sql = f"SELECT * FROM {self.table_name} ORDER BY symbol"
+        return self.db.query(sql, [])
+
     def find_by_symbol(self, symbol: str) -> Optional[Dict]:
         """Find instrument by symbol"""
         sql = f"SELECT * FROM {self.table_name} WHERE symbol = :symbol"
@@ -155,7 +160,7 @@ class Positions(BaseModel):
     def find_by_account(self, account_id: str) -> List[Dict]:
         """Find all positions in an account"""
         sql = f"""
-            SELECT p.*, i.name as instrument_name, i.instrument_type
+            SELECT p.*, i.name as instrument_name, i.instrument_type, i.current_price
             FROM {self.table_name} p
             JOIN instruments i ON p.symbol = i.symbol
             WHERE p.account_id = :account_id::uuid

@@ -27,7 +27,12 @@ def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
     for account in portfolio_data.get("accounts", []):
         account_name = account.get("name", "Unknown")
         account_type = account.get("type", "unknown")
-        cash = float(account.get("cash_balance", 0))
+        # Handle None or missing cash_balance
+        cash_balance = account.get("cash_balance")
+        if cash_balance is None or cash_balance == "":
+            cash = 0.0
+        else:
+            cash = float(cash_balance)
 
         if account_name not in account_totals:
             account_totals[account_name] = {"value": 0, "type": account_type, "positions": []}
@@ -39,7 +44,13 @@ def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
             symbol = position.get("symbol")
             quantity = float(position.get("quantity", 0))
             instrument = position.get("instrument", {})
-            price = float(instrument.get("current_price", 1.0))
+            # Handle None or missing current_price
+            current_price = instrument.get("current_price")
+            if current_price is None or current_price == "":
+                price = 1.0  # Default price if not available
+                logger.warning(f"Charter: No price for {symbol}, using default of 1.0")
+            else:
+                price = float(current_price)
             value = quantity * price
 
             position_values[symbol] = position_values.get(symbol, 0) + value
@@ -79,7 +90,13 @@ def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
             symbol = position.get("symbol")
             quantity = float(position.get("quantity", 0))
             instrument = position.get("instrument", {})
-            price = float(instrument.get("current_price", 1.0))
+            # Handle None or missing current_price
+            current_price = instrument.get("current_price")
+            if current_price is None or current_price == "":
+                price = 1.0  # Default price if not available
+                logger.warning(f"Charter: No price for {symbol}, using default of 1.0")
+            else:
+                price = float(current_price)
             value = quantity * price
             
             # Aggregate asset classes
@@ -98,7 +115,10 @@ def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:
                 sectors[sector] = sectors.get(sector, 0) + sector_value
     
     # Add cash to asset classes
-    total_cash = sum(float(acc.get("cash_balance", 0)) for acc in portfolio_data.get("accounts", []))
+    total_cash = sum(
+        float(acc.get("cash_balance")) if acc.get("cash_balance") is not None else 0
+        for acc in portfolio_data.get("accounts", [])
+    )
     if total_cash > 0:
         asset_classes["cash"] = asset_classes.get("cash", 0) + total_cash
     

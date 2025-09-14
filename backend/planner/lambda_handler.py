@@ -23,6 +23,7 @@ from src import Database
 
 from templates import ORCHESTRATOR_INSTRUCTIONS
 from agent import create_agent, handle_missing_instruments, load_portfolio_summary
+from market import update_instrument_prices
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -44,7 +45,11 @@ async def run_orchestrator(job_id: str) -> None:
         
         # Handle missing instruments first (non-agent pre-processing)
         await asyncio.to_thread(handle_missing_instruments, job_id, db)
-        
+
+        # Update instrument prices after tagging
+        logger.info("Planner: Updating instrument prices from market data")
+        await asyncio.to_thread(update_instrument_prices, job_id, db)
+
         # Load portfolio summary (just statistics, not full data)
         portfolio_summary = await asyncio.to_thread(load_portfolio_summary, job_id, db)
         

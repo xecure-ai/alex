@@ -224,6 +224,20 @@ test_full.py # the remote test
    - Orchestrator calls all agents including InstrumentTagger
    - Complete portfolio analysis flow
 
+**Deployment Steps** (for user to complete):
+- [ ] **Package and deploy all agents**:
+  ```bash
+  cd /Users/ed/projects/alex/backend
+  uv run deploy_all_lambdas.py --package
+  ```
+- [ ] **Test with real analysis** to verify prices are updated before agents run
+
+**Benefits**:
+- Charter agent now calculates accurate portfolio values
+- All analysis based on current market prices
+- Single efficient API call to Yahoo Finance
+- Graceful fallback for any symbols that fail
+
 ### Agent Communication Flow
 ```
 User Request → API → SQS → Planner (Lambda)
@@ -543,19 +557,19 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 
 ### Step 5: Advisor Team & Analysis Trigger
 **5a. Advisor Team page (pages/advisor-team.tsx)**
-- [ ] Agent cards in grid layout (4 visible agents):
+- [x] Agent cards in grid layout (4 visible agents):
   - 🎯 Financial Planner (orchestrator) - purple accent - "Coordinates your financial analysis"
   - 📊 Portfolio Analyst (reporter) - blue - "Analyzes your holdings and performance"
   - 📈 Chart Specialist (charter) - green - "Visualizes your portfolio composition"  
   - 🎯 Retirement Planner (retirement) - orange - "Projects your retirement readiness"
-- [ ] Note: Market Researcher (tagger) runs invisibly in background when needed
-- [ ] Previous analyses list:
+- [x] Note: Market Researcher (tagger) runs invisibly in background when needed
+- [x] Previous analyses list:
   - Job ID, date, status, view button
   - Click to load analysis on Analysis page
-- [ ] "Start New Analysis" button (prominent, purple #753991)
+- [x] "Start New Analysis" button (prominent, purple #753991)
 
 **5b. Analysis progress visualization**
-- [ ] After clicking "Start New Analysis":
+- [x] After clicking "Start New Analysis":
   - Create job → POST /api/analyze
   - Show progress panel with 4 agent avatars
   - Poll /api/jobs/{job_id} every 2 seconds
@@ -569,26 +583,9 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
   - Upon completion: auto-navigate to Analysis page
 
 **5c. Error handling**
-- [ ] If job fails: show error panel with details
-- [ ] Retry button to trigger new analysis
-- [ ] Show last successful analysis if available
-
-**5d. Analysis trigger testing & documentation**
-- [ ] Create `ed_test_step5.md` with:
-  - Prerequisites (ensure agents are deployed from Part 6)
-  - Test checklist:
-    1. View Advisor Team page with agent cards
-    2. Click "Start New Analysis" 
-    3. Watch progress visualization (agents lighting up)
-    4. Verify SQS message sent
-    5. Monitor job progress (2-3 minutes)
-    6. Auto-redirect to Analysis page on completion
-    7. Test error scenario (if possible)
-  - AWS Console checks:
-    - SQS messages
-    - Lambda invocations
-    - CloudWatch logs for each agent
-  - Database queries to check job status
+- [x] If job fails: show error panel with details
+- [x] Retry button to trigger new analysis
+- [x] Show last successful analysis if available
 
 ### Step 6: Analysis Results Page
 **6a. Analysis page structure (pages/analysis.tsx)**
@@ -616,25 +613,51 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
   ```
 
 **6c. Interactive charts using Recharts**
-- [ ] Render charter agent's JSON output as:
+- [x] Render charter agent's JSON output as:
   - Pie charts for allocations (asset class, region, sector)
   - Bar charts for account comparisons
   - Line charts for retirement projections
-- [ ] Color-coded with our palette
+- [x] Color-coded with our palette
 - [ ] Hover tooltips with details
 - [ ] Responsive sizing
 
-**6d. Analysis results testing & documentation**
-- [ ] Create `ed_test_step6.md` with:
-  - Test checklist:
-    1. View completed analysis
-    2. Switch between tabs (Overview, Charts, Retirement)
-    3. Verify markdown rendering (headers, lists, tables)
-    4. Interact with charts (hover, tooltips)
-    5. Check responsive design on mobile view
-    6. Print preview looks reasonable
-  - Visual checks for professional appearance
-  - Performance metrics (page load time)
+**6d. Real-Time Market Data Integration**
+
+**Objective**: Update the Planner to fetch real-time stock prices using yfinance after the tagger runs, ensuring all agents work with current market data.
+
+- [x] **Add yfinance dependency** to planner (`uv add yfinance`)
+- [x] **Create market.py module** with price fetching logic
+  - Uses `yf.download()` for single batch API call
+  - Handles all tickers in one request (no chunking needed for <100 symbols)
+  - Includes 3 retry attempts with exponential backoff using tenacity
+  - Updates instruments table with current prices
+  - Falls back to default price of 1.0 if fetch fails
+- [x] **Integrate into planner workflow**
+  - Runs automatically after `handle_missing_instruments` (tagger)
+  - Updates prices before portfolio summary is loaded
+  - Non-blocking: continues analysis even if price fetch fails
+- [x] **Use set() for deduplication**
+  - Ensures each symbol is only fetched once even if in multiple accounts
+- [x] **Update package_docker.py**
+  - Added market.py to files copied into Lambda package
+  - yfinance and dependencies included via requirements export
+- [x] **Test locally**
+  - Successfully fetched prices for 14 symbols
+  - Verified database updates with real prices (e.g., AAPL: $234.07, MSFT: $509.90)
+
+**6e. CHANGE IN PLAN FOR MARKET DATA - switch to polygon.io**
+- yfinance is too unstable and the dependencies are too large. Different approach is needed
+- see reference implementation in backend/planner/market_new.py
+- [x] First, uv remove yfinance, and uv add polygon-api-client
+- [x] Next, see implementation in backend/planner/prices.py and check it carefully - this is taken from another project
+- [x] If it's OK, update the code in market.py to use prices.get_share_price()
+- [x] Test locally with test_market.py (I have populated the .env with the 2 secrets)
+- [x] Update the package_docker: remove the yfinance dependencies, include the polygon dependency (can we make this all binary again?) and include prices.py
+- [x] Tell me (the user, Ed) how I need to change the tfvars file in part 6 so that it has these 2 secrets, and make the change
+- [x] Tell me to deploy and test remotely
+- [x] When it's confirmed to be successful, we need to update the guide 6 to tell students to obtain a polygon key and make the changes in .env and tfvars, and we need to update .env.example and tfvars.example
+- [x] Fix the problem with portfolio values not updating, and with runs not refreshing after completing 
+- [ ] Test and resolve the 1 remaining issue with Charts not displaying
 
 ### Step 7: Polish & Production Readiness
 **7a. UI/UX refinements**
@@ -709,21 +732,31 @@ Solution: Use Docker with the official AWS Lambda Python runtime image.
 
 ## Critical API Architecture Understanding
 
-### Local vs Deployed Environment Configuration
-**Local Setup:**
-- Frontend on `localhost:3000` backend API on `localhost:8000`
-- Frontend `.env.local` has `NEXT_PUBLIC_API_URL=http://localhost:8000` for local development
-- Backend reads from root `.env` file
+### API URL Configuration (FINAL APPROACH)
+**Frontend uses `lib/config.ts` for all API calls:**
+```javascript
+// All pages import: import { API_URL } from "../lib/config"
+// Then use: fetch(`${API_URL}/api/endpoint`)
+```
 
-**Deployment Process (deploy.py) - FIXED v2:**
-1. **Packages Lambda** (`package_docker.py`)
-2. **Deploys Infrastructure** via Terraform to get API Gateway URL
-3. **Creates `.env.production.local`** with API URL (highest priority for prod builds)
-4. **Builds Frontend** with `NODE_ENV=production` (uses `.env.production.local`)
-5. **Uploads Frontend to S3**
-6. **Displays deployment info** without modifying `.env.local`
+**How it works:**
+- **Local development**: Detects `localhost` → returns `http://localhost:8000`
+- **Production**: Returns empty string → uses relative paths (CloudFront routes `/api/*` to API Gateway)
+- **No environment variables needed** in frontend for API URL
 
-**Key Fix:**
-- Local dev (`npm run dev`): Uses `.env.local` → `localhost:8000`
-- Deploy build: Creates `.env.production.local` → AWS API URL
-- No interference: `.env.production.local` only loaded when `NODE_ENV=production`
+### Authentication Pattern
+**All API calls require JWT token from Clerk:**
+```javascript
+const { getToken } = useAuth();
+const token = await getToken();
+const response = await fetch(`${API_URL}/api/endpoint`, {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+```
+
+### Deployment Process (deploy.py)
+1. **Package Lambda**: `cd backend/api && uv run package_docker.py`
+2. **Deploy Infrastructure**: Terraform creates API Gateway, Lambda, S3, CloudFront
+3. **Build Frontend**: NextJS static export (uses `lib/config.ts`, no env vars needed)
+4. **Upload to S3**: Static files served via CloudFront
+5. **Result**: CloudFront serves frontend and proxies `/api/*` to API Gateway
