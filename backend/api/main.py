@@ -11,9 +11,10 @@ from datetime import datetime
 from decimal import Decimal
 import uuid
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, ValidationError
 import boto3
 from mangum import Mangum
 from dotenv import load_dotenv
@@ -52,6 +53,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Custom exception handlers for better error messages
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """Handle Pydantic validation errors with user-friendly messages"""
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid input data. Please check your request and try again."}
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with improved messages"""
+    # Map technical errors to user-friendly messages
+    user_friendly_messages = {
+        401: "Your session has expired. Please sign in again.",
+        403: "You don't have permission to access this resource.",
+        404: "The requested resource was not found.",
+        429: "Too many requests. Please slow down and try again later.",
+        500: "An internal error occurred. Please try again later.",
+        503: "The service is temporarily unavailable. Please try again later."
+    }
+
+    message = user_friendly_messages.get(exc.status_code, exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": message}
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected errors gracefully"""
+    logger.error(f"Unexpected error: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected error occurred. Our team has been notified."}
+    )
 
 # Initialize services
 db = Database()
@@ -149,7 +187,7 @@ async def get_or_create_user(
 
     except Exception as e:
         logger.error(f"Error in get_or_create_user: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to load user profile")
 
 @app.put("/api/user")
 async def update_user(user_update: UserUpdate, clerk_user_id: str = Depends(get_current_user_id)):

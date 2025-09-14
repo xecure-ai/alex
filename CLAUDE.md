@@ -664,6 +664,7 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [ ] Responsive design for mobile
 - [ ] Favicon and page titles
 - [ ] 404 and error pages
+- [ ] Do an `npm run build` and fix any build errors
 
 **7b. Security hardening**
 - [ ] JWT expiry handling → redirect to sign-in
@@ -675,14 +676,15 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 **7c. Error handling & monitoring**
 - [ ] Global error boundary in React
 - [ ] API error responses with user-friendly messages
+- [ ] Do an `npm run build` and fix any build errors
 
 **8. Guide 7 documentation**
-- [ ] Step-by-step setup instructions
+- [ ] Review guides 5-6 for a refresher on the style
+- [ ] Write guide 7 as step-by-step setup instructions - test local then deploy then test remote
 - [ ] **Include mention of Swagger docs at http://localhost:8000/docs for API exploration**
 - [ ] Architecture diagram
 - [ ] Troubleshooting section
 - [ ] Cost considerations
-- [ ] Deployment checklist
 
 
 ## Part 8: Observability, Monitoring & Security (NOT STARTED)

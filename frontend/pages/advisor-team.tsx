@@ -4,6 +4,7 @@ import { useAuth } from '@clerk/nextjs';
 import Layout from '../components/Layout';
 import { API_URL } from '../lib/config';
 import { emitAnalysisCompleted, emitAnalysisFailed, emitAnalysisStarted } from '../lib/events';
+import Head from 'next/head';
 
 interface Agent {
   icon: string;
@@ -261,7 +262,11 @@ export default function AdvisorTeam() {
   };
 
   return (
-    <Layout>
+    <>
+      <Head>
+        <title>Advisor Team - Alex AI Financial Advisor</title>
+      </Head>
+      <Layout>
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white rounded-lg shadow px-8 py-6 mb-8">
@@ -408,6 +413,7 @@ export default function AdvisorTeam() {
           </div>
         </div>
       </div>
-    </Layout>
+      </Layout>
+    </>
   );
 }

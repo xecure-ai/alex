@@ -145,7 +145,7 @@ def start_frontend():
         ["npm", "run", "dev"],
         cwd=frontend_dir,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # Combine stderr with stdout
         text=True,
         bufsize=1
     )
@@ -153,15 +153,36 @@ def start_frontend():
 
     # Wait for frontend to start
     print("  Waiting for frontend to start...")
-    for _ in range(30):  # 30 second timeout
-        try:
-            import httpx
-            response = httpx.get("http://localhost:3000")
-            if response.status_code == 200 or response.status_code == 404:  # 404 is OK for root
+    import httpx
+    import select
+
+    started = False
+    for i in range(30):  # 30 second timeout
+        # Check for any output from the process using non-blocking read
+        if proc.stdout:
+            ready, _, _ = select.select([proc.stdout], [], [], 0)
+            if ready:
+                line = proc.stdout.readline()
+                if line:
+                    print(f"    Frontend: {line.strip()}")
+                    # NextJS dev server prints "Ready" when it's ready
+                    if "ready" in line.lower() or "compiled" in line.lower() or "started server" in line.lower():
+                        started = True
+
+        # Also try to connect
+        if started or i > 5:  # Start checking after 5 seconds or when we see "ready"
+            try:
+                response = httpx.get("http://localhost:3000", timeout=1)
                 print("  ✅ Frontend running at http://localhost:3000")
                 return proc
-        except:
-            time.sleep(1)
+            except httpx.ConnectError:
+                pass  # Server not ready yet
+            except:
+                # Any other response means server is up
+                print("  ✅ Frontend running at http://localhost:3000")
+                return proc
+
+        time.sleep(1)
 
     print("  ❌ Frontend failed to start")
     cleanup()

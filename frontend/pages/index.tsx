@@ -1,8 +1,13 @@
 import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Head from "next/head";
 
 export default function Home() {
   return (
+    <>
+      <Head>
+        <title>Alex AI Financial Advisor - Intelligent Portfolio Management</title>
+      </Head>
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-gray-50">
       {/* Navigation */}
       <nav className="px-8 py-6 bg-white shadow-sm">
@@ -152,5 +157,6 @@ export default function Home() {
         </p>
       </footer>
     </div>
+    </>
   );
 }

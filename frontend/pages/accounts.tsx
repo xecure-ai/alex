@@ -4,6 +4,8 @@ import { useRouter } from "next/router";
 import Layout from "../components/Layout";
 import ConfirmModal from "../components/ConfirmModal";
 import { API_URL } from "../lib/config";
+import { SkeletonTable } from "../components/Skeleton";
+import Head from "next/head";
 
 interface Position {
   id: string;
@@ -263,7 +265,11 @@ export default function Accounts() {
   };
 
   return (
-    <Layout>
+    <>
+      <Head>
+        <title>Accounts - Alex AI Financial Advisor</title>
+      </Head>
+      <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="flex justify-between items-center mb-6">
@@ -313,9 +319,7 @@ export default function Accounts() {
           )}
 
           {loading ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600">Loading accounts...</p>
-            </div>
+            <SkeletonTable rows={3} />
           ) : accounts.length === 0 ? (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-6 text-center">
               <p className="text-primary font-semibold mb-2">
@@ -550,6 +554,7 @@ export default function Accounts() {
           isProcessing={resettingAccounts || deletingAccountId !== null}
         />
       </div>
-    </Layout>
+      </Layout>
+    </>
   );
 }

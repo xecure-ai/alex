@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import Layout from '../components/Layout';
 import { API_URL } from '../lib/config';
+import Head from 'next/head';
 
 interface Job {
   id: string;
@@ -481,7 +482,11 @@ export default function Analysis() {
   };
 
   return (
-    <Layout>
+    <>
+      <Head>
+        <title>Analysis - Alex AI Financial Advisor</title>
+      </Head>
+      <Layout>
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
@@ -548,6 +553,7 @@ export default function Analysis() {
           </div>
         </div>
       </div>
-    </Layout>
+      </Layout>
+    </>
   );
 }

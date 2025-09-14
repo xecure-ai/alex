@@ -2,6 +2,7 @@ import { useUser, UserButton, Protect } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ReactNode } from "react";
+import PageTransition from "./PageTransition";
 
 interface LayoutProps {
   children: ReactNode;
@@ -137,7 +138,9 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* Main Content */}
         <main className="flex-1">
-          {children}
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
 
         {/* Footer */}

@@ -3,6 +3,9 @@ import { useEffect, useState, useCallback } from "react";
 import { API_URL } from "../lib/config";
 import Layout from "../components/Layout";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
+import { showToast } from "../components/Toast";
+import Head from "next/head";
 
 interface UserData {
   clerk_user_id: string;
@@ -275,6 +278,35 @@ export default function Dashboard() {
   const handleSaveSettings = async () => {
     if (!userData) return;
 
+    // Input validation
+    if (!displayName || displayName.trim().length === 0) {
+      showToast('error', 'Display name is required');
+      return;
+    }
+
+    if (yearsUntilRetirement < 0 || yearsUntilRetirement > 50) {
+      showToast('error', 'Years until retirement must be between 0 and 50');
+      return;
+    }
+
+    if (targetRetirementIncome < 0) {
+      showToast('error', 'Target retirement income must be positive');
+      return;
+    }
+
+    // Validate allocation percentages
+    const equityFixed = equityTarget + fixedIncomeTarget;
+    if (Math.abs(equityFixed - 100) > 0.01) {
+      showToast('error', 'Equity and Fixed Income must sum to 100%');
+      return;
+    }
+
+    const regionTotal = northAmericaTarget + internationalTarget;
+    if (Math.abs(regionTotal - 100) > 0.01) {
+      showToast('error', 'North America and International must sum to 100%');
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -283,7 +315,7 @@ export default function Dashboard() {
       if (!token) throw new Error("Not authenticated");
 
       const updateData = {
-        display_name: displayName,
+        display_name: displayName.trim(),
         years_until_retirement: yearsUntilRetirement,
         target_retirement_income: targetRetirementIncome,
         asset_class_targets: {
@@ -312,17 +344,12 @@ export default function Dashboard() {
       const updatedUser = await response.json();
       setUserData(updatedUser);
 
-      // Show success feedback
-      const originalError = error;
-      setError(null);
-      setTimeout(() => {
-        if (error === null) setError("Settings saved successfully!");
-        setTimeout(() => setError(originalError), 3000);
-      }, 100);
+      // Show success toast
+      showToast('success', 'Settings saved successfully!');
 
     } catch (err) {
       console.error("Error saving settings:", err);
-      setError(err instanceof Error ? err.message : "Failed to save settings");
+      showToast('error', err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setSaving(false);
     }
@@ -342,12 +369,32 @@ export default function Dashboard() {
   const COLORS = ['#209DD7', '#753991', '#FFB707', '#062147', '#10B981'];
 
   return (
-    <Layout>
+    <>
+      <Head>
+        <title>Dashboard - Alex AI Financial Advisor</title>
+      </Head>
+      <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold text-dark mb-8">Dashboard</h1>
 
-        {/* Portfolio Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {loading ? (
+          // Loading skeleton
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-white rounded-lg shadow p-6">
+                  <Skeleton className="h-4 w-3/4 mx-auto mb-3" />
+                  <Skeleton className="h-8 w-1/2 mx-auto" />
+                </div>
+              ))}
+            </div>
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        ) : (
+          <>
+            {/* Portfolio Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <h3 className="text-sm font-medium text-gray-500 mb-3">Total Portfolio Value</h3>
             <p className="text-3xl font-bold text-primary">
@@ -604,7 +651,10 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+          </>
+        )}
       </div>
-    </Layout>
+      </Layout>
+    </>
   );
 }
