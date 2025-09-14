@@ -44,3 +44,32 @@ variable "polygon_plan" {
   type        = string
   default     = "free"
 }
+
+# LangFuse observability variables (optional)
+variable "langfuse_public_key" {
+  description = "LangFuse public key for observability (optional)"
+  type        = string
+  default     = ""
+  sensitive   = false
+}
+
+variable "langfuse_secret_key" {
+  description = "LangFuse secret key for observability (optional)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "langfuse_host" {
+  description = "LangFuse host URL (optional)"
+  type        = string
+  default     = "https://us.cloud.langfuse.com"
+}
+
+# OpenAI API key for tracing (required for OpenAI Agents SDK tracing)
+variable "openai_api_key" {
+  description = "OpenAI API key for enabling tracing in OpenAI Agents SDK"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

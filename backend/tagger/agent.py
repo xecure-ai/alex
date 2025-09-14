@@ -20,12 +20,50 @@ from templates import TAGGER_INSTRUCTIONS, CLASSIFICATION_PROMPT
 # Load environment variables (dotenv automatically searches up the tree)
 load_dotenv(override=True)
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Configure logging - use root logger for Lambda compatibility
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # Get configuration
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "us-west-2")
+
+# Setup LangFuse observability if configured
+LANGFUSE_CLIENT = None
+
+def setup_observability():
+    """Set up LangFuse observability if configured"""
+    global LANGFUSE_CLIENT
+
+    # Debug logging
+    logger.info(f"setup_observability called")
+    logger.info(f"LANGFUSE_SECRET_KEY exists: {bool(os.getenv('LANGFUSE_SECRET_KEY'))}")
+    logger.info(f"OPENAI_API_KEY exists: {bool(os.getenv('OPENAI_API_KEY'))}")
+
+    if os.getenv("LANGFUSE_SECRET_KEY"):
+        try:
+            import logfire
+            from langfuse import get_client
+
+            logfire.configure(
+                service_name='alex_tagger_agent',
+                send_to_logfire=False
+            )
+            logfire.instrument_openai_agents()
+
+            # Store client globally for flushing later
+            LANGFUSE_CLIENT = get_client()
+            LANGFUSE_CLIENT.auth_check()
+
+            logger.info("LangFuse observability enabled")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to setup LangFuse observability: {e}")
+            return False
+    return False
+
+# Initialize observability on module load
+OBSERVABILITY_ENABLED = setup_observability()
 
 
 class AllocationBreakdown(BaseModel):
@@ -170,32 +208,41 @@ async def classify_instrument(
     Returns:
         Complete classification with allocations
     """
-    # Initialize the model
-    model_id = BEDROCK_MODEL_ID
+    try:
+        # Initialize the model
+        model_id = BEDROCK_MODEL_ID
 
-    # Set region for LiteLLM Bedrock calls
-    bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
-    os.environ["AWS_REGION_NAME"] = bedrock_region
+        # Set region for LiteLLM Bedrock calls
+        bedrock_region = os.getenv("BEDROCK_REGION", "us-west-2")
+        os.environ["AWS_REGION_NAME"] = bedrock_region
 
-    model = LitellmModel(model=f"bedrock/{model_id}")
+        model = LitellmModel(model=f"bedrock/{model_id}")
 
-    # Create the classification task
-    task = CLASSIFICATION_PROMPT.format(symbol=symbol, name=name, instrument_type=instrument_type)
+        # Create the classification task
+        task = CLASSIFICATION_PROMPT.format(symbol=symbol, name=name, instrument_type=instrument_type)
 
-    # Run the agent (following gameplan pattern exactly)
-    with trace(f"Classify {symbol}"):
-        agent = Agent(
-            name="InstrumentTagger",
-            instructions=TAGGER_INSTRUCTIONS,
-            model=model,
-            tools=[],  # No tools needed for classification
-            output_type=InstrumentClassification,  # Specify structured output type
-        )
+        # Run the agent (following gameplan pattern exactly)
+        with trace(f"Classify {symbol}"):
+            agent = Agent(
+                name="InstrumentTagger",
+                instructions=TAGGER_INSTRUCTIONS,
+                model=model,
+                tools=[],  # No tools needed for classification
+                output_type=InstrumentClassification,  # Specify structured output type
+            )
 
-        result = await Runner.run(agent, input=task, max_turns=5)
+            result = await Runner.run(agent, input=task, max_turns=5)
 
-        # Extract the structured output from RunResult using final_output_as
-        return result.final_output_as(InstrumentClassification)
+            # Extract the structured output from RunResult using final_output_as
+            return result.final_output_as(InstrumentClassification)
+    finally:
+        # Flush LangFuse traces before Lambda terminates
+        if LANGFUSE_CLIENT:
+            try:
+                LANGFUSE_CLIENT.flush()
+                logger.debug("LangFuse traces flushed")
+            except Exception as e:
+                logger.warning(f"Failed to flush LangFuse traces: {e}")
 
 
 async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassification]:

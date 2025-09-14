@@ -665,11 +665,259 @@ We may not need to terraform directory at all for this part - it might just be a
 - [ ] Write Section 5: Explainability. First, introduce the topic of Explainability. Make the case that this was a serious concern in the early days of Deep Learning (black box deep neural networks), but in many ways modern LLMs and Agentic systems help address the issue of explainable AI with Generative AI that explains its reasoning.
 - [ ] As an example, show the students how they can edit the structured outputs coming from the Tagger agent to include its rationale for why it gave the breakdowns it did. This rationale wouldn't get returned to the planner agent, but instead log it. Be sure that the rationale is the first field in the structured output, so the LLM needs to generate the rationale BEFORE it generates the answer. Don't make this code change in the repo; just tell the students how to do it.
 
-### Section 6: Observability
-- [ ] First, read this page fully: https://langfuse.com/integrations/frameworks/openai-agents
-- [ ] Make changes to the repo so that IF the langfuse cloud keys are set in the .env / tf, then each of the 5 main agents (reporter, planner, tagger, retirement, charter) will use langfuse for traces with openai agents sdk as documented. Make Langfuse look as awesome as possible - add all tracing so that this comes to life. If the keys are not set, then your code changes should have no effect. That way we can include this code in the repo, and it won't make any difference for students until they add the keys
-- [ ] Write Section 6: Observability. Tell the student to set up a free account with langfuse, then add the variable to Terraform (in the 6_agents folder?) then terraform apply. Then sign into LangFlow, and show them what to Observe
-- [ ] If possible, have this show LLM costs/tokens as well (if not, show them this in the AWS console)
+### Section 6: Observability with LangFuse THIS IS THE NEXT STEP TO DO!
+
+#### Research Findings - LangFuse + OpenAI Agents SDK Integration
+
+**References:**
+- Official LangFuse Documentation: https://langfuse.com/integrations/frameworks/openai-agents
+- OpenAI Agents SDK Docs: https://openai.github.io/openai-agents-python/
+- Strategic Analysis (July 2025): https://thinhdanggroup.github.io/agent-observability/
+
+##### How the Integration Actually Works
+
+LangFuse does NOT directly integrate with OpenAI Agents SDK. Instead, it uses a chain of technologies:
+
+```
+OpenAI Agents SDK → Pydantic Logfire (instrumentation) → OpenTelemetry → LangFuse
+```
+
+**Key Discovery:** There is NO `openai-agents[langfuse]` package extra. The integration requires separate packages:
+
+```bash
+# Required packages (corrected - pydantic-ai now includes logfire by default)
+pip install openai-agents langfuse pydantic-ai
+# Or with uv:
+uv add openai-agents langfuse pydantic-ai
+```
+
+##### Implementation Pattern
+
+```python
+import os
+import logfire
+from langfuse import get_client
+from agents import Agent, Runner, trace
+
+# Configure Logfire to send traces to LangFuse (not Logfire cloud)
+logfire.configure(
+    service_name='alex_financial_advisor',
+    send_to_logfire=False  # Critical: Don't send to Logfire cloud
+)
+
+# Instrument OpenAI Agents SDK
+logfire.instrument_openai_agents()
+
+# Initialize LangFuse client
+langfuse = get_client()
+langfuse.auth_check()  # Verify connection
+
+# Now your agents are instrumented
+agent = Agent(name="Assistant", instructions="You are a helpful assistant")
+result = await Runner.run(agent, "What is the meaning of life?")
+```
+
+##### What Gets Traced
+- Agent planning and execution phases
+- Function tool calls with arguments and results
+- Multi-agent handoffs and delegation
+- Token usage and estimated costs
+- Latency metrics per step
+- Errors with full Python tracebacks
+- Correlation IDs for distributed tracing
+
+##### Lambda-Specific Considerations
+
+**Challenges:**
+1. **Cold Start Overhead**: OpenTelemetry + Logfire + LangFuse adds ~200-500ms initialization
+2. **Background Processing**: LangFuse optimized for background trace sending (problematic in Lambda's stateless environment)
+3. **Trace Flushing**: Lambda may terminate before traces are sent to LangFuse
+
+**Solutions:**
+- Ensure proper flushing before Lambda returns
+- Consider Lambda SnapStart or Provisioned Concurrency for production
+- Use environment variables for configuration (no config files)
+
+#### Implementation Gameplan
+
+##### Step 1: Ed Sets Up LangFuse Account
+- [ ] Go to https://cloud.langfuse.com and create free account
+- [ ] Create organization (required first step):
+  - Organization name: Your name or company
+  - Organization type: Personal organization
+  - Members: Just yourself
+- [ ] Create new project called "alex-financial-advisor"
+- [ ] Navigate to Settings → API Keys
+- [ ] Create new API keys and save:
+  - `LANGFUSE_PUBLIC_KEY`
+  - `LANGFUSE_SECRET_KEY`
+  - `LANGFUSE_HOST` (usually https://cloud.langfuse.com)
+
+##### Step 2: Add to Local .env
+- [ ] Add to `/Users/ed/projects/alex/.env`:
+```bash
+# LangFuse Observability (optional)
+LANGFUSE_PUBLIC_KEY=pk-lf-xxx
+LANGFUSE_SECRET_KEY=sk-lf-xxx
+LANGFUSE_HOST=https://cloud.langfuse.com
+```
+
+##### Step 3: Create Test Script
+- [ ] Create `backend/test_langfuse.py`:
+```python
+import os
+import asyncio
+from dotenv import load_dotenv
+import logfire
+from langfuse import get_client
+from agents import Agent, Runner, trace, function_tool
+
+load_dotenv(override=True)
+
+@function_tool
+async def get_meaning() -> str:
+    """Get the meaning of life from the universe"""
+    return "42"
+
+async def test_langfuse_integration():
+    # Only proceed if LangFuse env vars are set
+    if not os.getenv("LANGFUSE_SECRET_KEY"):
+        print("❌ LangFuse not configured - skipping observability")
+        return
+
+    print("🔧 Configuring Logfire...")
+    logfire.configure(
+        service_name='alex_test',
+        send_to_logfire=False
+    )
+
+    print("📡 Instrumenting OpenAI Agents SDK...")
+    logfire.instrument_openai_agents()
+
+    print("✅ Connecting to LangFuse...")
+    langfuse = get_client()
+    langfuse.auth_check()
+
+    print("🤖 Creating test agent...")
+    with trace("Test Meaning of Life"):
+        agent = Agent(
+            name="Philosopher",
+            instructions="You are a wise philosopher. Use the get_meaning tool to find the meaning of life.",
+            model="gpt-4o-mini",
+            tools=[get_meaning]
+        )
+
+        result = await Runner.run(
+            agent,
+            "What is the meaning of life?",
+            max_turns=3
+        )
+
+        print(f"📝 Result: {result.messages[-1].content}")
+
+    print("✨ Check LangFuse dashboard for traces!")
+    print(f"🔗 {os.getenv('LANGFUSE_HOST')}")
+
+if __name__ == "__main__":
+    asyncio.run(test_langfuse_integration())
+```
+
+- [ ] Install dependencies: `uv add openai-agents langfuse pydantic-ai`
+- [ ] Run test: `uv run test_langfuse.py`
+- [ ] Verify traces appear in LangFuse dashboard
+
+##### Step 4: Add to Tagger Agent (Proof of Concept)
+- [ ] Update `backend/tagger/pyproject.toml` dependencies
+- [ ] Modify `backend/tagger/agent.py`:
+```python
+import os
+import logfire
+from langfuse import get_client
+
+def setup_observability():
+    """Set up LangFuse observability if configured"""
+    if os.getenv("LANGFUSE_SECRET_KEY"):
+        logfire.configure(
+            service_name='alex_tagger_agent',
+            send_to_logfire=False
+        )
+        logfire.instrument_openai_agents()
+        langfuse = get_client()
+        langfuse.auth_check()
+        return True
+    return False
+
+async def tag_instrument(symbol: str, name: str, instrument_type: str) -> InstrumentAllocation:
+    """Tag an instrument with allocations"""
+    observability_enabled = setup_observability()
+
+    # Rest of existing code...
+    with trace("Tag Instrument" if observability_enabled else None):
+        # Existing agent code
+```
+
+##### Step 5: Add to Terraform
+- [ ] Update `terraform/6_agents/variables.tf`:
+```hcl
+variable "langfuse_public_key" {
+  description = "LangFuse public key for observability"
+  type        = string
+  default     = ""
+  sensitive   = false
+}
+
+variable "langfuse_secret_key" {
+  description = "LangFuse secret key for observability"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "langfuse_host" {
+  description = "LangFuse host URL"
+  type        = string
+  default     = "https://cloud.langfuse.com"
+}
+```
+
+- [ ] Update Lambda environment variables in `terraform/6_agents/main.tf` for tagger:
+```hcl
+environment {
+  variables = {
+    # Existing vars...
+    LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+    LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+    LANGFUSE_HOST       = var.langfuse_host
+  }
+}
+```
+
+##### Step 6: Deploy and Test on Lambda
+- [ ] Package tagger: `cd backend/tagger && uv run package_docker.py`
+- [ ] Deploy with terraform:
+```bash
+cd terraform/6_agents
+terraform apply -var="langfuse_public_key=$LANGFUSE_PUBLIC_KEY" \
+                -var="langfuse_secret_key=$LANGFUSE_SECRET_KEY"
+```
+- [ ] Trigger tagger Lambda via test event or from planner
+- [ ] Check LangFuse dashboard for Lambda traces
+- [ ] Monitor cold start impact and trace completeness
+
+##### Step 7: Roll Out to Other Agents (If Successful)
+- [ ] If tagger works well, apply same pattern to:
+  - [ ] Planner (most complex, do last)
+  - [ ] Reporter
+  - [ ] Charter
+  - [ ] Retirement
+- [ ] Each agent should only initialize LangFuse if env vars present
+- [ ] This allows code to be in repo without requiring LangFuse
+
+#### Important Notes
+- The integration is optional - agents work without LangFuse configured
+- No `openai-agents[langfuse]` extra exists - install packages separately
+- Logfire is the instrumentation layer, not a direct integration
+- Test locally first, then Lambda with ONE agent before rolling out
 
 ### Finale
 - [ ] End with a paragraph to congratulate them on the deployment of an enterprise grade agentic ai system!

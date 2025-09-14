@@ -259,17 +259,17 @@ resource "aws_lambda_event_source_mapping" "planner_sqs" {
 resource "aws_lambda_function" "tagger" {
   function_name = "alex-tagger"
   role          = aws_iam_role.lambda_agents_role.arn
-  
+
   # Using S3 for deployment package (>50MB)
   s3_bucket        = aws_s3_bucket.lambda_packages.id
   s3_key           = aws_s3_object.lambda_packages["tagger"].key
   source_code_hash = fileexists("${path.module}/../../backend/tagger/tagger_lambda.zip") ? filebase64sha256("${path.module}/../../backend/tagger/tagger_lambda.zip") : null
-  
+
   handler     = "lambda_handler.lambda_handler"
   runtime     = "python3.12"
   timeout     = 300  # 5 minutes for tagger
   memory_size = 1024
-  
+
   environment {
     variables = {
       AURORA_CLUSTER_ARN = var.aurora_cluster_arn
@@ -278,6 +278,11 @@ resource "aws_lambda_function" "tagger" {
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
+      # LangFuse observability (optional)
+      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+      LANGFUSE_HOST       = var.langfuse_host
+      OPENAI_API_KEY      = var.openai_api_key
     }
   }
   
