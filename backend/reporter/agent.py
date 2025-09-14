@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from agents import function_tool, RunContextWrapper
 from agents.extensions.models.litellm_model import LitellmModel
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 @dataclass

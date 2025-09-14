@@ -41,9 +41,18 @@ def package_lambda():
             ["uv", "export", "--no-hashes", "--no-emit-project"],
             cwd=str(retirement_dir)
         )
-        
+
+        # Filter out packages that don't work in Lambda
+        filtered_requirements = []
+        for line in requirements_result.splitlines():
+            # Skip pyperclip (clipboard library not needed in Lambda)
+            if line.startswith("pyperclip"):
+                print(f"Excluding from Lambda: {line}")
+                continue
+            filtered_requirements.append(line)
+
         req_file = temp_path / "requirements.txt"
-        req_file.write_text(requirements_result)
+        req_file.write_text("\n".join(filtered_requirements))
         
         # Use Docker to install dependencies for Lambda's architecture
         docker_cmd = [
@@ -54,15 +63,16 @@ def package_lambda():
             "--entrypoint", "/bin/bash",
             "public.ecr.aws/lambda/python:3.12",
             "-c",
-            """cd /build && pip install --target ./package --platform manylinux2014_x86_64 --only-binary=:all: -r requirements.txt && pip install --target ./package --no-deps /database"""
+            """cd /build && pip install --target ./package -r requirements.txt && pip install --target ./package --no-deps /database"""
         ]
         
         run_command(docker_cmd)
         
-        # Copy Lambda handler, agent, and templates
+        # Copy Lambda handler, agent, templates, and observability
         shutil.copy(retirement_dir / "lambda_handler.py", package_dir)
         shutil.copy(retirement_dir / "agent.py", package_dir)
         shutil.copy(retirement_dir / "templates.py", package_dir)
+        shutil.copy(retirement_dir / "observability.py", package_dir)
         
         # Create the zip file
         zip_path = retirement_dir / "retirement_lambda.zip"

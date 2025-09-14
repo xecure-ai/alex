@@ -133,7 +133,7 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
         ]
         Resource = var.aurora_secret_arn
       },
-      # S3 Vectors access for orchestrator
+      # S3 Vectors access for all agents
       {
         Effect = "Allow"
         Action = [
@@ -144,6 +144,15 @@ resource "aws_iam_role_policy" "lambda_agents_policy" {
           "arn:aws:s3:::${var.vector_bucket}",
           "arn:aws:s3:::${var.vector_bucket}/*"
         ]
+      },
+      # S3 Vectors API access for all agents
+      {
+        Effect = "Allow"
+        Action = [
+          "s3vectors:QueryVectors",
+          "s3vectors:GetVectors"
+        ]
+        Resource = "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${var.vector_bucket}/index/*"
       },
       # SageMaker endpoint access for reporter agent
       {
@@ -236,9 +245,14 @@ resource "aws_lambda_function" "planner" {
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
       POLYGON_API_KEY    = var.polygon_api_key
       POLYGON_PLAN       = var.polygon_plan
+      # LangFuse observability (optional)
+      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+      LANGFUSE_HOST       = var.langfuse_host
+      OPENAI_API_KEY      = var.openai_api_key
     }
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -319,9 +333,14 @@ resource "aws_lambda_function" "reporter" {
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
       SAGEMAKER_ENDPOINT = var.sagemaker_endpoint
+      # LangFuse observability (optional)
+      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+      LANGFUSE_HOST       = var.langfuse_host
+      OPENAI_API_KEY      = var.openai_api_key
     }
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -354,9 +373,14 @@ resource "aws_lambda_function" "charter" {
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
+      # LangFuse observability (optional)
+      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+      LANGFUSE_HOST       = var.langfuse_host
+      OPENAI_API_KEY      = var.openai_api_key
     }
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "6"
@@ -389,9 +413,14 @@ resource "aws_lambda_function" "retirement" {
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       BEDROCK_REGION     = var.bedrock_region
       DEFAULT_AWS_REGION = var.aws_region
+      # LangFuse observability (optional)
+      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
+      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
+      LANGFUSE_HOST       = var.langfuse_host
+      OPENAI_API_KEY      = var.openai_api_key
     }
   }
-  
+
   tags = {
     Project = "alex"
     Part    = "6"

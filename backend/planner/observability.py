@@ -56,8 +56,8 @@ def observe():
 
         # Configure logfire to instrument OpenAI Agents SDK
         logfire.configure(
-            service_name='alex_tagger_agent',
-            send_to_logfire=False  # Don't send to Logfire cloud
+            service_name="alex_planner_agent",
+            send_to_logfire=False,  # Don't send to Logfire cloud
         )
         logger.info("✅ Observability: Logfire configured")
 
@@ -72,7 +72,9 @@ def observe():
         # Optional: Check authentication (blocking call, use sparingly)
         try:
             auth_result = langfuse_client.auth_check()
-            logger.info(f"✅ Observability: LangFuse authentication check passed (result: {auth_result})")
+            logger.info(
+                f"✅ Observability: LangFuse authentication check passed (result: {auth_result})"
+            )
         except Exception as auth_error:
             logger.warning(f"⚠️  Observability: Auth check failed but continuing: {auth_error}")
 
@@ -98,12 +100,12 @@ def observe():
                 # Add a 10 second delay to ensure network requests complete
                 # This is a workaround for Lambda's immediate termination
                 import time
-                logger.info("🔍 Observability: Waiting 10 seconds for flush to complete...")
-                time.sleep(10)
+
+                logger.info("🔍 Observability: Waiting 15 seconds for flush to complete...")
+                time.sleep(15)
 
                 logger.info("✅ Observability: Traces flushed successfully")
             except Exception as e:
                 logger.error(f"❌ Observability: Failed to flush traces: {e}")
         else:
             logger.debug("🔍 Observability: No client to flush")
-

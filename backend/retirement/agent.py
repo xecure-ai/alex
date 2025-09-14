@@ -12,7 +12,7 @@ from datetime import datetime
 # No tools needed - simplified agent
 from agents.extensions.models.litellm_model import LitellmModel
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 # Context removed - no longer needed without tools
 

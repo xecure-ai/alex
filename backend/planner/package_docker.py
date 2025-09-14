@@ -43,9 +43,18 @@ def package_lambda():
             ["uv", "export", "--no-hashes", "--no-emit-project"],
             cwd=str(planner_dir)
         )
-        
+
+        # Filter out packages that don't work in Lambda
+        filtered_requirements = []
+        for line in requirements_result.splitlines():
+            # Skip pyperclip (clipboard library not needed in Lambda)
+            if line.startswith("pyperclip"):
+                print(f"Excluding from Lambda: {line}")
+                continue
+            filtered_requirements.append(line)
+
         req_file = temp_path / "requirements.txt"
-        req_file.write_text(requirements_result)
+        req_file.write_text("\n".join(filtered_requirements))
         
         # Use Docker to install dependencies for Lambda's architecture
         # The --no-emit-project excludes the current project from requirements
@@ -69,6 +78,7 @@ def package_lambda():
         shutil.copy(planner_dir / "templates.py", package_dir)
         shutil.copy(planner_dir / "market.py", package_dir)
         shutil.copy(planner_dir / "prices.py", package_dir)
+        shutil.copy(planner_dir / "observability.py", package_dir)
         
         # Create the zip file
         zip_path = planner_dir / "planner_lambda.zip"

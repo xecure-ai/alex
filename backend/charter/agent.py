@@ -10,7 +10,7 @@ from agents.extensions.models.litellm_model import LitellmModel
 
 from templates import CHARTER_INSTRUCTIONS, create_charter_task
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 def analyze_portfolio(portfolio_data: Dict[str, Any]) -> str:

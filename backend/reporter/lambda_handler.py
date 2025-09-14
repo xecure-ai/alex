@@ -24,6 +24,7 @@ from src import Database
 
 from templates import REPORTER_INSTRUCTIONS
 from agent import create_agent, ReporterContext
+from observability import observe
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -77,7 +78,7 @@ async def run_reporter_agent(job_id: str, portfolio_data: Dict[str, Any], user_d
 def lambda_handler(event, context):
     """
     Lambda handler expecting job_id, portfolio_data, and user_data in event.
-    
+
     Expected event:
     {
         "job_id": "uuid",
@@ -85,114 +86,116 @@ def lambda_handler(event, context):
         "user_data": {...}
     }
     """
-    try:
-        logger.info(f"Reporter Lambda invoked with event: {json.dumps(event)[:500]}")
-        
-        # Parse event
-        if isinstance(event, str):
-            event = json.loads(event)
-        
-        job_id = event.get('job_id')
-        if not job_id:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'job_id is required'})
-            }
-        
-        # Initialize database
-        db = Database()
-        
-        portfolio_data = event.get('portfolio_data')
-        if not portfolio_data:
-            # Try to load from database
-            try:
-                job = db.jobs.find_by_id(job_id)
-                if job:
-                    user_id = job['clerk_user_id']
-                    user = db.users.find_by_clerk_id(user_id)
-                    accounts = db.accounts.find_by_user(user_id)
-                    
-                    portfolio_data = {
-                        'user_id': user_id,
-                        'job_id': job_id,
-                        'accounts': []
-                    }
-                    
-                    for account in accounts:
-                        positions = db.positions.find_by_account(account['id'])
-                        account_data = {
-                            'id': account['id'],
-                            'name': account['account_name'],
-                            'type': account.get('account_type', 'investment'),
-                            'cash_balance': float(account.get('cash_balance', 0)),
-                            'positions': []
-                        }
-                        
-                        for position in positions:
-                            instrument = db.instruments.find_by_symbol(position['symbol'])
-                            if instrument:
-                                account_data['positions'].append({
-                                    'symbol': position['symbol'],
-                                    'quantity': float(position['quantity']),
-                                    'instrument': instrument
-                                })
-                        
-                        portfolio_data['accounts'].append(account_data)
-                else:
-                    return {
-                        'statusCode': 404,
-                        'body': json.dumps({'error': f'Job {job_id} not found'})
-                    }
-            except Exception as e:
-                logger.error(f"Could not load portfolio from database: {e}")
+    # Wrap entire handler with observability context
+    with observe():
+        try:
+            logger.info(f"Reporter Lambda invoked with event: {json.dumps(event)[:500]}")
+
+            # Parse event
+            if isinstance(event, str):
+                event = json.loads(event)
+
+            job_id = event.get('job_id')
+            if not job_id:
                 return {
                     'statusCode': 400,
-                    'body': json.dumps({'error': 'No portfolio data provided'})
+                    'body': json.dumps({'error': 'job_id is required'})
                 }
-        
-        user_data = event.get('user_data', {})
-        if not user_data:
-            # Try to load from database
-            try:
-                job = db.jobs.find_by_id(job_id)
-                if job and job.get('clerk_user_id'):
-                    user = db.users.find_by_clerk_id(job['clerk_user_id'])
-                    if user:
-                        user_data = {
-                            'years_until_retirement': user.get('years_until_retirement', 30),
-                            'target_retirement_income': float(user.get('target_retirement_income', 80000))
+
+            # Initialize database
+            db = Database()
+
+            portfolio_data = event.get('portfolio_data')
+            if not portfolio_data:
+                # Try to load from database
+                try:
+                    job = db.jobs.find_by_id(job_id)
+                    if job:
+                        user_id = job['clerk_user_id']
+                        user = db.users.find_by_clerk_id(user_id)
+                        accounts = db.accounts.find_by_user(user_id)
+
+                        portfolio_data = {
+                            'user_id': user_id,
+                            'job_id': job_id,
+                            'accounts': []
                         }
+
+                        for account in accounts:
+                            positions = db.positions.find_by_account(account['id'])
+                            account_data = {
+                                'id': account['id'],
+                                'name': account['account_name'],
+                                'type': account.get('account_type', 'investment'),
+                                'cash_balance': float(account.get('cash_balance', 0)),
+                                'positions': []
+                            }
+
+                            for position in positions:
+                                instrument = db.instruments.find_by_symbol(position['symbol'])
+                                if instrument:
+                                    account_data['positions'].append({
+                                        'symbol': position['symbol'],
+                                        'quantity': float(position['quantity']),
+                                        'instrument': instrument
+                                    })
+
+                            portfolio_data['accounts'].append(account_data)
                     else:
-                        user_data = {
-                            'years_until_retirement': 30,
-                            'target_retirement_income': 80000
+                        return {
+                            'statusCode': 404,
+                            'body': json.dumps({'error': f'Job {job_id} not found'})
                         }
-            except Exception as e:
-                logger.warning(f"Could not load user data: {e}. Using defaults.")
-                user_data = {
-                    'years_until_retirement': 30,
-                    'target_retirement_income': 80000
-                }
-        
-        # Run the agent
-        result = asyncio.run(run_reporter_agent(job_id, portfolio_data, user_data, db))
-        
-        logger.info(f"Reporter completed for job {job_id}")
-        
-        return {
-            'statusCode': 200,
-            'body': json.dumps(result)
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in reporter: {e}", exc_info=True)
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'success': False,
-                'error': str(e)
-            })
-        }
+                except Exception as e:
+                    logger.error(f"Could not load portfolio from database: {e}")
+                    return {
+                        'statusCode': 400,
+                        'body': json.dumps({'error': 'No portfolio data provided'})
+                    }
+
+            user_data = event.get('user_data', {})
+            if not user_data:
+                # Try to load from database
+                try:
+                    job = db.jobs.find_by_id(job_id)
+                    if job and job.get('clerk_user_id'):
+                        user = db.users.find_by_clerk_id(job['clerk_user_id'])
+                        if user:
+                            user_data = {
+                                'years_until_retirement': user.get('years_until_retirement', 30),
+                                'target_retirement_income': float(user.get('target_retirement_income', 80000))
+                            }
+                        else:
+                            user_data = {
+                                'years_until_retirement': 30,
+                                'target_retirement_income': 80000
+                            }
+                except Exception as e:
+                    logger.warning(f"Could not load user data: {e}. Using defaults.")
+                    user_data = {
+                        'years_until_retirement': 30,
+                        'target_retirement_income': 80000
+                    }
+
+            # Run the agent
+            result = asyncio.run(run_reporter_agent(job_id, portfolio_data, user_data, db))
+
+            logger.info(f"Reporter completed for job {job_id}")
+
+            return {
+                'statusCode': 200,
+                'body': json.dumps(result)
+            }
+
+        except Exception as e:
+            logger.error(f"Error in reporter: {e}", exc_info=True)
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'success': False,
+                    'error': str(e)
+                })
+            }
 
 # For local testing
 if __name__ == "__main__":

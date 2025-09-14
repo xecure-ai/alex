@@ -735,321 +735,156 @@ class AuditLogger:
 
 ## Section 6: Observability with LangFuse
 
-LangFuse provides comprehensive tracing for LLM applications, giving you visibility into agent interactions, token usage, and performance metrics.
+LangFuse provides comprehensive tracing for LLM applications, giving you visibility into agent interactions, token usage, and performance metrics. We've integrated LangFuse throughout all our agents using a clean context manager pattern.
 
-### Setting Up LangFuse Integration
+### Our Implementation Approach
 
-First, let's modify our agents to support LangFuse when credentials are provided. This integration will be transparent - if LangFuse credentials aren't set, the agents work normally.
+We've implemented a reusable observability pattern that:
+- Works transparently - agents function normally without LangFuse credentials
+- Uses a context manager for automatic trace flushing
+- Instruments the OpenAI Agents SDK via Pydantic Logfire
+- Provides comprehensive logging at every step
 
-**Step 1: Update Agent Dependencies**
+### Setting Up LangFuse Account
 
-Add LangFuse to each agent's `pyproject.toml`:
-```toml
-# In backend/planner/pyproject.toml (and all other agents)
-dependencies = [
-    "openai-agents[litellm,langfuse]",  # Add langfuse extra
-    # ... other dependencies
-]
-```
+**Step 1: Create Your LangFuse Account**
 
-**Step 2: Create LangFuse Integration Module**
+1. Go to https://cloud.langfuse.com
+2. Sign up for a free account
+3. Create an organization (required for the first time)
+4. Create a new project called "alex-financial-advisor"
+5. Navigate to Settings → API Keys
+6. Create a new API key pair
+7. Copy your Public Key and Secret Key (you'll need these for configuration)
 
-Create `backend/shared/observability.py`:
-```python
-import os
-from typing import Optional
-from agents import trace
-from agents.extensions.integrations.langfuse import LangfuseIntegration
+**Step 2: Configure Your Environment**
 
-def setup_langfuse() -> Optional[LangfuseIntegration]:
-    """
-    Set up LangFuse integration if credentials are available.
-    Returns None if credentials not set, allowing agents to run normally.
-    """
-    public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
-    secret_key = os.getenv("LANGFUSE_SECRET_KEY")
-    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
-
-    if public_key and secret_key:
-        return LangfuseIntegration(
-            public_key=public_key,
-            secret_key=secret_key,
-            host=host,
-            flush_at=1,  # Flush immediately for Lambda
-            flush_interval=0.5
-        )
-    return None
-```
-
-**Step 3: Integrate into Each Agent**
-
-Update each agent to use LangFuse when available. Example for `backend/planner/agent.py`:
-
-```python
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from shared.observability import setup_langfuse
-from agents import Agent, Runner, trace, function_tool
-from agents.extensions.models.litellm_model import LitellmModel
-
-async def run_planner_agent(job_id: str, user_data: dict, accounts: list) -> dict:
-    # Set up observability if available
-    langfuse = setup_langfuse()
-
-    # Create comprehensive trace metadata
-    trace_metadata = {
-        "job_id": job_id,
-        "user_id": user_data.get("clerk_user_id"),
-        "agent": "planner",
-        "account_count": len(accounts),
-        "total_value": sum(a.get("total_value", 0) for a in accounts)
-    }
-
-    # Use trace with metadata for better observability
-    with trace(
-        "Portfolio Analysis Orchestration",
-        metadata=trace_metadata,
-        integration=langfuse  # Will be None if not configured
-    ):
-        model = LitellmModel(
-            model=f"bedrock/{os.getenv('BEDROCK_MODEL_ID')}",
-            aws_region=os.getenv("BEDROCK_REGION", "us-east-1")
-        )
-
-        # Add session tags for filtering in LangFuse
-        if langfuse:
-            langfuse.set_tags([
-                f"env:{os.getenv('ENVIRONMENT', 'production')}",
-                f"version:{os.getenv('AGENT_VERSION', '1.0')}",
-                "agent:planner"
-            ])
-
-        agent = Agent(
-            name="Financial Planning Orchestrator",
-            instructions=PLANNER_INSTRUCTIONS,
-            model=model,
-            tools=[delegate_to_agent, fetch_market_knowledge]
-        )
-
-        # Create detailed task with context
-        task = create_analysis_task(user_data, accounts)
-
-        # Run with comprehensive tracing
-        result = await Runner.run(
-            agent,
-            input=task,
-            max_turns=20,
-            session_id=job_id  # Links all traces to this job
-        )
-
-        # Log token usage if available
-        if hasattr(result, 'usage'):
-            logger.info(json.dumps({
-                "event": "TOKEN_USAGE",
-                "job_id": job_id,
-                "agent": "planner",
-                "total_tokens": result.usage.total_tokens,
-                "prompt_tokens": result.usage.prompt_tokens,
-                "completion_tokens": result.usage.completion_tokens,
-                "estimated_cost": result.usage.total_tokens * 0.00002  # Adjust per model
-            }))
-
-        return parse_agent_output(result.final_output)
-```
-
-**Step 4: Enhanced Tracing for Sub-agents**
-
-For reporter, charter, and retirement agents, add detailed sub-traces:
-
-```python
-# In backend/reporter/agent.py
-async def run_reporter_agent(job_id: str, analysis_data: dict) -> str:
-    langfuse = setup_langfuse()
-
-    with trace(
-        "Generate Portfolio Report",
-        metadata={
-            "job_id": job_id,
-            "report_type": "comprehensive",
-            "data_points": len(analysis_data.get("positions", []))
-        },
-        integration=langfuse
-    ):
-        # Add performance sub-trace
-        with trace("Calculate Performance Metrics"):
-            metrics = calculate_performance_metrics(analysis_data)
-
-        # Add recommendation sub-trace
-        with trace("Generate Recommendations"):
-            model = LitellmModel(model=f"bedrock/{os.getenv('BEDROCK_MODEL_ID')}")
-
-            agent = Agent(
-                name="Portfolio Reporter",
-                instructions=REPORTER_INSTRUCTIONS,
-                model=model,
-                tools=[analyze_allocation, calculate_risk_metrics]
-            )
-
-            result = await Runner.run(
-                agent,
-                input=create_report_task(analysis_data, metrics),
-                max_turns=10,
-                session_id=job_id
-            )
-
-        return result.final_output
-```
-
-**Step 5: Add LangFuse Credentials to Terraform**
-
-Update `terraform/6_agents/main.tf` to include LangFuse environment variables:
-
+Add your LangFuse credentials to `terraform/6_agents/terraform.tfvars`:
 ```hcl
-# Add variables for LangFuse (optional)
-variable "langfuse_public_key" {
-  description = "LangFuse public key for observability"
-  type        = string
-  default     = ""
-}
+# LangFuse observability (optional but recommended)
+langfuse_public_key = "pk-lf-xxxxxxxxxx"
+langfuse_secret_key = "sk-lf-xxxxxxxxxx"
+langfuse_host       = "https://cloud.langfuse.com"
 
-variable "langfuse_secret_key" {
-  description = "LangFuse secret key for observability"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "langfuse_host" {
-  description = "LangFuse host URL"
-  type        = string
-  default     = "https://cloud.langfuse.com"
-}
-
-# Add to each Lambda function
-resource "aws_lambda_function" "planner" {
-  # ... existing configuration ...
-
-  environment {
-    variables = {
-      # ... existing variables ...
-      LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-      LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-      LANGFUSE_HOST       = var.langfuse_host
-      ENVIRONMENT         = "production"
-      AGENT_VERSION       = "1.0"
-    }
-  }
-}
+# Required for trace export (even with Bedrock)
+openai_api_key = "sk-xxxxxxxxxx"  # Your OpenAI key
 ```
 
-### Setting Up Your LangFuse Account
+**Important**: The `openai_api_key` is required for LangFuse traces to export properly, even though we're using Bedrock models. This is a quirk of the OpenTelemetry integration.
 
-1. **Create a Free LangFuse Account**
-   - Go to https://cloud.langfuse.com
-   - Sign up for a free account
-   - Create a new project called "Alex Financial Advisor"
+### How Our Integration Works
 
-2. **Get Your API Credentials**
-   - Navigate to Settings → API Keys
-   - Create a new API key pair
-   - Copy the Public Key and Secret Key
+Each agent includes an `observability.py` module that provides a context manager for LangFuse integration:
 
-3. **Configure Terraform Variables**
-   - Create `terraform/6_agents/terraform.tfvars`:
-   ```hcl
-   langfuse_public_key = "pk-lf-xxx"
-   langfuse_secret_key = "sk-lf-xxx"
-   langfuse_host       = "https://cloud.langfuse.com"
-   ```
+```python
+from observability import observe
 
-4. **Deploy the Updates**
-   ```bash
-   cd terraform/6_agents
-   terraform apply
-   ```
+def lambda_handler(event, context):
+    # Wrap entire handler with observability context
+    with observe():
+        # Your lambda code here
+        result = asyncio.run(run_agent(...))
+        return {...}
+    # Traces automatically flush here
+```
 
-### Using LangFuse Dashboard
+The `observe()` context manager:
+- Checks for LangFuse environment variables
+- Sets up Pydantic Logfire to instrument OpenAI Agents SDK
+- Configures the appropriate service name (e.g., 'alex_planner_agent')
+- Handles authentication gracefully
+- **Automatically flushes traces on exit** (critical for Lambda)
 
-Once deployed, the LangFuse dashboard provides:
+### Monitoring Your Agents
 
-1. **Traces View**
-   - See all agent executions
-   - Filter by job_id, user_id, or agent
-   - View complete conversation flows
-   - Identify slow or failed executions
+**Step 3: Deploy with Observability**
 
-2. **Token Usage & Costs**
-   - Track token consumption per agent
-   - Monitor costs across different models
-   - Set up usage alerts
-   - Optimize expensive operations
+```bash
+# Package all agents with observability
+cd backend
+uv run deploy_all_lambdas.py --package
 
-3. **Performance Metrics**
-   - Agent response times
-   - Success/failure rates
-   - Token usage trends
+# Deploy infrastructure with LangFuse variables
+cd ../terraform/6_agents
+terraform apply
+
+# Watch agent logs in real-time
+cd ../../backend
+uv run watch_agents.py
+```
+
+**Step 4: View Traces in LangFuse Dashboard**
+
+Once deployed and running, visit your LangFuse dashboard to see:
+
+1. **Agent Traces**
+   - Each agent execution appears as a trace
+   - Filter by service name: `alex_planner_agent`, `alex_reporter_agent`, etc.
+   - See the complete flow of agent interactions
+   - View token usage and costs
+
+2. **Performance Metrics**
+   - Response times for each agent
+   - Token consumption patterns
    - Model performance comparison
+   - Success/failure rates
 
-4. **Debug Failed Runs**
-   - View exact prompts and responses
-   - See error messages and stack traces
-   - Replay agent conversations
-   - Identify prompt issues
+3. **Debug Information**
+   - Exact prompts sent to models
+   - Complete responses received
+   - Error messages and stack traces
+   - Tool calls and their results
 
-5. **User Analytics**
-   - Track unique users
-   - Analyze usage patterns
-   - Identify power users
-   - Monitor user satisfaction
+### Using the Watch Script
 
-### Advanced LangFuse Features
+We've created a monitoring script to watch all agent logs in real-time:
 
-**Custom Scoring for Quality Monitoring:**
-```python
-# Add to agent after getting result
-if langfuse and result.final_output:
-    # Score based on output quality
-    output_length = len(result.final_output)
-    has_recommendations = "recommend" in result.final_output.lower()
+```bash
+# Run from backend directory
+uv run watch_agents.py
 
-    quality_score = 0.5  # Base score
-    if output_length > 1000:
-        quality_score += 0.25
-    if has_recommendations:
-        quality_score += 0.25
-
-    langfuse.score(
-        trace_id=trace.id,
-        name="output_quality",
-        value=quality_score,
-        comment=f"Length: {output_length}, Has recommendations: {has_recommendations}"
-    )
+# Options:
+uv run watch_agents.py --lookback 10  # Look back 10 minutes
+uv run watch_agents.py --interval 1   # Poll every 1 second
+uv run watch_agents.py --region us-west-2  # Different region
 ```
 
-**User Feedback Integration:**
-```python
-# In API endpoint after user rates analysis
-@app.post("/api/feedback")
-async def submit_feedback(
-    job_id: str,
-    rating: int,
-    comment: Optional[str] = None,
-    user=Depends(clerk_guard)
-):
-    # Store feedback in database
-    db.jobs.add_feedback(job_id, rating, comment)
+The watch script shows:
+- Color-coded output by agent (PLANNER=blue, REPORTER=green, etc.)
+- LangFuse-related logs in purple
+- Errors in red
+- Real-time updates from all 5 agents simultaneously
 
-    # Send to LangFuse for correlation
-    if langfuse:
-        langfuse.score(
-            session_id=job_id,
-            name="user_satisfaction",
-            value=rating / 5.0,  # Normalize to 0-1
-            comment=comment
-        )
-```
+### Troubleshooting Observability
+
+**If traces aren't appearing in LangFuse:**
+
+1. **Check environment variables are set:**
+   ```bash
+   aws lambda get-function-configuration --function-name alex-planner | grep LANGFUSE
+   ```
+
+2. **Verify OPENAI_API_KEY is set** (required for export):
+   ```bash
+   aws lambda get-function-configuration --function-name alex-planner | grep OPENAI_API_KEY
+   ```
+
+3. **Watch CloudWatch logs for LangFuse messages:**
+   ```bash
+   uv run watch_agents.py --lookback 5
+   ```
+   Look for messages like:
+   - "🔍 Observability: Setting up LangFuse..."
+   - "✅ Observability: Traces flushed successfully"
+   - "❌ Observability: Failed to flush traces"
+
+4. **Check LangFuse dashboard for any traces** - sometimes they take 30-60 seconds to appear
+
+**Common Issues:**
+
+- **No traces but logs show success**: Usually means OPENAI_API_KEY is missing
+- **Auth check failed warning**: Normal if using free tier, traces still work
+- **Missing required package error**: Re-run package_docker.py to ensure dependencies are included
 
 ## Conclusion: Your Enterprise-Grade AI System
 

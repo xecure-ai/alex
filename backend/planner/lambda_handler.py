@@ -24,6 +24,7 @@ from src import Database
 from templates import ORCHESTRATOR_INSTRUCTIONS
 from agent import create_agent, handle_missing_instruments, load_portfolio_summary
 from market import update_instrument_prices
+from observability import observe
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -85,7 +86,7 @@ async def run_orchestrator(job_id: str) -> None:
 def lambda_handler(event, context):
     """
     Lambda handler for SQS-triggered orchestration.
-    
+
     Expected event from SQS:
     {
         "Records": [
@@ -95,52 +96,54 @@ def lambda_handler(event, context):
         ]
     }
     """
-    try:
-        logger.info(f"Planner Lambda invoked with event: {json.dumps(event)[:500]}")
-        
-        # Extract job_id from SQS message
-        if 'Records' in event and len(event['Records']) > 0:
-            # SQS message
-            job_id = event['Records'][0]['body']
-            if isinstance(job_id, str) and job_id.startswith('{'):
-                # Body might be JSON
-                try:
-                    body = json.loads(job_id)
-                    job_id = body.get('job_id', job_id)
-                except json.JSONDecodeError:
-                    pass
-        elif 'job_id' in event:
-            # Direct invocation
-            job_id = event['job_id']
-        else:
-            logger.error("No job_id found in event")
+    # Wrap entire handler with observability context
+    with observe():
+        try:
+            logger.info(f"Planner Lambda invoked with event: {json.dumps(event)[:500]}")
+
+            # Extract job_id from SQS message
+            if 'Records' in event and len(event['Records']) > 0:
+                # SQS message
+                job_id = event['Records'][0]['body']
+                if isinstance(job_id, str) and job_id.startswith('{'):
+                    # Body might be JSON
+                    try:
+                        body = json.loads(job_id)
+                        job_id = body.get('job_id', job_id)
+                    except json.JSONDecodeError:
+                        pass
+            elif 'job_id' in event:
+                # Direct invocation
+                job_id = event['job_id']
+            else:
+                logger.error("No job_id found in event")
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({'error': 'No job_id provided'})
+                }
+
+            logger.info(f"Planner: Starting orchestration for job {job_id}")
+
+            # Run the orchestrator
+            asyncio.run(run_orchestrator(job_id))
+
             return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'No job_id provided'})
+                'statusCode': 200,
+                'body': json.dumps({
+                    'success': True,
+                    'message': f'Analysis completed for job {job_id}'
+                })
             }
-        
-        logger.info(f"Planner: Starting orchestration for job {job_id}")
-        
-        # Run the orchestrator
-        asyncio.run(run_orchestrator(job_id))
-        
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'success': True,
-                'message': f'Analysis completed for job {job_id}'
-            })
-        }
-        
-    except Exception as e:
-        logger.error(f"Planner: Error in lambda handler: {e}", exc_info=True)
-        return {
-            'statusCode': 500,
-            'body': json.dumps({
-                'success': False,
-                'error': str(e)
-            })
-        }
+
+        except Exception as e:
+            logger.error(f"Planner: Error in lambda handler: {e}", exc_info=True)
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'success': False,
+                    'error': str(e)
+                })
+            }
 
 # For local testing
 if __name__ == "__main__":
