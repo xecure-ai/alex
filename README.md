@@ -1,6 +1,6 @@
 # Alex - the Agentic Learning Equities Explainer
 
-## A multi-agent autonomous system to be a SaaS product for personal financial planning
+## Multi-agent Enterprise-Grade SaaS Financial Planner
 
 ![Course Image](assets/alex.png)
 
