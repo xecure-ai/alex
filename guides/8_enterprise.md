@@ -79,6 +79,7 @@ resource "aws_apigatewayv2_stage" "api" {
 
 Before going to production, test your scalability:
 
+**For macOS/Linux:**
 ```bash
 # Install Apache Bench
 apt-get install apache2-utils  # Ubuntu/Debian
@@ -89,15 +90,34 @@ ab -n 1000 -c 50 -H "Authorization: Bearer YOUR_TOKEN" \
    https://your-api.execute-api.region.amazonaws.com/api/user
 ```
 
+**For Windows:**
+```powershell
+# Install Apache Bench via XAMPP or use PowerShell's Invoke-WebRequest
+# Option 1: Download XAMPP which includes Apache Bench
+# Visit: https://www.apachefriends.org/download.html
+
+# Option 2: Use PowerShell for simple load testing
+$headers = @{"Authorization" = "Bearer YOUR_TOKEN"}
+$url = "https://your-api.execute-api.region.amazonaws.com/api/user"
+
+# Run 100 requests sequentially
+1..100 | ForEach-Object {
+    Invoke-WebRequest -Uri $url -Headers $headers -Method GET
+    Write-Host "Request $_ completed"
+}
+
+# For concurrent requests, consider using a tool like JMeter (cross-platform)
+# Download from: https://jmeter.apache.org/download_jmeter.cgi
+```
+
 ### Cost Optimization at Scale
 
 Monitor and optimize costs as you scale:
 
 1. **Use AWS Cost Explorer** to track spending
 2. **Set up billing alerts** for unexpected costs
-3. **Implement caching** with CloudFront for static content
-4. **Use SQS Dead Letter Queues** to handle failed messages
-5. **Consider Step Functions** for complex orchestrations at scale
+3. **Optimize CloudFront caching** - While CloudFront automatically caches static content from your S3 bucket, you can improve performance and reduce costs by configuring cache behaviors. Set longer TTLs (Time To Live) for assets that change infrequently (like images, CSS, JS files) using Cache-Control headers. This reduces origin requests to S3, lowering data transfer costs and improving response times.
+4. **Consider Step Functions** for complex orchestrations at scale
 
 ## Section 2: Security
 
@@ -136,11 +156,11 @@ resource "aws_iam_role_policy" "planner_policy" {
 #### 2. **JWT Authentication with Clerk**
 All API calls require valid JWT tokens:
 - Tokens expire after 1 hour
-- JWKS endpoint for key rotation
-- User context validated on every request
+- **JWKS endpoint for key rotation** - Clerk automatically rotates signing keys for security. The JWKS (JSON Web Key Set) endpoint provides the current public keys used to verify JWT signatures. This means even if a key is compromised, it will be automatically rotated, and your application fetches the new keys without any code changes.
+- **User context validated on every request** - Every API call includes a JWT token that is cryptographically verified using Clerk's public keys. This ensures the user is who they claim to be, their session is still valid, and the token hasn't been tampered with. Invalid or expired tokens are rejected before any business logic executes.
 
 #### 3. **API Gateway Throttling**
-Protection against DDoS and abuse:
+**Protection against DDoS and abuse** - DDoS (Distributed Denial of Service) attacks attempt to overwhelm your application by flooding it with requests from multiple sources. API Gateway's throttling limits the number of requests per second, automatically rejecting excess traffic. This protects your Lambda functions from being overwhelmed and prevents runaway costs from malicious traffic:
 ```hcl
 throttle_rate_limit  = 100   # 100 requests per second per user
 throttle_burst_limit = 200   # Burst capacity
@@ -148,12 +168,12 @@ throttle_burst_limit = 200   # Burst capacity
 
 #### 4. **CORS Controls**
 Strict CORS configuration:
-- Origin validation
-- Credentials not allowed with wildcard origins
-- Preflight caching for performance
+- **Origin validation** - Only allows requests from your specific frontend domain, preventing malicious websites from making API calls on behalf of your users
+- **Credentials not allowed with wildcard origins** - Prevents credential theft by ensuring authentication cookies/tokens are only sent to explicitly trusted origins, not to any website
+- **Preflight caching for performance** - Browser caches CORS preflight responses, reducing the number of OPTIONS requests and improving API response times
 
 #### 5. **XSS Protection**
-Content Security Policy headers:
+**Cross-Site Scripting (XSS) prevention** - XSS attacks inject malicious scripts into your web pages that execute in users' browsers, potentially stealing credentials or personal data. Content Security Policy (CSP) headers tell the browser which sources of content are trusted, blocking any unauthorized scripts from executing:
 ```javascript
 // In frontend pages
 <meta httpEquiv="Content-Security-Policy"
@@ -166,11 +186,16 @@ Using AWS Secrets Manager:
 - Automatic rotation capability
 - Encrypted at rest with KMS
 
+**To view your secrets:** Navigate to AWS Console → Secrets Manager → Select your region (us-east-1) → You'll see secrets like `alex-database-secret` containing your Aurora credentials
+
 ### Additional Enterprise Security Features
 
 To further enhance security, consider implementing:
 
 #### 1. **AWS WAF (Web Application Firewall)**
+
+**AWS WAF** provides an additional layer of security by filtering malicious web traffic before it reaches your application. It protects against common attacks like SQL injection, cross-site scripting, and bot traffic. WAF uses rules to inspect incoming requests and can block, allow, or count requests based on conditions you define. While powerful, WAF is a paid add-on service with costs based on the number of rules and requests processed.
+
 Add to `terraform/7_frontend/main.tf`:
 ```hcl
 resource "aws_wafv2_web_acl" "api_protection" {
@@ -216,6 +241,9 @@ resource "aws_wafv2_web_acl" "api_protection" {
 ```
 
 #### 2. **VPC Endpoints for Private Communication**
+
+**VPC Endpoints** allow your Lambda functions to communicate with AWS services without traffic leaving the AWS network. This improves security by avoiding the public internet, reduces data transfer costs, and provides better performance with lower latency. While VPC endpoints are free to create, you pay for data processing (typically $0.01 per GB). This is especially valuable for high-security environments where data should never traverse the public internet.
+
 Keep traffic within AWS network:
 ```hcl
 resource "aws_vpc_endpoint" "s3" {
@@ -225,6 +253,9 @@ resource "aws_vpc_endpoint" "s3" {
 ```
 
 #### 3. **AWS GuardDuty for Threat Detection**
+
+**AWS GuardDuty** is a managed threat detection service that continuously monitors your AWS accounts and workloads for malicious activity. It uses machine learning to analyze VPC Flow Logs, CloudTrail events, and DNS logs to identify threats like cryptocurrency mining, credential compromise, and unusual API calls. GuardDuty requires no infrastructure to manage but is a paid service (approximately $1 per GB of logs analyzed). It's particularly valuable for detecting sophisticated attacks that might bypass other security layers.
+
 ```hcl
 resource "aws_guardduty_detector" "main" {
   enable = true
@@ -400,37 +431,42 @@ Navigate to AWS CloudWatch Console and create a dashboard with these widgets:
 Navigate to SQS console to view:
 - Messages in flight
 - Message age
-- Dead letter queue messages
 - Throughput metrics
+- **Dead Letter Queue (DLQ) monitoring** - Failed messages automatically move to the DLQ after multiple processing attempts. Monitor the DLQ for patterns in failures to identify systematic issues. Set up CloudWatch alarms when messages appear in the DLQ to investigate problems quickly.
 
 ### Setting Up CloudWatch Alarms
 
-Create alarms for critical metrics:
+To create alarms for critical metrics, use the AWS Console:
 
-```bash
-aws cloudwatch put-metric-alarm \
-  --alarm-name "alex-api-errors" \
-  --alarm-description "Alert when API has errors" \
-  --metric-name Errors \
-  --namespace AWS/Lambda \
-  --statistic Sum \
-  --period 300 \
-  --threshold 5 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=FunctionName,Value=alex-api
-```
+1. **Sign in to AWS Console** as the root user (or an IAM user with CloudWatch permissions)
+2. **Navigate to CloudWatch** → Select "Alarms" from the left sidebar → Click "Create alarm"
+3. **Select metric** → Choose "Lambda" → "By Function Name" → Select your function (e.g., alex-api)
+4. **Configure the alarm:**
+   - Metric: Errors
+   - Statistic: Sum
+   - Period: 5 minutes
+   - Threshold: Greater than 5
+5. **Set notification** → Create new SNS topic → Enter your email → Confirm subscription via email
+6. **Name your alarm** (e.g., "alex-api-errors") and create it
+
+Repeat this process for other critical metrics like Duration, Throttles, and Concurrent Executions.
 
 ### Cost Monitoring
 
-Set up AWS Cost Explorer alerts:
-1. Navigate to AWS Billing Dashboard
-2. Create a budget for your expected monthly spend
-3. Set alerts at 50%, 80%, and 100% of budget
-4. Configure SNS notifications to your email
+**You already have AWS billing alerts configured from earlier guides!** As a reminder, regularly check your spending:
+
+1. **Navigate to AWS Console** → Billing Dashboard (top-right account menu)
+2. **Review your current month's charges** - Check the "Bills" section
+3. **Monitor your configured budget alerts** - You should have alerts at 50%, 80%, and 100% of your budget
+4. **Use Cost Explorer** for detailed analysis - Filter by service to see where costs are accumulating
+
+**Check costs frequently** during development and especially after deploying new features. Lambda and API Gateway costs can surprise you with high traffic!
 
 ## Section 4: Guardrails
 
-Implement validation and safety checks to prevent AI errors from affecting users.
+**Guardrails are essential safety mechanisms for AI systems.** While advanced agent frameworks often include sophisticated guardrail features, at their core, guardrails are simply validation checks you implement in code - tests that run before or after your agents execute to ensure outputs are safe and correct. The best guardrails are implemented directly in your code where you have full control over the validation logic.
+
+Let's implement validation and safety checks to prevent AI errors from affecting users.
 
 ### Charter Agent Output Validation
 
@@ -556,38 +592,52 @@ def truncate_response(text: str, max_length: int = 50000) -> str:
 
 ### Retry Logic with Exponential Backoff
 
-Add resilience to agent invocations:
+Add resilience to agent invocations using the **tenacity** library, which we already use for handling rate limit errors:
 
 ```python
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import asyncio
 from typing import Optional
 
+# Define custom exceptions for retryable errors
+class AgentTemporaryError(Exception):
+    """Temporary error that should trigger retry"""
+    pass
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type((AgentTemporaryError, TimeoutError))
+)
 async def invoke_agent_with_retry(
     agent_name: str,
-    payload: dict,
-    max_retries: int = 3
-) -> Optional[dict]:
-    """Invoke agent with exponential backoff retry"""
+    payload: dict
+) -> dict:
+    """Invoke agent with automatic retry using tenacity"""
+    try:
+        response = await lambda_client.invoke(
+            FunctionName=f"alex-{agent_name}",
+            InvocationType='RequestResponse',
+            Payload=json.dumps(payload)
+        )
 
-    for attempt in range(max_retries):
-        try:
-            response = await lambda_client.invoke(
-                FunctionName=f"alex-{agent_name}",
-                InvocationType='RequestResponse',
-                Payload=json.dumps(payload)
-            )
-            return json.loads(response['Payload'].read())
+        result = json.loads(response['Payload'].read())
 
-        except Exception as e:
-            wait_time = 2 ** attempt  # Exponential backoff
-            logger.warning(f"Agent {agent_name} failed (attempt {attempt + 1}): {e}")
+        # Check for retryable errors in response
+        if result.get('error_type') == 'RATE_LIMIT':
+            raise AgentTemporaryError(f"Rate limit hit for {agent_name}")
 
-            if attempt < max_retries - 1:
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(f"Agent {agent_name} failed after {max_retries} attempts")
-                return None
+        return result
+
+    except Exception as e:
+        logger.warning(f"Agent {agent_name} invocation failed: {e}")
+        # Determine if error is retryable
+        if "throttled" in str(e).lower() or "timeout" in str(e).lower():
+            raise AgentTemporaryError(f"Temporary error: {e}")
+        raise  # Non-retryable error
 ```
+
+**Note:** We already have tenacity configured for handling rate limit errors in our agents. This pattern extends it to handle other temporary failures with exponential backoff.
 
 ## Section 5: Explainability
 
@@ -795,27 +845,42 @@ The `observe()` context manager:
 - Handles authentication gracefully
 - **Automatically flushes traces on exit** (critical for Lambda)
 
-### Monitoring Your Agents
+### Observing Your Agents
 
 **Step 3: Deploy with Observability**
 
+From the `backend` directory:
 ```bash
 # Package all agents with observability
-cd backend
 uv run deploy_all_lambdas.py --package
+```
 
+From the `terraform/6_agents` directory:
+```bash
 # Deploy infrastructure with LangFuse variables
-cd ../terraform/6_agents
 terraform apply
+```
 
+From the `backend` directory:
+```bash
 # Watch agent logs in real-time
-cd ../../backend
 uv run watch_agents.py
+```
+
+Finally, from the `scripts` directory:
+```bash
+# Deploy the complete application
+uv run deploy.py
 ```
 
 **Step 4: View Traces in LangFuse Dashboard**
 
-Once deployed and running, visit your LangFuse dashboard to see:
+Once deployed and running, you have two options for viewing traces:
+
+1. **LangFuse Dashboard** (https://cloud.langfuse.com) - Visit your project to see:
+2. **OpenAI Traces Dashboard** - If you're using OpenAI models, you can also view traces at https://platform.openai.com/traces
+
+In the LangFuse dashboard, you'll see:
 
 1. **Agent Traces**
    - Each agent execution appears as a trace
@@ -894,59 +959,10 @@ The watch script shows:
 
 You've built a production-ready financial advisory platform that is:
 
-• **Scalable**: Serverless architecture automatically handles load from 1 to 1,000,000+ users
-• **Secure**: Multi-layered security with IAM, JWT auth, API throttling, CORS, XSS protection, and secrets management
-• **Robust & Monitored**: Comprehensive CloudWatch logging, dashboards, alarms, and SQS dead-letter queues for reliability
-• **Guarded**: Input validation, output verification, retry logic, and graceful error handling protect against AI failures
-• **Explainable**: AI decisions include rationale, audit trails track all operations, and reasoning is transparent
-• **Observable**: Complete LangFuse integration provides traces, token usage, costs, and performance metrics for every AI interaction
+- **Scalable**: Serverless architecture automatically handles load from 1 to 1,000,000+ users
+- **Secure**: Multi-layered security with IAM, JWT auth, API throttling, CORS, XSS protection, and secrets management
+- **Robust & Monitored**: Comprehensive CloudWatch logging, dashboards, alarms, and SQS dead-letter queues for reliability
+- **Guarded**: Input validation, output verification, retry logic, and graceful error handling protect against AI failures
+- **Explainable**: AI decisions include rationale, audit trails track all operations, and reasoning is transparent
+- **Observable**: Complete LangFuse integration provides traces, token usage, costs, and performance metrics for every AI interaction
 
-### Your Production Deployment Checklist
-
-Before launching to real users:
-
-- [ ] Set up LangFuse account and deploy with credentials
-- [ ] Configure CloudWatch dashboards and alarms
-- [ ] Set billing alerts in AWS Cost Explorer
-- [ ] Run load tests to validate scalability
-- [ ] Review IAM permissions (least privilege)
-- [ ] Enable AWS WAF for additional protection
-- [ ] Document runbooks for common issues
-- [ ] Set up on-call rotation for monitoring
-- [ ] Create user feedback mechanism
-- [ ] Plan for regular security audits
-
-### The Journey from Prototype to Production
-
-You've transformed a simple AI prototype into a robust, enterprise-ready system. This journey mirrors what happens in real organizations as they move from AI experiments to production deployments.
-
-Key lessons learned:
-1. **Architecture Matters**: Serverless scales effortlessly
-2. **Security is Layered**: No single point of failure
-3. **Observability is Critical**: You can't fix what you can't see
-4. **AI Needs Guardrails**: Trust but verify
-5. **Explainability Builds Trust**: Users need to understand AI decisions
-
-### Next Steps for Continuous Improvement
-
-Your platform is ready for production, but the journey doesn't end here:
-
-1. **A/B Testing**: Test different models and prompts
-2. **Fine-tuning**: Create custom models for your domain
-3. **Feature Expansion**: Add more sophisticated analysis
-4. **Integration**: Connect to real brokerage APIs
-5. **Compliance**: Add SOC2, GDPR, or financial regulations as needed
-
-### Final Thoughts
-
-You've built more than just an application - you've created a blueprint for deploying AI agents in production. The patterns, practices, and infrastructure you've implemented here can be adapted for any enterprise AI system.
-
-Welcome to the world of production AI deployment. Your agentic AI system is ready to serve users at scale! 🚀
-
----
-
-**Thank you for completing the Alex Financial Advisor deployment series!**
-
-For questions, issues, or to share your success stories, please visit our GitHub repository or community forums.
-
-Happy deploying! 🎯
