@@ -68,10 +68,11 @@ def package_lambda():
         
         run_command(docker_cmd)
         
-        # Copy Lambda handler, agent, and templates
+        # Copy Lambda handler, agent, templates, and observability
         shutil.copy(tagger_dir / "lambda_handler.py", package_dir)
         shutil.copy(tagger_dir / "agent.py", package_dir)
         shutil.copy(tagger_dir / "templates.py", package_dir)
+        shutil.copy(tagger_dir / "observability.py", package_dir)
         
         # Create the zip file
         zip_path = tagger_dir / "tagger_lambda.zip"

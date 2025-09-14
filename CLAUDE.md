@@ -3,15 +3,15 @@
 8 part project to build Alex, the Agentic AI Financial Planner, to be used in a course on deploying AI.
 Students will follow the guides in the guides folder to deploy this.
 
-Parts 1-6 are complete; Part 7 is in progress.
+Parts 1-7 complete, Part 8 in progress.
 
-## VERY IMPORTANT - debugging process
+## VERY IMPORTANT
 
 When you hit bugs, do NOT guess the solution. Do NOT quickly write a workaround. ALWAYS consider the root cause and prove it.
 
 1. You often jump to conclusions. Don't!
-2. BE THOUGHTFUL - identify the root cause.
-3. Follow a methodical process: Reproduce, prove the problem, determine the root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
+2. BE THOUGHTFUL - identify root cause.
+3. Follow a methodical process: Reproduce, prove the problem, determine root cause, fix properly - avoid bandaids like exception handlers, isinstance checks and other hacks.
 4. Do not declare victory unless you have evidence.
 5. Do not be dismissive of issues and call them "expected". Pay attention to every error!
 
@@ -221,7 +221,7 @@ test_full.py # the remote test
    - ✅ **Test**: Calculate projections for test user
 
 6. **Integration Testing**
-   - Orchestrator calls all agents including InstrumentTagger
+   - Planner calls all agents including tagger
    - Complete portfolio analysis flow
 
 **Deployment Steps** (for user to complete):
@@ -231,12 +231,6 @@ test_full.py # the remote test
   uv run deploy_all_lambdas.py --package
   ```
 - [ ] **Test with real analysis** to verify prices are updated before agents run
-
-**Benefits**:
-- Charter agent now calculates accurate portfolio values
-- All analysis based on current market prices
-- Single efficient API call to Yahoo Finance
-- Graceful fallback for any symbols that fail
 
 ### Agent Communication Flow
 ```
@@ -277,7 +271,7 @@ All tests confirmed working with Nova Pro model.
 
 ### Context & Decisions Made
 This section implements the user-facing frontend for the Alex Financial Advisor platform. Key architectural decisions:
-- **Authentication**: Using Clerk with the EXACT same credentials from week1 SaaS project (students already have these)
+- **Authentication**: Using Clerk with same credentials from week1 SaaS project (students already have these)
 - **Frontend**: NextJS with Pages Router (not App Router due to Clerk compatibility), static export for S3/CloudFront
 - **Backend**: Single Lambda function with FastAPI handling all API routes, JWT validation via Clerk
 - **User Sync**: Auto-create users on first sign-in with sensible defaults (20 years to retirement, 70/30 equity/fixed income)
@@ -372,17 +366,14 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 ### Steps
 
 - [x] **Step 0: Review and Planning** ✅ COMPLETE
-   - The folder reference/ has projects from earlier in the course and would be helpful reference:
-     - The saas app in reference/saas is a working app with a NextJS frontend, using Clerk
-     - The files day3.md and day3.part2.md were instructions for when we set up this saas app
-     - The file reference/twin_main.tf is from our big project in week2 called twin in which we used lambda, a static site on s3, API gateway, CORS settings, CloudFront distribution
+   - The folder reference/ has projects from earlier in the course as reference
    - Color scheme (and all shades of these)
      - primary color (boring): #209DD7 
      - primary color (anything to do with AI or Agents, like kicking off the planner): #753991
      - accent color (anything bright or exciting): #FFB707
      - dark color: #062147
-     - And usual red and green variations for good and bad things
-     - Look and feel should be relatively "enterprise" since this is all about Production Deployment, but with an edgy, exciting feel to it given this is autonomous agents. Light mode.
+     - Red and green variations for good and bad
+     - Enterprise UX but with an edgy, exciting feel. Light mode.
 
 ### Step 1: Foundations
 **1a. Create NextJS app with Pages Router**
@@ -498,13 +489,9 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 - [x] Portfolio summary cards
 
 **3c. Database population script for testing**
-- [x] Add a small button to the Accounts page to 'populate test data'
-- [x] Create an endpoint that this calls which sets up test data
-- [x] Text-based summary of the Account details on the Accounts page, to be replaced in Step 4
+- [x] Button on Accounts page to 'populate test data'
+- [x] Endpoint to create test data
 - [x] Reset Accounts button to delete all accounts associated with a user
-
-**3d. Dashboard testing & documentation**
-- [x] Have the user (Ed) test local and remote and check the data is created
 
 ### Step 4: Account Details Page
 **4a. Accounts list page (pages/accounts.tsx)**
@@ -568,10 +555,8 @@ Build a pure client-side NextJS React app with Clerk authentication, deployed as
 
 **Objective**: Update the Planner to fetch real-time stock prices using yfinance after the tagger runs, ensuring all agents work with current market data.
 
-**6e. CHANGE IN PLAN FOR MARKET DATA - switch to polygon.io**
-- yfinance is too unstable and the dependencies are too large. Different approach is needed
-- see reference implementation in backend/planner/market_new.py
-- [x] Implement polygon.io alternative
+**6e. polygon.io**
+- [x] Implement polygon.io
 
 ### Step 7: Polish & Production Readiness - ✅ COMPLETE
 **7a. UI/UX refinements**
@@ -633,18 +618,18 @@ const response = await fetch(`${API_URL}/api/endpoint`, {
 4. **Upload to S3**: Static files served via CloudFront
 5. **Result**: CloudFront serves frontend and proxies `/api/*` to API Gateway
 
-## Part 8: Enterprise Grade: Scalability, Security, APIs, Monitoring, Guardrails & Observability (NOT STARTED)
+## Part 8: Enterprise Grade: Scalability, Security, APIs, Monitoring, Guardrails & Observability (IN PROGRESS)
 
 ### Objective
 Implement comprehensive observability with LangFuse, monitoring with CloudWatch, and security best practices.
 We may not need to terraform directory at all for this part - it might just be a guide, and some code changes activated by adding an env variable
 
 ### Section 1: 
-- [ ] Start guide 8_enterprise.md to cover topics related to making our project enterprise strength
-- [ ] Write Section 1: Scalability. Explain to the student that the serverless architecture is already prepared to scale up. Show them the settings in terraform where we could ramp up our infrastructure if we wanted to
+- [X] Start guide 8_enterprise.md to cover topics related to making our project enterprise strength
+- [X] Write Section 1: Scalability. Explain to the student that the serverless architecture is already prepared to scale up. Show them the settings in terraform where we could ramp up our infrastructure if we wanted to
 
 ## Section 2:
-- [ ] Write Section 2: Security. Point the student to the aspects of the Alex project that have security best practices:
+- [X] Write Section 2: Security. Point the student to the aspects of the Alex project that have security best practices:
   - Our IAM controls, for example controlling what the Agents can do
   - The API key for the API
   - The JWT controls
@@ -654,271 +639,122 @@ We may not need to terraform directory at all for this part - it might just be a
   - Point out other enterprise strength controls that we could add through tf configuration if we wished
 
 ### Section 3: Add more on monitoring
-- [ ] First, check how much logging the agents do, and as necessary add more logging. Also ensure the API logs users logging in/out, kicking off runs, etc
-- [ ] Write Section 3: monitoring. Show how to build a dashboard from CloudWatch to see what is happening with our API and agents; log in, do a run, see everything in the logs
-- [ ] In Section 3, include any other AWS features (like SQS dashboard)
+- [X] First, check how much logging the agents do, and as necessary add more logging. Also ensure the API logs users logging in/out, kicking off runs, etc
+- [X] Write Section 3: monitoring. Show how to build a dashboard from CloudWatch to see what is happening with our API and agents; log in, do a run, see everything in the logs
+- [X] In Section 3, include any other AWS features (like SQS dashboard)
 
 ### Section 4: Guardrails
-- [ ] Write Section 4: Guardrails. Give the student some code that they could add to Charter to validate that the output is well formed json, and if not, to refuse to write the charts and log an issue. (Don't actually make this code change in the repo; let the student do it themselves)
+- [X] Write Section 4: Guardrails. Give the student some code that they could add to Charter to validate that the output is well formed json, and if not, to refuse to write the charts and log an issue. (Don't actually make this code change in the repo; let the student do it themselves)
 
 ### Section 5: Explainability
-- [ ] Write Section 5: Explainability. First, introduce the topic of Explainability. Make the case that this was a serious concern in the early days of Deep Learning (black box deep neural networks), but in many ways modern LLMs and Agentic systems help address the issue of explainable AI with Generative AI that explains its reasoning.
-- [ ] As an example, show the students how they can edit the structured outputs coming from the Tagger agent to include its rationale for why it gave the breakdowns it did. This rationale wouldn't get returned to the planner agent, but instead log it. Be sure that the rationale is the first field in the structured output, so the LLM needs to generate the rationale BEFORE it generates the answer. Don't make this code change in the repo; just tell the students how to do it.
+- [X] Write Section 5: Explainability. First, introduce the topic of Explainability. Make the case that this was a serious concern in the early days of Deep Learning (black box deep neural networks), but in many ways modern LLMs and Agentic systems help address the issue of explainable AI with Generative AI that explains its reasoning.
+- [X] As an example, show the students how they can edit the structured outputs coming from the Tagger agent to include its rationale for why it gave the breakdowns it did. This rationale wouldn't get returned to the planner agent, but instead log it. Be sure that the rationale is the first field in the structured output, so the LLM needs to generate the rationale BEFORE it generates the answer. Don't make this code change in the repo; just tell the students how to do it.
 
-### Section 6: Observability with LangFuse THIS IS THE NEXT STEP TO DO!
+### Section 6: Observability with LangFuse IN PROGRESS AND ACTION PLAN UNDERWAY
 
-#### Research Findings - LangFuse + OpenAI Agents SDK Integration
+#### Implementation Status
 
-**References:**
-- Official LangFuse Documentation: https://langfuse.com/integrations/frameworks/openai-agents
-- OpenAI Agents SDK Docs: https://openai.github.io/openai-agents-python/
-- Strategic Analysis (July 2025): https://thinhdanggroup.github.io/agent-observability/
+We successfully got LangFuse observability working with the OpenAI Agents SDK in Lambda, though with some inconsistencies in initial tests. The integration requires careful setup and the presence of `OPENAI_API_KEY` environment variable (even when using Bedrock models) for traces to export properly.
 
-##### How the Integration Actually Works
+#### Simplified Implementation - Context Manager Approach
 
-LangFuse does NOT directly integrate with OpenAI Agents SDK. Instead, it uses a chain of technologies:
-
-```
-OpenAI Agents SDK → Pydantic Logfire (instrumentation) → OpenTelemetry → LangFuse
-```
-
-**Key Discovery:** There is NO `openai-agents[langfuse]` package extra. The integration requires separate packages:
-
-```bash
-# Required packages (corrected - pydantic-ai now includes logfire by default)
-pip install openai-agents langfuse pydantic-ai
-# Or with uv:
-uv add openai-agents langfuse pydantic-ai
-```
-
-##### Implementation Pattern
+We've created a clean, reusable context manager in `backend/tagger/observability.py`:
 
 ```python
-import os
-import logfire
-from langfuse import get_client
-from agents import Agent, Runner, trace
+from observability import observe
 
-# Configure Logfire to send traces to LangFuse (not Logfire cloud)
-logfire.configure(
-    service_name='alex_financial_advisor',
-    send_to_logfire=False  # Critical: Don't send to Logfire cloud
-)
-
-# Instrument OpenAI Agents SDK
-logfire.instrument_openai_agents()
-
-# Initialize LangFuse client
-langfuse = get_client()
-langfuse.auth_check()  # Verify connection
-
-# Now your agents are instrumented
-agent = Agent(name="Assistant", instructions="You are a helpful assistant")
-result = await Runner.run(agent, "What is the meaning of life?")
+def lambda_handler(event, context):
+    # Wrap entire handler with observability context
+    with observe():
+        # Your lambda code here
+        result = asyncio.run(process_instruments(instruments))
+        return {...}
+    # Automatic flush happens here
 ```
 
-##### What Gets Traced
-- Agent planning and execution phases
-- Function tool calls with arguments and results
-- Multi-agent handoffs and delegation
-- Token usage and estimated costs
-- Latency metrics per step
-- Errors with full Python tracebacks
-- Correlation IDs for distributed tracing
+The `observe()` context manager:
+- Automatically sets up LangFuse if environment variables are configured
+- Configures logfire to instrument OpenAI Agents SDK
+- Handles authentication and error cases gracefully
+- **Automatically flushes traces on exit** (even if exceptions occur)
+- Provides comprehensive logging at each step
 
-##### Lambda-Specific Considerations
+#### Testing Utilities
 
-**Challenges:**
-1. **Cold Start Overhead**: OpenTelemetry + Logfire + LangFuse adds ~200-500ms initialization
-2. **Background Processing**: LangFuse optimized for background trace sending (problematic in Lambda's stateless environment)
-3. **Trace Flushing**: Lambda may terminate before traces are sent to LangFuse
+**try_tagger.py** - Complete test that:
+1. Packages the tagger Lambda using Docker
+2. Uploads to S3 and deploys to AWS Lambda
+3. Invokes the Lambda with test instruments
+4. Verifies results in the database
 
-**Solutions:**
-- Ensure proper flushing before Lambda returns
-- Consider Lambda SnapStart or Provisioned Concurrency for production
-- Use environment variables for configuration (no config files)
+**track_tagger.py** - Real-time log monitoring:
+- Continuously polls CloudWatch logs for the tagger Lambda
+- Color-codes different message types
+- Shows LangFuse-related logs prominently
+- Useful for debugging observability issues
 
-#### Implementation Gameplan
+#### Key Requirements & Gotchas
 
-##### Step 1: Ed Sets Up LangFuse Account
-- [ ] Go to https://cloud.langfuse.com and create free account
-- [ ] Create organization (required first step):
-  - Organization name: Your name or company
-  - Organization type: Personal organization
-  - Members: Just yourself
-- [ ] Create new project called "alex-financial-advisor"
-- [ ] Navigate to Settings → API Keys
-- [ ] Create new API keys and save:
-  - `LANGFUSE_PUBLIC_KEY`
-  - `LANGFUSE_SECRET_KEY`
-  - `LANGFUSE_HOST` (usually https://cloud.langfuse.com)
+1. **Environment Variables Required**:
+   - `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` for LangFuse
+   - `OPENAI_API_KEY` must be set (even for Bedrock) or traces won't export
 
-##### Step 2: Add to Local .env
-- [ ] Add to `/Users/ed/projects/alex/.env`:
-```bash
-# LangFuse Observability (optional)
-LANGFUSE_PUBLIC_KEY=pk-lf-xxx
-LANGFUSE_SECRET_KEY=sk-lf-xxx
-LANGFUSE_HOST=https://cloud.langfuse.com
-```
+2. **Lambda Considerations**:
+   - Cold starts add overhead from OpenTelemetry initialization
+   - Traces must be flushed before Lambda terminates
+   - **IMPORTANT**: Must use root logger (`logging.getLogger()`) for CloudWatch compatibility - using named loggers like `logging.getLogger(__name__)` will NOT appear in CloudWatch logs!
 
-##### Step 3: Create Test Script
-- [ ] Create `backend/test_langfuse.py`:
-```python
-import os
-import asyncio
-from dotenv import load_dotenv
-import logfire
-from langfuse import get_client
-from agents import Agent, Runner, trace, function_tool
+3. **Integration Chain**:
+   ```
+   OpenAI Agents SDK → Pydantic Logfire → OpenTelemetry → LangFuse
+   ```
 
-load_dotenv(override=True)
+#### Current Status
 
-@function_tool
-async def get_meaning() -> str:
-    """Get the meaning of life from the universe"""
-    return "42"
+- ✅ Manual testing confirmed traces appear in LangFuse dashboard
+- ✅ Simplified context manager approach implemented for tagger
+- ✅ Successful end-to-end test with comprehensive logging and automatic flush
+- ✅ Traces successfully exported to LangFuse with full observability
 
-async def test_langfuse_integration():
-    # Only proceed if LangFuse env vars are set
-    if not os.getenv("LANGFUSE_SECRET_KEY"):
-        print("❌ LangFuse not configured - skipping observability")
-        return
+#### Observability Action Plan - Roll Out to All Agents - TO DO!
 
-    print("🔧 Configuring Logfire...")
-    logfire.configure(
-        service_name='alex_test',
-        send_to_logfire=False
-    )
+- [ ] **Step 1**: Add observability.py to each of the other 4 agents: reporter, retirement, planner, charter. Simply copy the module (keeping it simple rather than creating a shared package)
 
-    print("📡 Instrumenting OpenAI Agents SDK...")
-    logfire.instrument_openai_agents()
+- [ ] **Step 2**: Update each lambda_handler.py to wrap everything in the context manager, following the tagger implementation pattern:
+  ```python
+  from observability import observe
 
-    print("✅ Connecting to LangFuse...")
-    langfuse = get_client()
-    langfuse.auth_check()
+  def lambda_handler(event, context):
+      with observe():
+          # existing handler code
+  ```
 
-    print("🤖 Creating test agent...")
-    with trace("Test Meaning of Life"):
-        agent = Agent(
-            name="Philosopher",
-            instructions="You are a wise philosopher. Use the get_meaning tool to find the meaning of life.",
-            model="gpt-4o-mini",
-            tools=[get_meaning]
-        )
+- [ ] **Step 3** update the agents
+  - [ ] In each agent project, `uv add langfuse pydantic-ai`
+  - [ ] Make changes to each package_docker to remove the binary requirement, consistent with tagger, otherwise this won't work.
+  - [ ] Update each package_docker.py to include observability.py in the Lambda package (add to the file copy section).
+  - [ ] Update the terraform in 6 so that the environment variables (OPENAI_API_KEY and the 3 langfuse ones) go to the other 4 agents, like they do for tagger.
+  - [ ] Review tagger to ensure no other changes are needed; update Ed if you find anything
 
-        result = await Runner.run(
-            agent,
-            "What is the meaning of life?",
-            max_turns=3
-        )
+- [ ] **Step 4**: Ed deploys and tests the complete flow from the UI to ensure everything is working with observability enabled
 
-        print(f"📝 Result: {result.messages[-1].content}")
+- [ ] **Step 5**: Review and update logging in all 5 agents:
+  - Ensure all use root logger (`logging.getLogger()`) otherwise the log messages will not be picked up by CLoudWatch
+  - Add informative logging at key points if not already present
+  - Ensure consistent logging format and levels
 
-    print("✨ Check LangFuse dashboard for traces!")
-    print(f"🔗 {os.getenv('LANGFUSE_HOST')}")
+- [ ] **Step 6**: Create watch_agents.py script in backend/ that:
+  - Polls all 5 agent CloudWatch log groups simultaneously
+  - Color-codes or labels output by agent (e.g., [PLANNER], [TAGGER], etc.)
+  - Shows real-time activity across the entire agent ecosystem
 
-if __name__ == "__main__":
-    asyncio.run(test_langfuse_integration())
-```
+- [ ] **Step 7**: Ed tests the complete flow again while running watch_agents.py to monitor all agent logs in real-time
 
-- [ ] Install dependencies: `uv add openai-agents langfuse pydantic-ai`
-- [ ] Run test: `uv run test_langfuse.py`
-- [ ] Verify traces appear in LangFuse dashboard
-
-##### Step 4: Add to Tagger Agent (Proof of Concept)
-- [ ] Update `backend/tagger/pyproject.toml` dependencies
-- [ ] Modify `backend/tagger/agent.py`:
-```python
-import os
-import logfire
-from langfuse import get_client
-
-def setup_observability():
-    """Set up LangFuse observability if configured"""
-    if os.getenv("LANGFUSE_SECRET_KEY"):
-        logfire.configure(
-            service_name='alex_tagger_agent',
-            send_to_logfire=False
-        )
-        logfire.instrument_openai_agents()
-        langfuse = get_client()
-        langfuse.auth_check()
-        return True
-    return False
-
-async def tag_instrument(symbol: str, name: str, instrument_type: str) -> InstrumentAllocation:
-    """Tag an instrument with allocations"""
-    observability_enabled = setup_observability()
-
-    # Rest of existing code...
-    with trace("Tag Instrument" if observability_enabled else None):
-        # Existing agent code
-```
-
-##### Step 5: Add to Terraform
-- [ ] Update `terraform/6_agents/variables.tf`:
-```hcl
-variable "langfuse_public_key" {
-  description = "LangFuse public key for observability"
-  type        = string
-  default     = ""
-  sensitive   = false
-}
-
-variable "langfuse_secret_key" {
-  description = "LangFuse secret key for observability"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "langfuse_host" {
-  description = "LangFuse host URL"
-  type        = string
-  default     = "https://cloud.langfuse.com"
-}
-```
-
-- [ ] Update Lambda environment variables in `terraform/6_agents/main.tf` for tagger:
-```hcl
-environment {
-  variables = {
-    # Existing vars...
-    LANGFUSE_PUBLIC_KEY = var.langfuse_public_key
-    LANGFUSE_SECRET_KEY = var.langfuse_secret_key
-    LANGFUSE_HOST       = var.langfuse_host
-  }
-}
-```
-
-##### Step 6: Deploy and Test on Lambda
-- [ ] Package tagger: `cd backend/tagger && uv run package_docker.py`
-- [ ] Deploy with terraform:
-```bash
-cd terraform/6_agents
-terraform apply -var="langfuse_public_key=$LANGFUSE_PUBLIC_KEY" \
-                -var="langfuse_secret_key=$LANGFUSE_SECRET_KEY"
-```
-- [ ] Trigger tagger Lambda via test event or from planner
-- [ ] Check LangFuse dashboard for Lambda traces
-- [ ] Monitor cold start impact and trace completeness
-
-##### Step 7: Roll Out to Other Agents (If Successful)
-- [ ] If tagger works well, apply same pattern to:
-  - [ ] Planner (most complex, do last)
-  - [ ] Reporter
-  - [ ] Charter
-  - [ ] Retirement
-- [ ] Each agent should only initialize LangFuse if env vars present
-- [ ] This allows code to be in repo without requiring LangFuse
+- [ ] **Step 8**: Update Guide 8 (enterprise.md):
+  - If not already covered in the guide, have students set up LangFuse account (they will need to create an organization, then a project "alex-financial-advisor", then navigate to API Keys)
+  - They will need to add to their terraform.tfvars the 3 langfuse variables and their OPENAI_API_KEY
+  - Also at the very end, have them run the watch script to see the agents themselves!
 
 #### Important Notes
 - The integration is optional - agents work without LangFuse configured
-- No `openai-agents[langfuse]` extra exists - install packages separately
 - Logfire is the instrumentation layer, not a direct integration
-- Test locally first, then Lambda with ONE agent before rolling out
-
-### Finale
-- [ ] End with a paragraph to congratulate them on the deployment of an enterprise grade agentic ai system!
-- [ ] Summarise with a bullet each: this system is scalable, secure, robust/monitored, has guardrails, is explainable and observable. Mission accomplished!

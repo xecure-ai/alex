@@ -11,7 +11,8 @@ from typing import List, Dict, Any
 
 from src import Database
 from src.schemas import InstrumentCreate
-from agent import tag_instruments, classification_to_db_format, LANGFUSE_CLIENT
+from agent import tag_instruments, classification_to_db_format
+from observability import observe
 
 # Configure logging
 logger = logging.getLogger()
@@ -104,35 +105,29 @@ def lambda_handler(event, context):
         ]
     }
     """
-    try:
-        # Parse the event
-        instruments = event.get('instruments', [])
+    # Wrap entire handler with observability context
+    with observe():
+        try:
+            # Parse the event
+            instruments = event.get('instruments', [])
 
-        if not instruments:
+            if not instruments:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({'error': 'No instruments provided'})
+                }
+
+            # Process all instruments in a single async context
+            result = asyncio.run(process_instruments(instruments))
+
             return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'No instruments provided'})
+                'statusCode': 200,
+                'body': json.dumps(result)
             }
 
-        # Process all instruments in a single async context
-        result = asyncio.run(process_instruments(instruments))
-
-        return {
-            'statusCode': 200,
-            'body': json.dumps(result)
-        }
-
-    except Exception as e:
-        logger.error(f"Lambda handler error: {e}")
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
-    finally:
-        # Ensure LangFuse traces are flushed before Lambda terminates
-        if LANGFUSE_CLIENT:
-            try:
-                LANGFUSE_CLIENT.flush()
-                logger.debug("LangFuse traces flushed at Lambda handler level")
-            except Exception as e:
-                logger.warning(f"Failed to flush LangFuse traces: {e}")
+        except Exception as e:
+            logger.error(f"Lambda handler error: {e}")
+            return {
+                'statusCode': 500,
+                'body': json.dumps({'error': str(e)})
+            }

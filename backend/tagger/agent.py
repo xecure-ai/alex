@@ -20,50 +20,12 @@ from templates import TAGGER_INSTRUCTIONS, CLASSIFICATION_PROMPT
 # Load environment variables (dotenv automatically searches up the tree)
 load_dotenv(override=True)
 
-# Configure logging - use root logger for Lambda compatibility
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Get configuration
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-3-7-sonnet-20250219-v1:0")
 BEDROCK_REGION = os.getenv("BEDROCK_REGION", "us-west-2")
-
-# Setup LangFuse observability if configured
-LANGFUSE_CLIENT = None
-
-def setup_observability():
-    """Set up LangFuse observability if configured"""
-    global LANGFUSE_CLIENT
-
-    # Debug logging
-    logger.info(f"setup_observability called")
-    logger.info(f"LANGFUSE_SECRET_KEY exists: {bool(os.getenv('LANGFUSE_SECRET_KEY'))}")
-    logger.info(f"OPENAI_API_KEY exists: {bool(os.getenv('OPENAI_API_KEY'))}")
-
-    if os.getenv("LANGFUSE_SECRET_KEY"):
-        try:
-            import logfire
-            from langfuse import get_client
-
-            logfire.configure(
-                service_name='alex_tagger_agent',
-                send_to_logfire=False
-            )
-            logfire.instrument_openai_agents()
-
-            # Store client globally for flushing later
-            LANGFUSE_CLIENT = get_client()
-            LANGFUSE_CLIENT.auth_check()
-
-            logger.info("LangFuse observability enabled")
-            return True
-        except Exception as e:
-            logger.warning(f"Failed to setup LangFuse observability: {e}")
-            return False
-    return False
-
-# Initialize observability on module load
-OBSERVABILITY_ENABLED = setup_observability()
 
 
 class AllocationBreakdown(BaseModel):
@@ -235,14 +197,10 @@ async def classify_instrument(
 
             # Extract the structured output from RunResult using final_output_as
             return result.final_output_as(InstrumentClassification)
-    finally:
-        # Flush LangFuse traces before Lambda terminates
-        if LANGFUSE_CLIENT:
-            try:
-                LANGFUSE_CLIENT.flush()
-                logger.debug("LangFuse traces flushed")
-            except Exception as e:
-                logger.warning(f"Failed to flush LangFuse traces: {e}")
+
+    except Exception as e:
+        logger.error(f"Error classifying {symbol}: {e}")
+        raise
 
 
 async def tag_instruments(instruments: List[dict]) -> List[InstrumentClassification]:
