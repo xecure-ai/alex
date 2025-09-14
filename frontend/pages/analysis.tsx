@@ -31,6 +31,13 @@ interface Job {
   error_message?: string;
 }
 
+interface JobListItem {
+  id: string;
+  created_at: string;
+  status: string;
+  job_type: string;
+}
+
 type TabType = 'overview' | 'charts' | 'retirement';
 
 // Color palette for charts
@@ -54,6 +61,7 @@ export default function Analysis() {
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [fetchingLatest, setFetchingLatest] = useState(false);
 
   useEffect(() => {
     const loadJob = async (jobId: string) => {
@@ -78,13 +86,51 @@ export default function Analysis() {
       }
     };
 
+    const loadLatestJob = async () => {
+      setFetchingLatest(true);
+      try {
+        const token = await getToken();
+        // First, get the list of jobs to find the latest completed one
+        const response = await fetch(`${API_URL}/api/jobs`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const jobs: JobListItem[] = data.jobs || [];
+          // Find the latest completed job
+          const latestCompletedJob = jobs
+            .filter(j => j.status === 'completed')
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+          if (latestCompletedJob) {
+            // Load the full job details
+            await loadJob(latestCompletedJob.id);
+            // Update the URL to include the job_id without causing a page reload
+            router.replace(`/analysis?job_id=${latestCompletedJob.id}`, undefined, { shallow: true });
+          } else {
+            setLoading(false);
+          }
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Error fetching latest job:', error);
+        setLoading(false);
+      } finally {
+        setFetchingLatest(false);
+      }
+    };
+
     if (job_id) {
       loadJob(job_id as string);
     } else if (router.isReady) {
-      // Router is ready but no job_id provided
-      setLoading(false);
+      // Router is ready but no job_id provided - fetch the latest analysis
+      loadLatestJob();
     }
-  }, [job_id, router.isReady, getToken]);
+  }, [job_id, router.isReady, getToken, router]);
 
 
   const formatDate = (dateString: string) => {
@@ -120,14 +166,22 @@ export default function Analysis() {
         <div className="min-h-screen bg-gray-50 py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="bg-white rounded-lg shadow px-8 py-12 text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Analysis Not Found</h2>
-              <p className="text-gray-600 mb-6">The requested analysis could not be found.</p>
-              <button
-                onClick={() => router.push('/advisor-team')}
-                className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 font-semibold"
-              >
-                Back to Advisor Team
-              </button>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                {fetchingLatest ? 'Loading Latest Analysis...' : 'No Analysis Available'}
+              </h2>
+              <p className="text-gray-600 mb-6">
+                {fetchingLatest
+                  ? 'Please wait while we load your latest analysis.'
+                  : 'You have not completed any analyses yet. Start a new analysis to see results here.'}
+              </p>
+              {!fetchingLatest && (
+                <button
+                  onClick={() => router.push('/advisor-team')}
+                  className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 font-semibold"
+                >
+                  Start New Analysis
+                </button>
+              )}
             </div>
           </div>
         </div>

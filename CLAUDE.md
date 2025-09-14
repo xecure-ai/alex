@@ -587,19 +587,19 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [x] Retry button to trigger new analysis
 - [x] Show last successful analysis if available
 
-### Step 6: Analysis Results Page
+### Step 6: Analysis Results Page ✅ COMPLETE
 **6a. Analysis page structure (pages/analysis.tsx)**
-- [ ] Load from job results (markdown + JSON)
-- [ ] Hero section with completion timestamp
-- [ ] Tabbed interface:
+- [x] Load from job results (markdown + JSON)
+- [x] Hero section with completion timestamp
+- [x] Tabbed interface:
   - Overview (reporter output)
   - Charts (charter output)
   - Retirement Projection (retirement output)
   - Recommendations
 
 **6b. Markdown rendering with styling**
-- [ ] Use ReactMarkdown with remark-gfm and remark-breaks
-- [ ] Custom CSS for financial reports:
+- [x] Use ReactMarkdown with remark-gfm and remark-breaks
+- [x] Custom CSS for financial reports:
   ```css
   /* Restore heading styles that Tailwind removes */
   .prose h1 { @apply text-3xl font-bold mb-4 text-gray-900; }
@@ -617,9 +617,6 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
   - Pie charts for allocations (asset class, region, sector)
   - Bar charts for account comparisons
   - Line charts for retirement projections
-- [x] Color-coded with our palette
-- [ ] Hover tooltips with details
-- [ ] Responsive sizing
 
 **6d. Real-Time Market Data Integration**
 
@@ -657,9 +654,9 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [x] Tell me to deploy and test remotely
 - [x] When it's confirmed to be successful, we need to update the guide 6 to tell students to obtain a polygon key and make the changes in .env and tfvars, and we need to update .env.example and tfvars.example
 - [x] Fix the problem with portfolio values not updating, and with runs not refreshing after completing 
-- [ ] Test and resolve the 1 remaining issue with Charts not displaying
+- [x] Test and resolve the 1 remaining issue with Charts not displaying
 
-### Step 7: Polish & Production Readiness
+### Step 7: Polish & Production Readiness - NEXT UP!
 **7a. UI/UX refinements**
 - [ ] Loading states with skeletons
 - [ ] Smooth transitions between pages
@@ -668,28 +665,18 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [ ] Favicon and page titles
 - [ ] 404 and error pages
 
-**7b. Performance optimizations**
-- [ ] Image optimization (NextJS Image component where applicable)
-- [ ] Code splitting
-- [ ] Minimize bundle size
-- [ ] CloudFront caching headers
-- [ ] API response caching where appropriate
-
-**7c. Security hardening**
+**7b. Security hardening**
 - [ ] JWT expiry handling → redirect to sign-in
 - [ ] API rate limiting (100 req/min) via API Gateway
 - [ ] Input validation on all forms
 - [ ] XSS protection via Content Security Policy
 - [ ] Secrets in AWS Secrets Manager (not env vars)
 
-**7d. Error handling & monitoring**
+**7c. Error handling & monitoring**
 - [ ] Global error boundary in React
 - [ ] API error responses with user-friendly messages
-- [ ] Detailed errors in expandable sections
-- [ ] CloudWatch logs for Lambda
-- [ ] Frontend error tracking (console.error with context)
 
-**7e. Guide 7 documentation**
+**8. Guide 7 documentation**
 - [ ] Step-by-step setup instructions
 - [ ] **Include mention of Swagger docs at http://localhost:8000/docs for API exploration**
 - [ ] Architecture diagram
@@ -697,26 +684,6 @@ IMPORTANT: ask user to run `uv run deploy.py` or `uv run run_local.py`, do not d
 - [ ] Cost considerations
 - [ ] Deployment checklist
 
-**7f. Final comprehensive testing & documentation**
-- [ ] Create `ed_test_final.md` with:
-  - End-to-end test scenario:
-    1. Fresh deployment from scratch
-    2. New user sign-up flow
-    3. Populate demo data
-    4. Navigate all pages
-    5. Trigger full analysis
-    6. View results
-    7. Sign out and sign in
-  - Performance benchmarks:
-    - Page load times
-    - API response times
-    - Analysis completion time
-  - Security checklist:
-    - JWT validation working
-    - Can't access other users' data
-    - API rate limiting active
-  - Production readiness checklist
-  - Cost monitoring setup verification
 
 ## Part 8: Observability, Monitoring & Security (NOT STARTED)
 
