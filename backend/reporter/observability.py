@@ -38,7 +38,7 @@ def observe():
 
     if not has_langfuse:
         logger.info("🔍 Observability: LangFuse not configured, skipping setup")
-        yield
+        yield None
         return
 
     if not has_openai:
@@ -89,7 +89,7 @@ def observe():
 
     try:
         # Yield control back to the calling code
-        yield
+        yield langfuse_client
     finally:
         # Flush traces on exit
         if langfuse_client:
