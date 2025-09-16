@@ -6,11 +6,11 @@ Welcome to the most exciting part of Alex! In this guide, you'll deploy a sophis
 
 You'll deploy five specialized AI agents that work together:
 
-1. **Financial Planner** (Orchestrator) - The conductor of our AI orchestra
-2. **InstrumentTagger** - Classifies and tags financial instruments
-3. **Report Writer** - Generates detailed portfolio analysis reports
-4. **Chart Maker** - Creates data visualizations for your portfolio
-5. **Retirement Specialist** - Projects retirement scenarios with Monte Carlo simulations
+1. **Planner** (Orchestrator) - The conductor of our AI orchestra
+2. **Tagger** - Classifies and tags financial instruments
+3. **Reporter** - Generates detailed portfolio analysis reports
+4. **Charter** - Creates data visualizations for your portfolio
+5. **Retirement** - Projects retirement scenarios with Monte Carlo simulations
 
 Here's how they collaborate:
 
@@ -60,6 +60,12 @@ Before starting, ensure you have:
 - Python with `uv` package manager installed
 - Docker Desktop running
 - Access to AWS Bedrock models in us-west-2
+
+## Before we start - Context Engineering
+
+Read this seminal post by Google DeepMind Senior AI Relation Engineer Philipp Schmid:
+
+https://www.philschmid.de/context-engineering
 
 ## Step 0: Request Additional Bedrock Model Access
 
@@ -111,9 +117,9 @@ BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0
 BEDROCK_REGION=us-west-2
 DEFAULT_AWS_REGION=us-east-1  # Or your preferred region
 
-# Polygon API for real-time prices
+# Polygon.io API for real-time stock prices (sign up free at polygon.io) - change free to paid if you're using paid plan
 POLYGON_API_KEY=your_polygon_api_key_here
-POLYGON_BASE_URL=https://api.polygon.io
+POLYGON_PLAN=free
 ```
 
 The `BEDROCK_MODEL_ID` uses Amazon's Nova Pro model which has excellent tool-calling capabilities and high rate limits.
@@ -318,8 +324,8 @@ bedrock_region = "us-west-2"
 sagemaker_endpoint = "alex-embedding-endpoint"
 
 # Polygon API configuration (for real-time prices)
-polygon_api_key = "your_polygon_api_key_here"  # From Step 1.1
-polygon_base_url = "https://api.polygon.io"
+polygon_api_key = "your_polygon_api_key_here"
+polygon_plan = "free"
 ```
 
 **Note**: The Aurora ARNs can be left empty - Terraform will automatically find them using data sources. Make sure to update the `vector_bucket` with your actual AWS account ID and add your Polygon API key.

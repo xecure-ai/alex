@@ -67,17 +67,7 @@ If you need to create a new Clerk application:
 
 ### 1.2 Configure Frontend Environment
 
-Navigate to the frontend directory and set up your environment:
-
-```bash
-# Navigate to frontend directory
-# Go to alex/frontend in your terminal
-
-# Copy the example environment file
-cp .env.example .env.local
-```
-
-Edit `.env.local` in Cursor and add your Clerk credentials:
+Create `.env.local` in the frontend directory in Cursor and add your Clerk credentials:
 
 ```bash
 # Clerk Authentication (use your existing keys if you have them)
@@ -87,6 +77,9 @@ CLERK_SECRET_KEY=sk_test_your-secret-here
 # Sign-in/up redirects (these are already set correctly)
 NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
+
+# API URL - use localhost for local development, AWS URL for production
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 ### 1.3 Configure Backend Environment
@@ -218,20 +211,15 @@ cp terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars` in Cursor:
 
 ```hcl
-# Your AWS region (should match your other infrastructure)
+# AWS region for deployment
 aws_region = "us-east-1"
 
-# Your AWS account ID (12 digits)
-aws_account_id = "123456789012"
-
-# Clerk configuration
-clerk_jwks_url = "https://your-app.clerk.accounts.dev/.well-known/jwks.json"
-
-# Environment name
-environment = "production"
-
-# CORS origins (your CloudFront domain will be added automatically)
-cors_origins = "http://localhost:3000"
+# Clerk configuration for JWT validation
+# Get these from your Clerk dashboard
+# The JWKS URL is: https://[your-instance].clerk.accounts.dev/.well-known/jwks.json
+# The issuer is: https://[your-instance].clerk.accounts.dev
+clerk_jwks_url = "https://engaging-feline-80.clerk.accounts.dev/.well-known/jwks.json"
+clerk_issuer   = "https://engaging-feline-80.clerk.accounts.dev"
 ```
 
 To find your AWS account ID:

@@ -96,6 +96,7 @@ def observe():
             try:
                 logger.info("🔍 Observability: Flushing traces to LangFuse...")
                 langfuse_client.flush()
+                langfuse_client.shutdown()
 
                 # Add a 10 second delay to ensure network requests complete
                 # This is a workaround for Lambda's immediate termination

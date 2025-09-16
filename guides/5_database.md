@@ -330,43 +330,6 @@ Test user created:
 - 5 positions in 401k account
 ```
 
-## Step 6: Verify the Setup
-
-Let's verify everything is working:
-
-```bash
-# From backend/database directory
-uv run verify_database.py
-```
-
-You should see:
-```
-Database Status:
-✅ Aurora cluster is running
-✅ Data API is accessible
-✅ All 5 tables exist
-✅ 22 instruments loaded
-✅ Test user exists (if created)
-✅ Pydantic validation working
-
-Database ready for use!
-```
-
-## Step 7: Test the Shared Database Package
-
-The database package can now be used by other services:
-
-```bash
-# From backend/database directory
-uv run test_db.py
-```
-
-This test verifies that:
-- Data API client works correctly
-- Pydantic schemas validate data properly
-- Type conversions handle JSONB, Decimal, UUID, and dates
-- All allocations sum to 100%
-
 ## Understanding the Database Schema
 
 Our schema includes five tables with clear separation between user-specific and shared reference data:
