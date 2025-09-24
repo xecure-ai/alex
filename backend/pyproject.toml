@@ -15,6 +15,7 @@ dependencies = [
 members = [
     "database",
     "api",
+    "scheduler",
 ]
 
 [tool.uv.sources]
