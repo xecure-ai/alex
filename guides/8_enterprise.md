@@ -356,76 +356,17 @@ def lambda_handler(event, context):
 
 ### Creating CloudWatch Dashboards
 
-Navigate to AWS CloudWatch Console and create a dashboard with these widgets:
+From the terraform directory, from 8_enterprise:
 
-#### 1. **API Activity Dashboard**
-```json
-{
-  "widgets": [
-    {
-      "type": "log",
-      "properties": {
-        "query": "SOURCE '/aws/lambda/alex-api' | fields @timestamp, event_type, user_id | filter event_type = 'USER_LOGIN' | stats count() by bin(5m)",
-        "region": "us-east-1",
-        "title": "User Logins Over Time"
-      }
-    },
-    {
-      "type": "log",
-      "properties": {
-        "query": "SOURCE '/aws/lambda/alex-api' | filter event_type = 'ANALYSIS_TRIGGERED' | stats count() by user_id",
-        "region": "us-east-1",
-        "title": "Analyses by User"
-      }
-    },
-    {
-      "type": "metric",
-      "properties": {
-        "metrics": [
-          ["AWS/Lambda", "Invocations", {"stat": "Sum"}],
-          [".", "Errors", {"stat": "Sum"}],
-          [".", "Duration", {"stat": "Average"}]
-        ],
-        "period": 300,
-        "stat": "Average",
-        "region": "us-east-1",
-        "title": "API Lambda Metrics"
-      }
-    }
-  ]
-}
-```
+Copy terraform.tfvars.example to terraform.tfvars and update the values, as usual.
 
-#### 2. **Agent Performance Dashboard**
-```json
-{
-  "widgets": [
-    {
-      "type": "metric",
-      "properties": {
-        "metrics": [
-          ["AWS/Lambda", "Duration", {"label": "Planner", "dimensions": {"FunctionName": "alex-planner"}}],
-          [".", ".", {"label": "Reporter", "dimensions": {"FunctionName": "alex-reporter"}}],
-          [".", ".", {"label": "Charter", "dimensions": {"FunctionName": "alex-charter"}}],
-          [".", ".", {"label": "Retirement", "dimensions": {"FunctionName": "alex-retirement"}}]
-        ],
-        "period": 300,
-        "stat": "Average",
-        "region": "us-east-1",
-        "title": "Agent Execution Times"
-      }
-    },
-    {
-      "type": "log",
-      "properties": {
-        "query": "SOURCE '/aws/lambda/alex-planner' | filter event = 'AGENT_INVOKED' | stats count() by agent",
-        "region": "us-east-1",
-        "title": "Agent Invocation Counts"
-      }
-    }
-  ]
-}
-```
+Then:
+
+`terraform init`
+
+`terraform apply`
+
+And follow the instructions to bring up your new CloudWatch dashboards for Bedrock & SageMaker, and Agent activity.
 
 #### 3. **SQS Queue Monitoring**
 Navigate to SQS console to view:
