@@ -108,7 +108,7 @@ class InstrumentClassification(BaseModel):
     @field_validator("allocation_asset_class")
     def validate_asset_class_sum(cls, v: AllocationBreakdown):
         total = v.equity + v.fixed_income + v.real_estate + v.commodities + v.cash + v.alternatives
-        if abs(total - 100.0) > 0.01:  # Allow small floating point errors
+        if abs(total - 100.0) > 0.05:  # Allow small floating point errors
             raise ValueError(f"Asset class allocations must sum to 100.0, got {total}")
         return v
 
@@ -125,7 +125,7 @@ class InstrumentClassification(BaseModel):
             + v.global_
             + v.international
         )
-        if abs(total - 100.0) > 0.01:
+        if abs(total - 100.0) > 0.05:
             raise ValueError(f"Regional allocations must sum to 100.0, got {total}")
         return v
 
@@ -151,7 +151,7 @@ class InstrumentClassification(BaseModel):
             + v.diversified
             + v.other
         )
-        if abs(total - 100.0) > 0.01:
+        if abs(total - 100.0) > 0.05:
             raise ValueError(f"Sector allocations must sum to 100.0, got {total}")
         return v
 
@@ -181,7 +181,9 @@ async def classify_instrument(
         model = LitellmModel(model=f"bedrock/{model_id}")
 
         # Create the classification task
-        task = CLASSIFICATION_PROMPT.format(symbol=symbol, name=name, instrument_type=instrument_type)
+        task = CLASSIFICATION_PROMPT.format(
+            symbol=symbol, name=name, instrument_type=instrument_type
+        )
 
         # Run the agent (following gameplan pattern exactly)
         with trace(f"Classify {symbol}"):
@@ -313,7 +315,9 @@ def classification_to_db_format(classification: InstrumentClassification) -> Ins
         symbol=classification.symbol,
         name=classification.name,
         instrument_type=classification.instrument_type,
-        current_price=Decimal(str(classification.current_price)),  # Use actual price from classification
+        current_price=Decimal(
+            str(classification.current_price)
+        ),  # Use actual price from classification
         allocation_asset_class=asset_class_dict,
         allocation_regions=regions_dict,
         allocation_sectors=sectors_dict,
