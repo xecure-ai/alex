@@ -44,7 +44,7 @@ graph LR
 
 The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You need to request access to this model first.
 
-### Request Model Access
+### Request Model Access - these instructions are for OSS models, but you can also use Nova in us-east-1 or in your region (cheaper and easier)
 
 1. Sign in to the AWS Console
 2. Navigate to **Amazon Bedrock** service
@@ -57,13 +57,44 @@ The Researcher uses AWS Bedrock with OpenAI's open-source OSS 120B model. You ne
    - **gpt-oss-20b** (OpenAI GPT OSS 20B) - optional, smaller model
 8. Click **Request model access** at the bottom
 9. Wait for approval (usually instant for these models)
+10. As an alternative - request access to the Amazon Nova models in your region or in us-east-1
 
 **Important Notes:**
-- ⚠️ These models are ONLY available in **us-west-2** region
+- ⚠️ The OSS models are ONLY available in **us-west-2** region
 - ✅ Your App Runner service can be in any region (e.g., us-east-1) and will connect cross-region to us-west-2
 - The OSS models are open-weight models from OpenAI, not the commercial GPT models
 - No API key is required for Bedrock - AWS IAM handles authentication
 - The researcher requires an OpenAI API key for the OpenAI Agents SDK's tracing functionality (to monitor and debug agent execution)
+
+## Extra part of Step 0: IMPORTANT - ADDED SINCE THE VIDEOS!!
+
+### Update server.py with your model
+
+With many thanks to Student Marcin B. for this crucial extra step.
+
+In future labs, we will make this more configurable. But for this step, the Researcher Agent has some variables hard-coded which you will need to change.
+
+Please look at the file `backend/researcher/server.py`
+
+You should see this section:
+
+```python
+    # Please override these variables with the region you are using
+    # Other choices: us-west-2 (for OpenAI OSS models) and eu-central-1
+    REGION = "us-east-1"
+    os.environ["AWS_REGION_NAME"] = REGION  # LiteLLM's preferred variable
+    os.environ["AWS_REGION"] = REGION  # Boto3 standard
+    os.environ["AWS_DEFAULT_REGION"] = REGION  # Fallback
+
+    # Please override this variable with the model you are using
+    # Other choices: bedrock/eu.amazon.nova-lite-v1:0 for EU and bedrock/us.amazon.nova-lite-v1:0 for US
+    # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
+    # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
+    MODEL = "bedrock/us.amazon.nova-lite-v1:0"
+    model = LitellmModel(model=MODEL)
+```
+
+Please update the value of REGION and MODEL to reflect the model you have access to. See the examples given for possible values.
 
 ## Step 1: Deploy the Infrastructure
 

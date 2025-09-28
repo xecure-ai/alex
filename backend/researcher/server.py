@@ -41,18 +41,19 @@ async def run_research_agent(topic: str = None) -> str:
     else:
         query = DEFAULT_RESEARCH_PROMPT
 
-    # Configure Bedrock model with us-east-1 region
-    # Set ALL region environment variables to ensure us-east-1 is used
-    os.environ["AWS_REGION_NAME"] = "us-east-1"  # LiteLLM's preferred variable
-    os.environ["AWS_REGION"] = "us-east-1"  # Boto3 standard
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # Fallback
+    # Please override these variables with the region you are using
+    # Other choices: us-west-2 (for OpenAI OSS models) and eu-central-1
+    REGION = "us-east-1"
+    os.environ["AWS_REGION_NAME"] = REGION  # LiteLLM's preferred variable
+    os.environ["AWS_REGION"] = REGION  # Boto3 standard
+    os.environ["AWS_DEFAULT_REGION"] = REGION  # Fallback
 
-    # Using Amazon Nova Pro which supports tools and MCP servers
-    model = LitellmModel(model="bedrock/amazon.nova-pro-v1:0")
-
-    # Previous models (kept for reference):
-    # model = LitellmModel(model="bedrock/openai.gpt-oss-120b-1:0")  # Had tools parameter issues in us-west-2
-    # model = LitellmModel(model="bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0")  # Rate limited
+    # Please override this variable with the model you are using
+    # Other choices: bedrock/eu.amazon.nova-lite-v1:0 for EU and bedrock/us.amazon.nova-lite-v1:0 for US
+    # bedrock/openai.gpt-oss-120b-1:0 for OpenAI OSS models
+    # bedrock/converse/us.anthropic.claude-sonnet-4-20250514-v1:0 for Claude Sonnet 4
+    MODEL = "bedrock/us.amazon.nova-lite-v1:0"
+    model = LitellmModel(model=MODEL)
 
     # Create and run the agent with MCP server
     with trace("Researcher"):
