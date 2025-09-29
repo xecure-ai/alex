@@ -116,7 +116,7 @@ graph TD
   
   USERS --> CF
   CF -->|Static Content| S3
-  CF -->|API Calls (/api/*)| APIGW
+  CF -->|API Calls| APIGW
   
   APIGW --> LAMBDA
   LAMBDA --> ROLE
@@ -124,6 +124,11 @@ graph TD
   LAMBDA --> SQS
   LAMBDA --> AGENTS
   LAMBDA --> CLERK
+  
+  style S3 fill:#e1f5fe
+  style LAMBDA fill:#f3e5f5
+  style AURORA fill:#e8f5e8
+  style CLERK fill:#fff3e0
 ```
 
 ## Request Flow
