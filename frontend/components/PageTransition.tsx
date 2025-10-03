@@ -9,15 +9,18 @@ export default function PageTransition({ children }: { children: ReactNode }) {
     const handleStart = () => setIsTransitioning(true);
     const handleComplete = () => setIsTransitioning(false);
 
-    router.events.on('routeChangeStart', handleStart);
-    router.events.on('routeChangeComplete', handleComplete);
-    router.events.on('routeChangeError', handleComplete);
+    // Check if router.events exists (Pages Router)
+    if (router.events) {
+      router.events.on('routeChangeStart', handleStart);
+      router.events.on('routeChangeComplete', handleComplete);
+      router.events.on('routeChangeError', handleComplete);
 
-    return () => {
-      router.events.off('routeChangeStart', handleStart);
-      router.events.off('routeChangeComplete', handleComplete);
-      router.events.off('routeChangeError', handleComplete);
-    };
+      return () => {
+        router.events.off('routeChangeStart', handleStart);
+        router.events.off('routeChangeComplete', handleComplete);
+        router.events.off('routeChangeError', handleComplete);
+      };
+    }
   }, [router]);
 
   return (
